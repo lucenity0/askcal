@@ -1,0 +1,47 @@
+import asyncio
+import contextlib
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+from app.config import get_settings
+from app.core.errors import PulseError, http_exception_handler, pulse_error_handler
+from app.routers import auth, closing_time, inbox, today, tracks
+from app.services.sync import sync_loop
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    task = asyncio.create_task(sync_loop()) if get_settings().sync_enabled else None
+    yield
+    if task:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+
+app = FastAPI(title="Pulse API", version="0.1.0", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_settings().cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.add_exception_handler(PulseError, pulse_error_handler)
+app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+
+app.include_router(auth.router)
+app.include_router(today.router)
+app.include_router(inbox.router)
+app.include_router(tracks.router)
+app.include_router(closing_time.router)
+
+
+@app.get("/health", tags=["meta"])
+async def health() -> dict:
+    return {"status": "ok"}
