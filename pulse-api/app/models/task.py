@@ -57,6 +57,10 @@ class Task(TimestampMixin, Base):
     # The day this task belongs to. NULL means today (legacy rows / no
     # explicit choice); Today/plan/review endpoints exclude future days.
     scheduled_for: Mapped[date | None] = mapped_column(Date)
+    # A user-pinned start time. When set, the day planner treats this task as
+    # a fixed anchor at this moment instead of auto-placing it. NULL = let the
+    # scheduler decide (email-derived tasks, quick adds without a time).
+    scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[TaskStatus] = mapped_column(
         Enum(TaskStatus, name="task_status"), default=TaskStatus.pending
     )

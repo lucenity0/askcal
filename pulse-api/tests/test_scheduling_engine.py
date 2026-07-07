@@ -5,14 +5,17 @@ import uuid
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
-from app.services.scheduling import build_day_plan
+from app.services.scheduling import build_day_plan, humanize_due
 
 TZ = "UTC"
 DAY = dt.date(2026, 7, 8)
 
 
-def task(score: int, hours: float | None = 1.0):
-    return SimpleNamespace(id=uuid.uuid4(), regret_score=score, estimated_hours=hours)
+def task(score: int, hours: float | None = 1.0, scheduled_at: dt.datetime | None = None):
+    return SimpleNamespace(
+        id=uuid.uuid4(), regret_score=score, estimated_hours=hours,
+        scheduled_at=scheduled_at,
+    )
 
 
 def busy(start_h: int, start_m: int, end_h: int, end_m: int):
@@ -119,3 +122,53 @@ def test_after_hours_everything_is_unscheduled():
     slots, unscheduled = build_day_plan([task(50, 1.0)], [], DAY, TZ, now=_at(21, 30))
     assert slots == []
     assert len(unscheduled) == 1
+
+
+# ── Pinned tasks (user-chosen time) ─────────────────────────────────────────
+
+def test_pinned_task_lands_at_its_chosen_time():
+    pinned = task(20, 1.0, scheduled_at=_at(14, 0))
+    slots, unscheduled = build_day_plan([pinned], [], DAY, TZ)
+    assert unscheduled == []
+    assert slots[0]["time"] == "14:00"
+    assert slots[0]["task_id"] == pinned.id
+
+
+def test_untimed_tasks_flow_around_a_pin():
+    # a 2h pin at 10:00 blocks 10–12; the 1h untimed task takes the 09:00 gap
+    pinned = task(30, 2.0, scheduled_at=_at(10, 0))
+    floating = task(90, 1.0)
+    slots, unscheduled = build_day_plan([pinned, floating], [], DAY, TZ)
+    assert unscheduled == []
+    by_id = {s["task_id"]: s for s in slots}
+    assert by_id[pinned.id]["time"] == "10:00"
+    assert by_id[floating.id]["time"] == "09:00"  # before the pin, not overlapping
+
+
+def test_pin_wins_over_now_clip():
+    # pinned at 08:00 even though it's already 15:00 — an explicit choice
+    # is honored, unlike auto-placement which never lands in the past
+    pinned = task(20, 1.0, scheduled_at=_at(8, 0))
+    slots, _ = build_day_plan([pinned], [], DAY, TZ, now=_at(15, 0))
+    assert slots[0]["time"] == "08:00"
+
+
+# ── Deadline humanization (time-remaining granularity) ──────────────────────
+
+def test_humanize_minutes_hours_days():
+    now = _at(12, 0)
+    assert humanize_due(_at(12, 25), now) == "due in 25 min"
+    assert humanize_due(_at(18, 0), now) == "due in 6 h"
+    assert humanize_due(DAY_PLUS(3, 12, 0), now) == "due in 3 days"
+
+
+def test_humanize_overdue_and_none():
+    now = _at(12, 0)
+    assert humanize_due(_at(11, 30), now) == "overdue by 30 min"
+    assert humanize_due(None, now) is None
+
+
+def DAY_PLUS(days: int, hour: int, minute: int) -> dt.datetime:
+    return dt.datetime.combine(
+        DAY + dt.timedelta(days=days), dt.time(hour, minute), tzinfo=ZoneInfo(TZ)
+    )

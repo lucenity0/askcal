@@ -39,23 +39,48 @@ def local_midnight(tz_name: str) -> dt.datetime:
     return dt.datetime.combine(dt.datetime.now(tz).date(), dt.time.min, tzinfo=tz)
 
 
-def humanize_due(due_at: dt.datetime | None, today: dt.date) -> str | None:
-    """"due today" / "due tomorrow" / "due in N days" / "overdue by N days"."""
+def humanize_due(due_at: dt.datetime | None, now: dt.datetime | None = None) -> str | None:
+    """Deadline countdown by actual time-remaining, not calendar day:
+    under an hour → minutes, under a day → hours, otherwise days.
+    e.g. "due in 25 min" / "due in 6 h" / "due in 3 days" / "overdue by 2 h".
+    """
     if due_at is None:
         return None
-    days = (due_at.date() - today).days
-    if days < 0:
-        return f"overdue by {-days} day{'s' if days != -1 else ''}"
-    if days == 0:
-        return "due today"
-    if days == 1:
-        return "due tomorrow"
-    return f"due in {days} days"
+    now = now or dt.datetime.now(dt.timezone.utc)
+    delta = due_at - now
+    overdue = delta.total_seconds() < 0
+    secs = abs(delta.total_seconds())
+
+    if secs < 3600:
+        n = max(1, round(secs / 60))
+        unit = f"{n} min"
+    elif secs < 86400:
+        n = max(1, int(secs // 3600))
+        unit = f"{n} h"
+    else:
+        n = int(secs // 86400)
+        unit = f"{n} day{'s' if n != 1 else ''}"
+
+    return f"overdue by {unit}" if overdue else f"due in {unit}"
 
 
 def _task_minutes(task: Task) -> int:
     minutes = int((task.estimated_hours or 1.0) * 60)
     return max(minutes, 15) if minutes else DEFAULT_TASK_MINUTES
+
+
+def _pinned_start_minute(
+    task: Task, day: dt.date, tz: "ZoneInfo | dt.timezone", day_anchor: dt.datetime
+) -> int | None:
+    """Minutes-since-midnight of a task's pinned start, or None if it isn't
+    pinned (or is pinned to a different day)."""
+    pinned = getattr(task, "scheduled_at", None)
+    if pinned is None:
+        return None
+    local = pinned.astimezone(tz)
+    if local.date() != day:
+        return None
+    return int((local - day_anchor).total_seconds() / 60)
 
 
 def _merge(intervals: list[tuple[int, int]]) -> list[tuple[int, int]]:
@@ -110,7 +135,32 @@ def build_day_plan(
         if e > s:
             busy_minutes.append((int(s), int(e)))
 
-    # free gaps = window minus merged busy
+    slots: list[dict] = []
+    unscheduled: list[Task] = []
+
+    # Pinned tasks (user chose a specific time) are fixed anchors: they always
+    # get their slot — the explicit choice wins over auto-placement — and they
+    # occupy that time so untimed tasks flow around them.
+    pinned: list[tuple[Task, int]] = []
+    unpinned: list[Task] = []
+    for task in tasks:
+        start_min = _pinned_start_minute(task, day, tz, day_anchor)
+        (unpinned if start_min is None else pinned).append(
+            task if start_min is None else (task, start_min)  # type: ignore[arg-type]
+        )
+
+    for task, start_min in pinned:
+        minutes = _task_minutes(task)
+        slots.append(
+            {
+                "time": f"{start_min // 60:02d}:{start_min % 60:02d}",
+                "task_id": task.id,
+                "duration": minutes,
+            }
+        )
+        busy_minutes.append((start_min, start_min + minutes))
+
+    # free gaps = window minus merged (calendar busy + pinned tasks)
     free: list[tuple[int, int]] = []
     cursor = window_start
     for b_start, b_end in _merge(busy_minutes):
@@ -120,10 +170,8 @@ def build_day_plan(
     if cursor < window_end:
         free.append((cursor, window_end))
 
-    # first-fit, highest regret first
-    slots: list[dict] = []
-    unscheduled: list[Task] = []
-    for task in sorted(tasks, key=lambda t: t.regret_score, reverse=True):
+    # untimed tasks: first-fit, highest regret first
+    for task in sorted(unpinned, key=lambda t: t.regret_score, reverse=True):
         minutes = _task_minutes(task)
         placed = False
         for i, (gap_start, gap_end) in enumerate(free):

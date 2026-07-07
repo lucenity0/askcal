@@ -58,7 +58,7 @@ async def get_today(user: CurrentUser, db: DbSession) -> TodayResponse:
             id=t.id,
             track=t.track.key.value,
             title=t.title,
-            meta=humanize_due(t.due_at, today),
+            meta=humanize_due(t.due_at),
             regret_score=t.regret_score,
             estimated_hours=t.estimated_hours,
         )

@@ -22,3 +22,14 @@ dist/
 # OS / editor cruft
 .DS_Store
 *.log
+
+# Xcode / iOS
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+DerivedData/
+*.xcworkspace/xcuserdata/
+*.mobileprovision
+*.p12
+*.cer
+GoogleService-Info.plist

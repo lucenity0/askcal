@@ -16,11 +16,12 @@ from app.schemas.inbox import (
     SnoozeResponse,
     SyncAccepted,
 )
+from app.routers.tasks import _task_full_out
 from app.schemas.tasks import TaskFullOut
 from app.services.brew_engine import temp_for_score
 from app.services.classifier import parse_deadline
 from app.services.gmail import mark_as_read
-from app.services.scheduling import humanize_due, local_midnight, user_today
+from app.services.scheduling import local_midnight, user_today
 from app.services.sync import run_sync_for_user
 
 router = APIRouter(prefix="/api", tags=["inbox"])
@@ -145,20 +146,12 @@ async def handle_email(
     email.handled = True
     db.add(task)
     await db.commit()
+    await db.refresh(task, ["track"])
 
     if user.google_refresh_token:
         background_tasks.add_task(mark_as_read, user.google_refresh_token, gmail_id)
 
-    return TaskFullOut(
-        id=task.id,
-        track=track_key.value,
-        title=task.title,
-        meta=humanize_due(task.due_at, user_today(user.timezone)),
-        regret_score=task.regret_score,
-        estimated_hours=task.estimated_hours,
-        status=task.status.value,
-        pipeline=task.pipeline.value if task.pipeline else None,
-    )
+    return _task_full_out(task)
 
 
 @router.post("/inbox/{gmail_id}/snooze", response_model=SnoozeResponse)
