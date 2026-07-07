@@ -2,14 +2,23 @@ from fastapi import APIRouter
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
+from app.core.errors import PulseError
 from app.deps import CurrentUser, DbSession
 from app.models import TaskStatus, Track
-from app.schemas.tracks import TrackItem, TrackOut, TracksResponse
+from app.schemas.tracks import (
+    ProfileRequest,
+    ProfileResponse,
+    TrackItem,
+    TrackOut,
+    TracksResponse,
+    TrackSettingOut,
+)
 from app.services.brew_engine import SCORE_THRESHOLDS
+from app.services.profile import STUDENT_TYPES, WORK_TYPES, profile_track_settings
 
 router = APIRouter(prefix="/api", tags=["tracks"])
 
-# "urgent" = would land on long_black or above by itself
+# "urgent" = high-consequence by itself (top scoring band)
 URGENT_THRESHOLD = SCORE_THRESHOLDS["long_black"]
 
 
@@ -48,3 +57,31 @@ async def get_tracks(user: CurrentUser, db: DbSession) -> TracksResponse:
             )
         )
     return TracksResponse(tracks=out)
+
+
+@router.post("/profile", response_model=ProfileResponse)
+async def set_profile(
+    body: ProfileRequest, user: CurrentUser, db: DbSession
+) -> ProfileResponse:
+    """Onboarding answers → per-track weight + active flags."""
+    if body.student_type not in STUDENT_TYPES:
+        raise PulseError(422, "INVALID_PROFILE", f"Unknown studentType '{body.student_type}'")
+    if body.work_type not in WORK_TYPES:
+        raise PulseError(422, "INVALID_PROFILE", f"Unknown workType '{body.work_type}'")
+
+    settings = profile_track_settings(body.student_type, body.work_type)
+    tracks = (
+        await db.scalars(select(Track).where(Track.user_id == user.id))
+    ).all()
+    for track in tracks:
+        weight, active = settings[track.key]
+        track.weight = weight
+        track.active = active
+    await db.commit()
+
+    return ProfileResponse(
+        tracks=[
+            TrackSettingOut(id=t.key.value, weight=t.weight, active=t.active)
+            for t in sorted(tracks, key=lambda t: t.key.value)
+        ]
+    )

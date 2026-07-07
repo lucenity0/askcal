@@ -22,3 +22,18 @@ class TrackOut(CamelModel):
 
 class TracksResponse(CamelModel):
     tracks: list[TrackOut]
+
+
+class ProfileRequest(CamelModel):
+    student_type: str  # student | working | both
+    work_type: str     # design | dev | both | other | none
+
+
+class TrackSettingOut(CamelModel):
+    id: str
+    weight: float
+    active: bool
+
+
+class ProfileResponse(CamelModel):
+    tracks: list[TrackSettingOut]

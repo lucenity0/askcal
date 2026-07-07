@@ -8,7 +8,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import get_settings
 from app.core.errors import PulseError, http_exception_handler, pulse_error_handler
-from app.routers import auth, closing_time, inbox, today, tracks
+from app.routers import auth, calendar, closing_time, inbox, routines, tasks, today, tracks
 from app.services.sync import sync_loop
 
 
@@ -39,7 +39,10 @@ app.include_router(auth.router)
 app.include_router(today.router)
 app.include_router(inbox.router)
 app.include_router(tracks.router)
+app.include_router(tasks.router)
+app.include_router(calendar.router)
 app.include_router(closing_time.router)
+app.include_router(routines.router)
 
 
 @app.get("/health", tags=["meta"])

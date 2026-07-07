@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, BackgroundTasks
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 
 from app.core.errors import PulseError
 from app.deps import CurrentUser, DbSession
@@ -16,11 +16,11 @@ from app.schemas.inbox import (
     SnoozeResponse,
     SyncAccepted,
 )
-from app.schemas.today import TaskOut
+from app.schemas.tasks import TaskFullOut
 from app.services.brew_engine import temp_for_score
 from app.services.classifier import parse_deadline
 from app.services.gmail import mark_as_read
-from app.services.scheduling import humanize_due, user_today
+from app.services.scheduling import humanize_due, local_midnight, user_today
 from app.services.sync import run_sync_for_user
 
 router = APIRouter(prefix="/api", tags=["inbox"])
@@ -28,6 +28,8 @@ router = APIRouter(prefix="/api", tags=["inbox"])
 
 @router.get("/inbox", response_model=InboxResponse)
 async def get_inbox(user: CurrentUser, db: DbSession) -> InboxResponse:
+    """Today's unhandled mail only — anything auto-tasked by the pipeline or
+    already swiped is out; yesterday's leftovers don't resurface."""
     now = datetime.now(timezone.utc)
     emails = (
         await db.scalars(
@@ -35,7 +37,15 @@ async def get_inbox(user: CurrentUser, db: DbSession) -> InboxResponse:
             .where(
                 Email.user_id == user.id,
                 Email.handled.is_(False),
-                or_(Email.snoozed_until.is_(None), Email.snoozed_until <= now),
+                or_(
+                    # fresh: arrived today, not snoozed away
+                    and_(
+                        Email.received_at >= local_midnight(user.timezone),
+                        Email.snoozed_until.is_(None),
+                    ),
+                    # returning: snooze expired (regardless of arrival day)
+                    and_(Email.snoozed_until.is_not(None), Email.snoozed_until <= now),
+                ),
             )
             .order_by(Email.regret_score.desc().nulls_last(), Email.received_at.desc())
         )
@@ -89,14 +99,14 @@ async def _get_inbox_email(db: DbSession, user: CurrentUser, gmail_id: str) -> E
     return email
 
 
-@router.post("/inbox/{gmail_id}/handle", response_model=TaskOut, status_code=201)
+@router.post("/inbox/{gmail_id}/handle", response_model=TaskFullOut, status_code=201)
 async def handle_email(
     gmail_id: str,
     body: HandleRequest,
     user: CurrentUser,
     db: DbSession,
     background_tasks: BackgroundTasks,
-) -> TaskOut:
+) -> TaskFullOut:
     """Swipe right: the email becomes a Task on its classified track."""
     email = await _get_inbox_email(db, user, gmail_id)
     if email.handled:
@@ -130,6 +140,7 @@ async def handle_email(
             round(email.estimated_minutes / 60, 1) if email.estimated_minutes else None
         ),
         due_at=parse_deadline(signals.get("deadline_utc")),
+        scheduled_for=user_today(user.timezone),
     )
     email.handled = True
     db.add(task)
@@ -138,13 +149,15 @@ async def handle_email(
     if user.google_refresh_token:
         background_tasks.add_task(mark_as_read, user.google_refresh_token, gmail_id)
 
-    return TaskOut(
+    return TaskFullOut(
         id=task.id,
         track=track_key.value,
         title=task.title,
         meta=humanize_due(task.due_at, user_today(user.timezone)),
         regret_score=task.regret_score,
         estimated_hours=task.estimated_hours,
+        status=task.status.value,
+        pipeline=task.pipeline.value if task.pipeline else None,
     )
 
 

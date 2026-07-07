@@ -1,9 +1,9 @@
 import enum
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum, Float, ForeignKey, Integer, String
+from sqlalchemy import Date, DateTime, Enum, Float, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -54,6 +54,9 @@ class Task(TimestampMixin, Base):
     regret_score: Mapped[int] = mapped_column(Integer, default=0)
     estimated_hours: Mapped[float | None] = mapped_column(Float)
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # The day this task belongs to. NULL means today (legacy rows / no
+    # explicit choice); Today/plan/review endpoints exclude future days.
+    scheduled_for: Mapped[date | None] = mapped_column(Date)
     status: Mapped[TaskStatus] = mapped_column(
         Enum(TaskStatus, name="task_status"), default=TaskStatus.pending
     )

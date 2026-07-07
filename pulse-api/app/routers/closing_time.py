@@ -11,26 +11,32 @@ from app.schemas.closing_time import (
     ClosingTimeRequest,
     ClosingTimeResponse,
 )
+from app.routers.tasks import due_by_today
 from app.schemas.today import TaskOut
-from app.services.brew_engine import calculate_brew
 from app.services.scheduling import humanize_due, user_today
 
 router = APIRouter(prefix="/api", tags=["closing-time"])
 
 
-async def _projected_brew(user_id, db: DbSession) -> tuple[str, int, list[Task]]:
-    """Brew tomorrow opens with, given every still-open task."""
+async def _open_state(
+    user_id, db: DbSession, today
+) -> tuple[list[Task], list[Task]]:
+    """(open tasks for today or earlier by regret desc, the carried subset).
+    Tomorrow's tasks aren't part of tonight's ritual."""
     open_tasks = (
         await db.scalars(
             select(Task)
-            .where(Task.user_id == user_id, Task.status != TaskStatus.done)
+            .where(
+                Task.user_id == user_id,
+                Task.status != TaskStatus.done,
+                due_by_today(today),
+            )
             .options(selectinload(Task.track))
             .order_by(Task.regret_score.desc())
         )
     ).all()
     carried = [t for t in open_tasks if t.status == TaskStatus.carried]
-    brew = calculate_brew([t.regret_score for t in open_tasks], len(carried))
-    return brew, len(carried), list(open_tasks)
+    return list(open_tasks), carried
 
 
 @router.post("/closing-time", response_model=ClosingTimeResponse)
@@ -52,7 +58,7 @@ async def closing_time(
             .values(status=TaskStatus.carried, carried_count=Task.carried_count + 1)
         )
 
-    tomorrow_brew, carry_count, _ = await _projected_brew(user.id, db)
+    _, carried = await _open_state(user.id, db, user_today(user.timezone))
 
     log = await db.scalar(
         select(DayLog).where(DayLog.user_id == user.id, DayLog.date == body.date)
@@ -63,22 +69,19 @@ async def closing_time(
     log.notes = body.notes
     log.pulled_count = len(body.pulled)
     log.remaining_count = len(body.remaining)
-    log.projected_brew = tomorrow_brew
 
     await db.commit()
 
     return ClosingTimeResponse(
-        tomorrow_brew=tomorrow_brew,
-        carry_forward_count=carry_count,
+        carry_forward_count=len(carried),
         message="tomorrow's pre-order updated",
     )
 
 
 @router.get("/carry-forward", response_model=CarryForwardResponse)
 async def carry_forward(user: CurrentUser, db: DbSession) -> CarryForwardResponse:
-    projected, carry_count, open_tasks = await _projected_brew(user.id, db)
     today = user_today(user.timezone)
-    carried = [t for t in open_tasks if t.status == TaskStatus.carried]
+    _, carried = await _open_state(user.id, db, today)
     return CarryForwardResponse(
         tasks=[
             TaskOut(
@@ -91,6 +94,5 @@ async def carry_forward(user: CurrentUser, db: DbSession) -> CarryForwardRespons
             )
             for t in carried
         ],
-        count=carry_count,
-        projected_brew=projected,
+        count=len(carried),
     )

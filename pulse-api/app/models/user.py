@@ -12,6 +12,7 @@ from app.models.base import TimestampMixin
 if TYPE_CHECKING:
     from app.models.email import Email
     from app.models.refresh_token import RefreshToken
+    from app.models.routine import Routine
     from app.models.task import Task
     from app.models.track import Track
 
@@ -43,5 +44,8 @@ class User(TimestampMixin, Base):
         back_populates="user", cascade="all, delete-orphan"
     )
     refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    routines: Mapped[list["Routine"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )

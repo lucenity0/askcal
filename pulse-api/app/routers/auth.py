@@ -1,6 +1,10 @@
+import re
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlencode
 
+import jwt
 from fastapi import APIRouter, Response
+from fastapi.responses import RedirectResponse
 from sqlalchemy import select, update
 
 from app.config import get_settings
@@ -15,13 +19,13 @@ from app.schemas.auth import (
     RefreshResponse,
     UserOut,
 )
-from app.services.gmail import exchange_google_code
+from app.services.gmail import GoogleProfile, authorization_url, exchange_google_code
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-# New accounts start with career + uni; design activates when freelance work
-# is added, feed once the profile is set up (spec: "The four tracks").
-DEFAULT_ACTIVE_TRACKS = {TrackKey.career, TrackKey.uni}
+# New accounts start with career + uni + finance; design activates when
+# freelance work is added, feed once the profile is set up.
+DEFAULT_ACTIVE_TRACKS = {TrackKey.career, TrackKey.uni, TrackKey.finance}
 
 
 async def _issue_refresh_token(db: DbSession, user: User) -> str:
@@ -37,10 +41,8 @@ async def _issue_refresh_token(db: DbSession, user: User) -> str:
     return raw
 
 
-@router.post("/google", response_model=AuthResponse)
-async def google_auth(body: GoogleAuthRequest, db: DbSession) -> AuthResponse:
-    profile = await exchange_google_code(body.code)
-
+async def _login(profile: GoogleProfile, db: DbSession) -> tuple[User, str, str]:
+    """Upsert the user from a verified Google profile → (user, access, refresh)."""
     user = await db.scalar(select(User).where(User.google_sub == profile.sub))
     if user is None:
         user = await db.scalar(select(User).where(User.email == profile.email))
@@ -59,12 +61,72 @@ async def google_auth(body: GoogleAuthRequest, db: DbSession) -> AuthResponse:
     await db.flush()
     raw_refresh = await _issue_refresh_token(db, user)
     await db.commit()
+    return user, create_access_token(user.id), raw_refresh
 
+
+@router.post("/google", response_model=AuthResponse)
+async def google_auth(body: GoogleAuthRequest, db: DbSession) -> AuthResponse:
+    profile = await exchange_google_code(body.code)
+    user, access, raw_refresh = await _login(profile, db)
     return AuthResponse(
-        access_token=create_access_token(user.id),
+        access_token=access,
         refresh_token=raw_refresh,
         user=UserOut.model_validate(user),
     )
+
+
+# ─── Mobile flow: /auth/google/start → Google → /auth/google/callback → app ──
+# ASWebAuthenticationSession can't intercept a plain web redirect, so the API
+# brokers the exchange and hands tokens back via the app's custom scheme.
+# Requires {api_base_url}/auth/google/callback in the Google console client.
+
+_SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*$")
+
+
+def _callback_url() -> str:
+    return f"{get_settings().api_base_url}/auth/google/callback"
+
+
+@router.get("/google/start")
+async def google_start(scheme: str = "pulse") -> RedirectResponse:
+    if not _SCHEME_RE.match(scheme):
+        raise PulseError(422, "INVALID_SCHEME", "Bad callback scheme")
+    s = get_settings()
+    state = jwt.encode(
+        {
+            "scheme": scheme,
+            "type": "oauth_state",
+            "exp": datetime.now(timezone.utc) + timedelta(minutes=10),
+        },
+        s.jwt_secret,
+        algorithm=s.jwt_algorithm,
+    )
+    return RedirectResponse(authorization_url(state, redirect_uri=_callback_url()))
+
+
+@router.get("/google/callback")
+async def google_callback(code: str, state: str, db: DbSession) -> RedirectResponse:
+    s = get_settings()
+    try:
+        payload = jwt.decode(state, s.jwt_secret, algorithms=[s.jwt_algorithm])
+        if payload.get("type") != "oauth_state":
+            raise jwt.InvalidTokenError("wrong token type")
+        scheme = payload["scheme"]
+    except jwt.InvalidTokenError:
+        raise PulseError(401, "AUTH_EXPIRED", "OAuth state invalid or expired")
+
+    profile = await exchange_google_code(code, redirect_uri=_callback_url())
+    user, access, raw_refresh = await _login(profile, db)
+
+    fragment = urlencode(
+        {
+            "accessToken": access,
+            "refreshToken": raw_refresh,
+            "email": user.email,
+            "name": user.name or "",
+        }
+    )
+    return RedirectResponse(f"{scheme}://oauth#{fragment}")
 
 
 @router.post("/refresh", response_model=RefreshResponse)

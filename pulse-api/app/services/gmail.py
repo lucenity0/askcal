@@ -38,6 +38,9 @@ GMAIL_SCOPES = [
     "https://www.googleapis.com/auth/userinfo.profile",
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/gmail.modify",  # mark-as-read on triage
+    # one consent flow covers mail + calendar — never two connect buttons
+    # for the same provider. Existing users must re-consent to add this.
+    "https://www.googleapis.com/auth/calendar.readonly",
 ]
 
 
@@ -78,13 +81,13 @@ def _require_credentials() -> None:
 # ─── OAuth flow ───────────────────────────────────────────────────────────────
 
 
-def authorization_url(state: str) -> str:
+def authorization_url(state: str, redirect_uri: str | None = None) -> str:
     """URL the client sends the user to for the Google consent screen."""
     _require_credentials()
     s = get_settings()
     params = {
         "client_id": s.google_client_id,
-        "redirect_uri": s.google_redirect_uri,
+        "redirect_uri": redirect_uri or s.google_redirect_uri,
         "response_type": "code",
         "scope": " ".join(GMAIL_SCOPES),
         "access_type": "offline",  # get a refresh token for background ingestion
@@ -94,8 +97,9 @@ def authorization_url(state: str) -> str:
     return f"{GOOGLE_AUTH_URL}?{urlencode(params)}"
 
 
-async def exchange_google_code(code: str) -> GoogleProfile:
-    """Exchange the OAuth authorization code for tokens + verified identity."""
+async def exchange_google_code(code: str, redirect_uri: str | None = None) -> GoogleProfile:
+    """Exchange the OAuth authorization code for tokens + verified identity.
+    redirect_uri must match the one used in the authorization request."""
     _require_credentials()
     s = get_settings()
 
@@ -106,7 +110,7 @@ async def exchange_google_code(code: str) -> GoogleProfile:
                 "code": code,
                 "client_id": s.google_client_id,
                 "client_secret": s.google_client_secret,
-                "redirect_uri": s.google_redirect_uri,
+                "redirect_uri": redirect_uri or s.google_redirect_uri,
                 "grant_type": "authorization_code",
             },
         )
@@ -126,8 +130,20 @@ async def exchange_google_code(code: str) -> GoogleProfile:
     )
 
 
+# Google access tokens live ~1h; refreshing on every request added a full
+# Google round-trip (~0.5s) to every /api/today and /api/calendar call.
+_access_token_cache: dict[str, tuple[str, float]] = {}
+
+
 async def refresh_google_access_token(google_refresh_token: str) -> str:
-    """Trade the stored Google refresh token for a short-lived access token."""
+    """Trade the stored Google refresh token for a short-lived access token.
+    Cached in-process until ~1 min before expiry."""
+    import time
+
+    cached = _access_token_cache.get(google_refresh_token)
+    if cached and cached[1] > time.time():
+        return cached[0]
+
     _require_credentials()
     s = get_settings()
     async with httpx.AsyncClient() as client:
@@ -142,8 +158,13 @@ async def refresh_google_access_token(google_refresh_token: str) -> str:
         )
     if resp.status_code != 200:
         # invalid_grant = user revoked access or token expired → reconnect
+        _access_token_cache.pop(google_refresh_token, None)
         raise PulseError(401, "GMAIL_DISCONNECTED", "Gmail auth expired")
-    return resp.json()["access_token"]
+    data = resp.json()
+    token = data["access_token"]
+    ttl = int(data.get("expires_in", 3600))
+    _access_token_cache[google_refresh_token] = (token, time.time() + ttl - 60)
+    return token
 
 
 # ─── Message fetching ─────────────────────────────────────────────────────────
@@ -275,11 +296,21 @@ def parse_message(msg: dict) -> GmailMessage:
     )
 
 
-async def fetch_recent_messages(google_refresh_token: str) -> list[GmailMessage]:
-    """List + batch-fetch + parse recent inbox messages for one mailbox."""
+async def fetch_recent_messages(
+    google_refresh_token: str, since: datetime | None = None
+) -> list[GmailMessage]:
+    """List + batch-fetch + parse recent inbox messages for one mailbox.
+
+    `since` scopes the pull (Gmail `after:` takes epoch seconds) — the sync
+    passes the user's local midnight so a re-check only touches today's mail.
+    Without it, falls back to the configured lookback window.
+    """
     s = get_settings()
     access_token = await refresh_google_access_token(google_refresh_token)
-    query = f"newer_than:{s.gmail_lookback_days}d -in:spam -in:trash"
+    if since is not None:
+        query = f"after:{int(since.timestamp())} -in:spam -in:trash"
+    else:
+        query = f"newer_than:{s.gmail_lookback_days}d -in:spam -in:trash"
     ids = await list_message_ids(access_token, query, s.gmail_max_results)
     if not ids:
         return []

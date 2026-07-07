@@ -13,7 +13,6 @@ class ClosingTimeRequest(CamelModel):
 
 
 class ClosingTimeResponse(CamelModel):
-    tomorrow_brew: str
     carry_forward_count: int
     message: str
 
@@ -21,4 +20,3 @@ class ClosingTimeResponse(CamelModel):
 class CarryForwardResponse(CamelModel):
     tasks: list[TaskOut]
     count: int
-    projected_brew: str

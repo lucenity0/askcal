@@ -30,5 +30,7 @@ class TodayResponse(CamelModel):
     brew_data: BrewData
     top_tasks: list[TaskOut]
     day_plan: list[PlanSlot]
+    # tasks that fit nowhere around today's calendar — surfaced, never dropped
+    unscheduled: list[TaskOut] = []
     carry_forward: int
     date: dt.date

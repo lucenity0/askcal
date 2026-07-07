@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     google_client_id: str = ""
     google_client_secret: str = ""
     google_redirect_uri: str = "http://localhost:5173/auth/callback"
+    # Where this API is reachable — used to build the mobile OAuth callback
+    # (add {api_base_url}/auth/google/callback to the Google console client)
+    api_base_url: str = "http://localhost:8000"
 
     # Gemini classifier — free-tier API key from https://aistudio.google.com/apikey.
     # Classification is skipped (emails stay unranked) until this is set.

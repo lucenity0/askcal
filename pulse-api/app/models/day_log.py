@@ -1,7 +1,7 @@
 import datetime as dt
 import uuid
 
-from sqlalchemy import Date, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Date, ForeignKey, Integer, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -25,5 +25,3 @@ class DayLog(TimestampMixin, Base):
     notes: Mapped[str | None] = mapped_column(Text)
     pulled_count: Mapped[int] = mapped_column(Integer, default=0)
     remaining_count: Mapped[int] = mapped_column(Integer, default=0)
-    # Brew key projected for the following day at closing time
-    projected_brew: Mapped[str | None] = mapped_column(String(20))

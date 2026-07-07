@@ -19,6 +19,9 @@ class TrackKey(enum.StrEnum):
     design = "design"
     uni = "uni"
     feed = "feed"
+    # invoices, payments, banking — matters only when urgent; the regret
+    # formula's money_loss consequence carries the urgency weight
+    finance = "finance"
 
 
 class Track(TimestampMixin, Base):

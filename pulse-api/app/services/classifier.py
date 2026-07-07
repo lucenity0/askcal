@@ -33,7 +33,7 @@ class EmailSignals(BaseModel):
     email row — audit trail now, training labels for the ML model later."""
 
     gmail_id: str
-    track: Literal["career", "design", "uni", "feed", "none"]
+    track: Literal["career", "design", "uni", "feed", "finance", "none"]
     sender_type: SenderType
     consequence: Consequence
     action_required: bool
@@ -61,7 +61,9 @@ Classify each email below into signals. Track meanings:
 - design: freelance client work, briefs, deliverables, client communication
 - uni: coursework, exams, assignments, professor/university emails
 - feed: newsletters/content worth reading but with no obligation
-- none: everything else (spam, receipts, promotions, notifications)
+- finance: invoices, payments due, banking alerts, fees — money matters that
+  are important only when urgent (a payment reminder yes, a paid receipt no)
+- none: everything else (spam, paid receipts, promotions, notifications)
 
 Rules:
 - consequence = what the user loses by IGNORING the email, not how urgent it feels
