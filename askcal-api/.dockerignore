@@ -1,0 +1,13 @@
+# Keep the image lean and never bake local state/secrets into it.
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.prod
+.pytest_cache/
+.ruff_cache/
+.git/
+.DS_Store
+._*
+*.md
+tests/

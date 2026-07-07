@@ -33,3 +33,5 @@ DerivedData/
 *.p12
 *.cer
 GoogleService-Info.plist
+
+Pulse/Pulse.xcodeproj

@@ -533,8 +533,21 @@ final class AskcalStore {
         return "\(done) done · \(moved) moved to tomorrow"
     }
 
+    /// yyyy-MM-dd for the date's *local* calendar day. Must use the device
+    /// timezone: `.iso8601` FormatStyle formats in UTC, which shifts the day
+    /// by ±1 for users east/west of GMT (e.g. IST midnight is still the prior
+    /// day in UTC) — the source of calendar/today off-by-one-day bugs.
+    private static let dayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .iso8601)
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = .current
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+
     static func dayString(_ date: Date) -> String {
-        date.formatted(.iso8601.year().month().day())
+        dayFormatter.string(from: date)
     }
 }
 

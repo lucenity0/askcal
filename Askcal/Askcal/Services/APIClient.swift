@@ -28,9 +28,9 @@ final class APIClient {
     static let shared = APIClient()
     private var accessToken: String?
 
-    /// Defaults to the ngrok tunnel; override via UserDefaults "apiBaseURL"
+    /// Production API on GCP; override via UserDefaults "apiBaseURL"
     /// (no UI for it — deliberate, per owner request).
-    static let defaultBaseURL = "https://ranged-dawdler-sector.ngrok-free.dev"
+    static let defaultBaseURL = "https://api.askcal.lucenity.dev"
 
     var baseURL: String {
         UserDefaults.standard.string(forKey: "apiBaseURL") ?? Self.defaultBaseURL

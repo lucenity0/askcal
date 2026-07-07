@@ -1,0 +1,5 @@
+# Caddy terminates TLS (auto Let's Encrypt cert) and proxies to the API.
+# Requires: DNS A-record for this name pointing at the VM, ports 80+443 open.
+api.askcal.lucenity.dev {
+	reverse_proxy api:8000
+}

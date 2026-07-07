@@ -1,0 +1,51 @@
+# Production stack for the VM: Postgres + API + Caddy (auto-HTTPS).
+# Bring up with:  docker compose -f docker-compose.prod.yml up -d --build
+# Secrets/config come from .env.prod (never committed).
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    # env_file provides POSTGRES_PASSWORD directly to the container — avoids
+    # relying on shell/.env interpolation of ${POSTGRES_PASSWORD}, which the
+    # `env_file:` key does NOT feed.
+    env_file: .env.prod
+    environment:
+      POSTGRES_USER: askcal
+      POSTGRES_DB: askcal
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # No ports: mapping — the DB is only reachable on the internal compose
+    # network, never exposed to the public internet.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U askcal -d askcal"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  api:
+    build: .
+    restart: unless-stopped
+    env_file: .env.prod
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "8000"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
