@@ -115,8 +115,8 @@ async def classify_batch(emails: list[Email]) -> dict[str, EmailSignals]:
     unclassified and get retried on the next sync pass.
     """
     s = get_settings()
-    if not s.gemini_api_key:
-        logger.info("ASKCAL_GEMINI_API_KEY unset — skipping classification")
+    if not s.gemini_api_key and not s.gemini_use_vertex:
+        logger.info("no Gemini backend configured — skipping classification")
         return {}
 
     from google import genai  # deferred: import cost + optional dependency at runtime
@@ -128,7 +128,14 @@ async def classify_batch(emails: list[Email]) -> dict[str, EmailSignals]:
         emails_json=json.dumps([_email_payload(e) for e in emails], indent=2),
     )
 
-    client = genai.Client(api_key=s.gemini_api_key)
+    if s.gemini_use_vertex:
+        client = genai.Client(
+            vertexai=True,
+            project=s.gemini_vertex_project,
+            location=s.gemini_vertex_location,
+        )
+    else:
+        client = genai.Client(api_key=s.gemini_api_key)
     response = await client.aio.models.generate_content(
         model=s.gemini_model,
         contents=prompt,

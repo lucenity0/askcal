@@ -22,9 +22,17 @@ class Settings(BaseSettings):
     # (add {api_base_url}/auth/google/callback to the Google console client)
     api_base_url: str = "http://localhost:8000"
 
-    # Gemini classifier — free-tier API key from https://aistudio.google.com/apikey.
-    # Classification is skipped (emails stay unranked) until this is set.
+    # Gemini classifier. Two backends:
+    #  1. AI Studio — set gemini_api_key (free-tier key from
+    #     https://aistudio.google.com/apikey). Billed on AI Studio's own system.
+    #  2. Vertex AI — set gemini_use_vertex=true + gemini_vertex_project. Uses
+    #     GCP application-default credentials (the VM's service account), billed
+    #     to the GCP project so it draws on Cloud billing/credits. No API key.
+    # Classification is skipped (emails stay unranked) until one is configured.
     gemini_api_key: str = ""
+    gemini_use_vertex: bool = False
+    gemini_vertex_project: str = ""
+    gemini_vertex_location: str = "us-central1"
     gemini_model: str = "gemini-2.5-flash-lite"
     classify_batch_size: int = 10  # emails per Gemini call
     classify_delay_seconds: float = 5.0  # between calls, respects free-tier RPM

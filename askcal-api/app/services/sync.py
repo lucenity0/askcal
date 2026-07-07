@@ -125,7 +125,7 @@ def _auto_task(email: Email, signals, track_row: Track, today) -> Task:
 async def _classify_pending(db: AsyncSession, user: User) -> tuple[int, int]:
     """→ (classified count, auto-created task count)."""
     s = get_settings()
-    if not s.gemini_api_key:
+    if not s.gemini_api_key and not s.gemini_use_vertex:
         return 0, 0
 
     pending = (
