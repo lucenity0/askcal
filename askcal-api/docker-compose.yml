@@ -1,0 +1,17 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: askcal
+      POSTGRES_PASSWORD: askcal
+      POSTGRES_DB: askcal
+    ports:
+      - "5432:5432"
+    volumes:
+      - askcal_pgdata:/var/lib/postgresql/data
+
+volumes:
+  askcal_pgdata:
+    # pinned to the volume created under the pre-rename "pulse-api" project
+    # name so compose keeps using the real data instead of a fresh volume
+    name: pulse-api_pulse_pgdata

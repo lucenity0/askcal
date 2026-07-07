@@ -4,7 +4,7 @@
     {
       "name": "landing",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "4173", "-d", "pulse-landing"],
+      "runtimeArgs": ["-m", "http.server", "4173", "-d", "askcal-landing"],
       "port": 4173
     }
   ]

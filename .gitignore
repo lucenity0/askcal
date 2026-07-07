@@ -14,7 +14,7 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
-# Node (future pulse-web)
+# Node (future askcal-web)
 node_modules/
 dist/
 .vite/
