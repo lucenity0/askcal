@@ -67,12 +67,23 @@ Classify each email below into signals. Track meanings:
 
 Rules:
 - action_required = TRUE only when the user must personally DO a concrete task
-  with a real consequence: submit/complete an assessment, reply to a client or
-  recruiter, finish an assignment, pay a bill. FALSE for anything merely read,
-  noticed, or optional — newsletters, promotions/marketing, job-board
-  alerts/digests that list openings, social notifications (new connection,
-  someone viewed/messaged you, "add X"), receipts/paid confirmations, and
-  generic "discover"/"check out"/"waiting for you" nudges.
+  with a real consequence. TRUE examples: an assignment or report due,
+  "complete your online assessment", an interview slot to confirm, an
+  invoice/fees payable, a client requesting a revision, a professor requesting
+  a submission. FALSE examples: job-board digests/alerts that list openings
+  ("50 new jobs for you"), social notifications ("X wants to connect",
+  "someone viewed your profile", "add X"), newsletters and product marketing,
+  order/payment receipts and confirmations, and "discover"/"check out"/"your
+  points" nudges.
+- A no-reply or automated sender does NOT lower action_required — an LMS
+  assignment, an ATS assessment link, or a bank due-date is a real task even
+  though it arrives from a system address.
+- Completed money movement is a notification, not a task: money debited or
+  credited, a payment "successful", receipts, and account/balance/statement
+  updates are action_required=FALSE — they report what happened. A bill,
+  invoice, fee, or EMI that is DUE — an unpaid amount to actively pay — is
+  action_required=TRUE. (A failed/declined payment may also be TRUE when it
+  implies the user must retry or update a payment method.)
 - A job-board DIGEST or ALERT that lists openings is `feed`, not `career`. Only
   a specific opportunity addressed to the user (an OA/interview invite, a
   recruiter contacting them directly) is `career` with action_required.

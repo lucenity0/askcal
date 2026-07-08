@@ -45,13 +45,15 @@ CLASSIFY_PASS_LIMIT = 50  # max unclassified emails handled per sync pass
 # read-later by definition and never auto-tasks
 AUTO_TASK_TRACKS = {TrackKey.career, TrackKey.design, TrackKey.uni, TrackKey.finance}
 
-# Automated blasts never auto-task even when the model marks them actionable:
-# job-board alerts, promo newsletters and transaction receipts all read as
-# action_required but are not personal work.
-NON_TASKING_SENDERS = {"newsletter", "automated_system"}
-# Social notifications ("add X", "someone viewed/posted") often get labelled
-# sender=peer, so also gate on consequence: a purely social or no-stakes
-# downside is never a real work task worth scheduling.
+# A real task always has real stakes: social notifications ("add X", "someone
+# viewed you") and zero-consequence FYIs are never work, even when the model
+# marks them action_required — so gate on consequence.
+#
+# sender_type is deliberately NOT a gate. Legitimate tasks — assignment due,
+# online assessment, bill payable — arrive from no-reply/automated systems
+# exactly like noise does; filtering automated_system out silently drops real
+# work (the original assignment-not-tasking bug). The prompt's action_required
+# judgment is what separates a genuine ask from a notification.
 NON_TASKING_CONSEQUENCES = {"social", "none"}
 
 
@@ -104,12 +106,12 @@ async def _store_new_messages(db: AsyncSession, user: User) -> SyncResult:
 
 
 def should_auto_task(signals, track: TrackKey | None, track_row: Track | None) -> bool:
-    """Owner-approved rule: action required, from a real human sender, in a
-    real (non-feed) track that's active for this user. Automated blasts and
-    everything else wait in the inbox for a human to triage."""
+    """A mail auto-tasks when the model says the user must personally do a
+    concrete task (action_required) with a real consequence, in a real
+    (non-feed) work track that's active for this user. Channel/sender is not a
+    gate — an assignment from a no-reply LMS is as real as a client email."""
     return bool(
         signals.action_required
-        and signals.sender_type not in NON_TASKING_SENDERS
         and signals.consequence not in NON_TASKING_CONSEQUENCES
         and track in AUTO_TASK_TRACKS
         and track_row is not None
