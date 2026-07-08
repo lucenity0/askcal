@@ -45,6 +45,15 @@ CLASSIFY_PASS_LIMIT = 50  # max unclassified emails handled per sync pass
 # read-later by definition and never auto-tasks
 AUTO_TASK_TRACKS = {TrackKey.career, TrackKey.design, TrackKey.uni, TrackKey.finance}
 
+# Automated blasts never auto-task even when the model marks them actionable:
+# job-board alerts, promo newsletters and transaction receipts all read as
+# action_required but are not personal work.
+NON_TASKING_SENDERS = {"newsletter", "automated_system"}
+# Social notifications ("add X", "someone viewed/posted") often get labelled
+# sender=peer, so also gate on consequence: a purely social or no-stakes
+# downside is never a real work task worth scheduling.
+NON_TASKING_CONSEQUENCES = {"social", "none"}
+
 
 @dataclass
 class SyncResult:
@@ -95,10 +104,13 @@ async def _store_new_messages(db: AsyncSession, user: User) -> SyncResult:
 
 
 def should_auto_task(signals, track: TrackKey | None, track_row: Track | None) -> bool:
-    """Owner-approved rule: action required + a real (non-feed) track that's
-    active for this user. Everything else waits in the inbox for a human."""
+    """Owner-approved rule: action required, from a real human sender, in a
+    real (non-feed) track that's active for this user. Automated blasts and
+    everything else wait in the inbox for a human to triage."""
     return bool(
         signals.action_required
+        and signals.sender_type not in NON_TASKING_SENDERS
+        and signals.consequence not in NON_TASKING_CONSEQUENCES
         and track in AUTO_TASK_TRACKS
         and track_row is not None
         and track_row.active

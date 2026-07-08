@@ -66,6 +66,19 @@ Classify each email below into signals. Track meanings:
 - none: everything else (spam, paid receipts, promotions, notifications)
 
 Rules:
+- action_required = TRUE only when the user must personally DO a concrete task
+  with a real consequence: submit/complete an assessment, reply to a client or
+  recruiter, finish an assignment, pay a bill. FALSE for anything merely read,
+  noticed, or optional — newsletters, promotions/marketing, job-board
+  alerts/digests that list openings, social notifications (new connection,
+  someone viewed/messaged you, "add X"), receipts/paid confirmations, and
+  generic "discover"/"check out"/"waiting for you" nudges.
+- A job-board DIGEST or ALERT that lists openings is `feed`, not `career`. Only
+  a specific opportunity addressed to the user (an OA/interview invite, a
+  recruiter contacting them directly) is `career` with action_required.
+- sender_type: use `newsletter` for bulk/marketing mail and `automated_system`
+  for platform/no-reply notifications; reserve `client`/`recruiter`/`professor`
+  for a real person writing to the user.
 - consequence = what the user loses by IGNORING the email, not how urgent it feels
 - deadline_utc: only if a concrete deadline is stated or strongly implied
   (ISO 8601, UTC). Today is {today_utc}.
