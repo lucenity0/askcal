@@ -32,7 +32,7 @@ struct TodayView: View {
     }
 
     var body: some View {
-        PageScaffold(onRefresh: { await store.refreshAll() }) {
+        PageScaffold(onRefresh: { await store.syncInbox() }) {
             header
             if showWeek { WeekStrip(selectedDate: $selectedDate) }
             Text(isToday ? store.loadLine : " ")

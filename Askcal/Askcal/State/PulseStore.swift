@@ -267,6 +267,10 @@ final class AskcalStore {
 
     func refreshAll() async {
         guard isLive else { return }
+        await fetchAll()
+    }
+
+    private func fetchAll() async {
         do {
             async let tasksReq = APIClient.shared.tasks()
             async let todayReq = APIClient.shared.today()
@@ -333,16 +337,15 @@ final class AskcalStore {
         }
     }
 
-    /// Pull-to-refresh on Inbox: trigger a Gmail sync, wait, re-fetch.
-    /// The pipeline may have auto-created tasks from actionable mail, so
-    /// tasks and the day plan refresh along with the inbox.
+    /// Pull-to-refresh on Today and Inbox, and the manual "sync now" action
+    /// in More: trigger a Gmail sync, wait, then refetch everything. The
+    /// pipeline may have auto-created tasks from actionable mail, so tasks
+    /// and the day plan refresh along with the inbox.
     func syncInbox() async {
         guard isLive else { return }
         try? await APIClient.shared.triggerSync()
         try? await Task.sleep(for: .seconds(6))
-        if let fresh = try? await APIClient.shared.inbox() { emails = fresh }
-        if let freshTasks = try? await APIClient.shared.tasks() { tasks = freshTasks }
-        if let today = try? await APIClient.shared.today() { dayPlan = today.dayPlan }
+        await fetchAll()
     }
 
     // MARK: - Actions
