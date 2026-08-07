@@ -44,14 +44,21 @@ class Email(TimestampMixin, Base):
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     raw: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
-    # Classifier output (async — Gemini categories + regret scoring model)
+    # Classifier output (async — track/consequence signals + regret scoring)
     track: Mapped[TrackKey | None] = mapped_column(Enum(TrackKey, name="track_key"))
     regret_score: Mapped[int | None] = mapped_column(Integer)
     estimated_minutes: Mapped[int | None] = mapped_column(Integer)
-    # Raw signals Gemini extracted (EmailSignals dump) — audit trail for the
+    # Raw signals the model extracted (EmailSignals dump) — audit trail for the
     # regret formula and training data for the future ML scoring model
     signals: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     classified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Failed classification attempts. Past classify_max_attempts the email stops
+    # being picked up: a message the model can never parse would otherwise be
+    # re-sent every sync interval forever, crowding the pass limit and burning
+    # quota indefinitely.
+    classify_attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0", default=0
+    )
 
     # Triage state: swipe right → handled, swipe left → snoozed
     handled: Mapped[bool] = mapped_column(Boolean, default=False)

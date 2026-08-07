@@ -15,6 +15,12 @@ class Settings(BaseSettings):
     access_token_ttl_minutes: int = 15
     refresh_token_ttl_days: int = 30
 
+    # Custom URL schemes the mobile OAuth callback may redirect tokens to.
+    # An allowlist because the scheme used to be attacker-controlled: a link to
+    # /auth/google/start?scheme=evil made the API hand a fresh access token and
+    # 30-day refresh token to any app registering evil://.
+    oauth_callback_schemes: list[str] = ["askcal"]
+
     # Google OAuth 2.0 — the flow is wired but inert until these are filled in .env
     google_client_id: str = ""
     google_client_secret: str = ""
@@ -78,6 +84,32 @@ class Settings(BaseSettings):
     # these explicitly overrides the active provider's own defaults.
     classify_batch_size: int = 10  # emails per Gemini call
     classify_delay_seconds: float = 5.0  # between calls, respects free-tier RPM
+
+    # ── Auto-tasking gates ────────────────────────────────────────────────
+    # The old rule was effectively "the model said action_required", which
+    # over-created badly: a promo only had to be labelled money_loss or
+    # opportunity_loss to become a permanent task. Both signals below were
+    # already computed and simply never consulted.
+    #
+    # A guess is not a task. The model reports 0.85-0.95 when it actually knows,
+    # so this floor only catches genuine uncertainty.
+    auto_task_min_confidence: float = 0.6
+    # Nor is a trivial one. Real work scores 50-75 on the regret formula while
+    # digests and receipts land at 0-18, so this sits in the gap. Note the score
+    # is already confidence-dampened, so the two gates compound deliberately.
+    auto_task_min_regret: int = 25
+    # A model-supplied deadline this far past the email's arrival is a
+    # hallucinated year, not a deadline. Anything overdue by more than the lower
+    # bound is stale enough that treating it as urgent is noise.
+    deadline_max_horizon_days: int = 365
+    deadline_max_overdue_days: int = 30
+    # How far ahead of a deadline the task lands on the plan. Tasks used to be
+    # scheduled for today unconditionally, so a deadline three weeks out still
+    # inflated today's list.
+    task_schedule_lead_days: int = 1
+    # Emails whose classification keeps failing stop being retried. Without this
+    # a permanently-unparseable message is re-sent every sync interval forever.
+    classify_max_attempts: int = 3
 
     # Background sync loop (in-process; POST /api/inbox/sync triggers on demand)
     sync_enabled: bool = True

@@ -307,10 +307,16 @@ async def fetch_recent_messages(
     """
     s = get_settings()
     access_token = await refresh_google_access_token(google_refresh_token)
+    # -category:promotions/social is the cheapest lever Askcal has on both cost
+    # and precision: without it every marketing blast and social notification is
+    # fetched, stored, paid for in LLM tokens, and made eligible for auto-tasking.
+    # `updates` is deliberately NOT excluded — that is where LMS, ATS and billing
+    # mail lands, i.e. most of the real work.
+    scope = "-in:spam -in:trash -category:promotions -category:social"
     if since is not None:
-        query = f"after:{int(since.timestamp())} -in:spam -in:trash"
+        query = f"after:{int(since.timestamp())} {scope}"
     else:
-        query = f"newer_than:{s.gmail_lookback_days}d -in:spam -in:trash"
+        query = f"newer_than:{s.gmail_lookback_days}d {scope}"
     ids = await list_message_ids(access_token, query, s.gmail_max_results)
     if not ids:
         return []

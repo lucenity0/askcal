@@ -112,6 +112,28 @@ async def create_task(
     return _task_full_out(task)
 
 
+@router.delete("/tasks/{task_id}", status_code=204)
+async def delete_task(task_id: uuid.UUID, user: CurrentUser, db: DbSession) -> None:
+    """Remove a task outright.
+
+    The undo for auto-tasking. Without this the only way to clear a wrongly
+    created task was to mark it done, so every false positive accumulated
+    permanently — which is what made over-creation feel bad rather than merely
+    noisy.
+
+    The source email deliberately stays `handled`: deleting the task means "this
+    was never work", so putting the mail back in the inbox would just ask the
+    same question again.
+    """
+    task = await db.scalar(
+        select(Task).where(Task.user_id == user.id, Task.id == task_id)
+    )
+    if task is None:
+        raise AskcalError(404, "NOT_FOUND", "No such task")
+    await db.delete(task)
+    await db.commit()
+
+
 @router.patch("/tasks/{task_id}", response_model=TaskFullOut)
 async def patch_task(
     task_id: uuid.UUID, body: TaskPatchRequest, user: CurrentUser, db: DbSession
