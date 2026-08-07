@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -22,6 +23,44 @@ class Settings(BaseSettings):
     # (add {api_base_url}/auth/google/callback to the Google console client)
     api_base_url: str = "http://localhost:8000"
 
+    # Which transport classifies mail. A Literal, not a str, so a typo is a
+    # startup ValidationError rather than a silent fall-through to the wrong
+    # provider.
+    # claude_code is the default because it needs no API key at all: it rides
+    # the operator's own Claude subscription through the locally-installed CLI,
+    # so a fresh clone classifies mail with zero credential setup.
+    llm_provider: Literal["claude_code", "gemini"] = "claude_code"
+
+    # Claude Code CLI provider — no API key at all: it rides the operator's own
+    # Claude subscription via the locally-installed `claude` binary. On a dev
+    # machine the CLI reads its own login and nothing here needs setting; inside
+    # a container there is no home directory to read from, so the OAuth token
+    # below is mandatory (mint it with `claude setup-token` on the host).
+    claude_code_binary: str = "claude"
+    # A CLI alias rather than a pinned id, so this survives model releases.
+    # "haiku" is the cheaper switch once there's a golden set to justify it.
+    claude_code_model: str = "sonnet"
+    # Classification is extraction against an explicit rubric, not reasoning,
+    # and effort is the quota lever — higher effort mostly buys deliberation the
+    # rubric already supplies.
+    claude_code_effort: Literal["low", "medium", "high", "xhigh", "max"] = "low"
+    # Ceiling for one batch. A low-effort run on 25 emails lands well inside
+    # this; the value exists so a wedged CLI cannot stall the sync loop past the
+    # sync interval.
+    claude_code_timeout_seconds: float = 240.0
+    claude_code_oauth_token: str = ""
+    # Bigger batches than Gemini and no inter-batch sleep: every invocation
+    # re-pays the CLI's own multi-thousand-token preamble against subscription
+    # quota, so one call of 25 beats three of 10, and there is no per-minute
+    # request limit to pace against.
+    claude_code_batch_size: int = 25
+    claude_code_delay_seconds: float = 0.0
+
+    # Extra attempts when the model's JSON does not validate. Only the emails
+    # that actually failed are re-sent, so this is cheap. 1 is enough — a second
+    # failure on the same email is a prompt problem, not a flake.
+    classify_max_retries: int = 1
+
     # Gemini classifier. Two backends:
     #  1. AI Studio — set gemini_api_key (free-tier key from
     #     https://aistudio.google.com/apikey). Billed on AI Studio's own system.
@@ -34,6 +73,9 @@ class Settings(BaseSettings):
     gemini_vertex_project: str = ""
     gemini_vertex_location: str = "us-central1"
     gemini_model: str = "gemini-2.5-flash-lite"
+    # Gemini pacing (free-tier RPM). The Claude Code provider uses
+    # claude_code_batch_size/_delay_seconds instead — but setting either of
+    # these explicitly overrides the active provider's own defaults.
     classify_batch_size: int = 10  # emails per Gemini call
     classify_delay_seconds: float = 5.0  # between calls, respects free-tier RPM
 

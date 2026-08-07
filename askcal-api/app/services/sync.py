@@ -14,7 +14,7 @@ The fetch is scoped to the user's current local day, so a re-sync re-checks
 today's mail only; the gmail_id unique constraint keeps it duplicate-free.
 
 Auto-task rule (owner decision): an email becomes a task the moment it's
-classified IF Gemini says action_required AND its track is real work
+classified IF the model says action_required AND its track is real work
 (not feed) AND that track is active for this user. Auto-tasked emails are
 marked handled — the inbox only ever shows what still needs a human.
 """
@@ -31,8 +31,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.core.errors import AskcalError
 from app.db import SessionLocal
+from app.llm.base import LLMLimitError
 from app.models import Email, Task, Track, TrackKey, User
-from app.services.classifier import classify_batch, parse_deadline, signals_track_key
+from app.services.classifier import (
+    classifier_configured,
+    classify_batch,
+    classify_pacing,
+    parse_deadline,
+    signals_track_key,
+)
 from app.services.gmail import fetch_recent_messages
 from app.services.regret import compute_regret
 from app.services.scheduling import local_midnight, user_today
@@ -138,8 +145,9 @@ def _auto_task(email: Email, signals, track_row: Track, today) -> Task:
 
 async def _classify_pending(db: AsyncSession, user: User) -> tuple[int, int]:
     """→ (classified count, auto-created task count)."""
-    s = get_settings()
-    if not s.gemini_api_key and not s.gemini_use_vertex:
+    # Guards the SELECT below, not just the LLM call: with no provider there is
+    # no point querying pending mail every sync interval.
+    if not classifier_configured():
         return 0, 0
 
     pending = (
@@ -162,14 +170,20 @@ async def _classify_pending(db: AsyncSession, user: User) -> tuple[int, int]:
     auto_tasked = 0
     now = datetime.now(timezone.utc)
     today = user_today(user.timezone)
-    for start in range(0, len(pending), s.classify_batch_size):
-        chunk = list(pending[start : start + s.classify_batch_size])
-        if start > 0:
-            await asyncio.sleep(s.classify_delay_seconds)
+    batch_size, delay = classify_pacing()
+    for start in range(0, len(pending), batch_size):
+        chunk = list(pending[start : start + batch_size])
+        if start > 0 and delay:
+            await asyncio.sleep(delay)
         try:
             signals_by_id = await classify_batch(chunk)
+        except LLMLimitError:
+            # Out of allowance, not broken. Grinding the remaining chunks against
+            # the wall just burns retries against a limit that only time fixes.
+            logger.warning("LLM quota reached — stopping this pass, resuming next sync")
+            break
         except Exception:
-            logger.exception("Gemini classification call failed; will retry next sync")
+            logger.exception("classification call failed; will retry next sync")
             continue
         for email in chunk:
             signals = signals_by_id.get(email.gmail_id)

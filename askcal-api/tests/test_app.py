@@ -10,7 +10,11 @@ client = TestClient(app)
 def test_health():
     r = client.get("/health")
     assert r.status_code == 200
-    assert r.json() == {"status": "ok"}
+    body = r.json()
+    assert body["status"] == "ok"
+    # Reported so a deploy can be verified without shelling into the VM.
+    assert body["llm_provider"] in {"claude_code", "gemini"}
+    assert isinstance(body["classifier_configured"], bool)
 
 
 def test_protected_routes_return_contract_error_shape():

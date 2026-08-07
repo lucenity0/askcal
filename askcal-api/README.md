@@ -44,12 +44,34 @@ lazy download + OCR is a later phase.
 
 ## Classification, regret scoring, auto-tasking
 
-`app/services/classifier.py` sends batches of `ASKCAL_CLASSIFY_BATCH_SIZE`
-emails per Gemini call (free-tier key from https://aistudio.google.com/apikey →
-`ASKCAL_GEMINI_API_KEY`; classification is skipped while unset). Gemini
-extracts structured signals only — track, sender type, consequence-of-
-ignoring, deadline, effort, confidence — stored on `emails.signals` (JSONB,
-future ML training data).
+`app/services/classifier.py` sends batches of emails to whichever transport
+`ASKCAL_LLM_PROVIDER` selects. The model extracts structured signals only —
+track, sender type, consequence-of-ignoring, deadline, effort, confidence —
+stored on `emails.signals` (JSONB, future ML training data).
+
+Two providers, both behind the one `LLMProvider` protocol in `app/llm/base.py`,
+so switching is config rather than code:
+
+| | Setup | Notes |
+|---|---|---|
+| `claude_code` (default) | `npm i -g @anthropic-ai/claude-code && claude` | No API key — drives the local CLI against your own Claude subscription. In Docker, also needs `ASKCAL_CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token`. |
+| `gemini` | `ASKCAL_GEMINI_API_KEY`, or Vertex via the VM service account | Constrained decoding via `response_schema`, so its output is shape-guaranteed. |
+
+The prompt, the JSON schema, gmail_id reconciliation and the retry policy all
+live in `classifier.py`, above the transport — a provider is a dumb
+`complete(system, user) -> text`, so adding one can never fork the classifier's
+judgment. Because the CLI has no constrained decoding, `app/llm/structured.py`
+renders the schema into the prompt from `EmailSignals.model_json_schema()` and
+validates **per item**, so one malformed entry in a batch of 25 costs one email
+rather than all of them; only the stragglers are retried.
+
+Classification is skipped entirely (mail is still ingested) when no provider is
+usable. `GET /health` reports `llm_provider` and `classifier_configured`, and a
+bad setup is logged as an error at startup.
+
+Note: the Claude Code CLI writes session transcripts under `~/.claude/projects/`,
+so email excerpts touch local disk — a difference from Gemini, which only sends
+them over TLS.
 
 The 0–100 regret score comes from the deterministic formula in
 `app/services/regret.py` (consequence base + deadline proximity + sender +
