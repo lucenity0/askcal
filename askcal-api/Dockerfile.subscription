@@ -1,0 +1,52 @@
+# Askcal API + the Claude Code CLI.
+#
+# Kept separate from the lean Dockerfile on purpose. Node plus the CLI takes the
+# image from 556MB to 1.26GB — measured, not estimated — and that is only worth
+# carrying when ASKCAL_LLM_PROVIDER=claude_code, which is a deployment choice
+# rather than a property of the app. Opt in with docker-compose.subscription.yml;
+# drop the overlay and you are back on the small image with nothing else to undo.
+#
+# Auth: inside a container there is no home directory holding CLI credentials,
+# so ASKCAL_CLAUDE_CODE_OAUTH_TOKEN is mandatory. Mint it on the host with
+# `claude setup-token`. The provider checks for it at construction and refuses
+# to start with a message naming the fix, rather than failing mid-classification.
+
+FROM python:3.13-slim-bookworm
+
+COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /bin/uv
+
+WORKDIR /app
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=0
+
+# Node + the CLI, pinned. The version is not cosmetic: this provider depends on
+# CLI surface area (`--tools ""` as an empty allow-list, `--output-format
+# stream-json`, `--effort`), so an unpinned upgrade could change behaviour
+# under a deploy that touched nothing else.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
+ && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+ && apt-get install -y --no-install-recommends nodejs \
+ && npm install -g @anthropic-ai/claude-code@2.1.224 \
+ && npm cache clean --force \
+ && apt-get purge -y gnupg curl && apt-get autoremove -y \
+ && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# The CLI wants a writable config dir and will not fall back gracefully without
+# one. /home/askcal is created here rather than relying on $HOME being set.
+ENV HOME=/home/askcal
+RUN mkdir -p /home/askcal
+
+# Deps in their own layer so source edits don't bust the (slow) dependency cache.
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-install-project --no-dev
+
+COPY . .
+RUN chmod +x docker-entrypoint.sh
+
+ENV PATH="/app/.venv/bin:$PATH"
+
+EXPOSE 8000
+ENTRYPOINT ["/app/docker-entrypoint.sh"]

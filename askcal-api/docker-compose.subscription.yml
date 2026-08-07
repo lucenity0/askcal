@@ -1,0 +1,20 @@
+# Overlay that swaps the API onto an image carrying the Claude Code CLI.
+#
+#   docker compose -f docker-compose.prod.yml -f docker-compose.subscription.yml up -d --build
+#
+# Only needed when ASKCAL_LLM_PROVIDER=claude_code. Without this overlay the API
+# runs the lean image, which has no `claude` binary — the provider then refuses
+# to construct and logs "not on PATH" at startup rather than failing silently.
+#
+# Note there is deliberately NO `environment:` block here. A restated
+# environment key outranks env_file, so listing ASKCAL_CLAUDE_CODE_OAUTH_TOKEN
+# without a value would blank the token that .env.prod just supplied — a failure
+# that looks exactly like a token that was never pasted.
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.subscription
+    # A distinct image name so this never overwrites the lean build and the two
+    # stay independently rebuildable.
+    image: askcal-api:subscription

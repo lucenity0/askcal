@@ -1,7 +1,7 @@
 # askcal-api
 
 FastAPI backend for [Askcal](../) — context-aware daily scheduler for student freelancers.
-Serves `api.lucenity.dev`.
+Serves `api.askcal.lucenity.dev`.
 
 ## Stack
 
@@ -112,6 +112,30 @@ the profile.
 ## Layout
 
 ```
+## Deployment
+
+```bash
+# lean image — use when ASKCAL_LLM_PROVIDER=gemini
+docker compose -f docker-compose.prod.yml up -d --build
+
+# with the Claude Code CLI — required when ASKCAL_LLM_PROVIDER=claude_code
+docker compose -f docker-compose.prod.yml -f docker-compose.subscription.yml up -d --build
+```
+
+The subscription overlay is separate because Node plus the CLI takes the image
+from 556MB to 1.26GB, and that is only worth carrying when the CLI is the
+transport.
+It needs `ASKCAL_CLAUDE_CODE_OAUTH_TOKEN` in `.env.prod` — a container has no
+home directory holding CLI credentials, so `claude setup-token` on your own
+machine is the only way in. Without it the provider refuses to construct at
+startup with a message naming the fix.
+
+Confirm a deploy with `curl https://api.askcal.lucenity.dev/health`, which
+reports `llm_provider` and `classifier_configured`.
+
+## Layout
+
+```
 app/
 ├── main.py          FastAPI app, CORS, error handlers
 ├── config.py        pydantic-settings (env prefix ASKCAL_)
@@ -120,9 +144,12 @@ app/
 ├── core/             security (JWT/refresh tokens), error shape (AskcalError)
 ├── models/           users, tracks, tasks, emails, routines, refresh_tokens, day_logs
 ├── schemas/          camelCase API models
+├── llm/              provider protocol + transports (claude_code, gemini),
+│                      structured-output parsing, provider registry
 ├── services/          gmail (OAuth + ingestion), gcal (calendar read), classifier
-│                      (Gemini), regret (scoring formula), sync (orchestration +
-│                      auto-tasking), scheduling (day-plan + humanized deadlines)
+│                      (prompt + schema + retry policy), regret (scoring formula),
+│                      sync (orchestration + auto-tasking), scheduling (day-plan
+│                      + humanized deadlines)
 └── routers/          /auth/*, /api/today, /api/tasks, /api/inbox (+ sync/handle/
                        snooze), /api/calendar, /api/tracks, /api/routines, /api/me,
                        /api/closing-time, /api/carry-forward
