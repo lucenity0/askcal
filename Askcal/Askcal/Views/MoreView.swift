@@ -19,7 +19,7 @@ struct MoreView: View {
     @Environment(AskcalStore.self) private var store
     @Environment(\.mono) private var mono
     @Environment(\.webAuthenticationSession) private var webAuth
-    @AppStorage("themeMode") private var themeRaw = ThemeMode.light.rawValue
+    @AppStorage("themeMode") private var themeRaw = ThemeMode.storageDefault
     @AppStorage("userName") private var userName = ""
     @AppStorage("morningDigest") private var morningDigest = true
     @AppStorage("eveningNudge") private var eveningNudge = true

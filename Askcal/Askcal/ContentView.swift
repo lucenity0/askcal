@@ -22,7 +22,7 @@ enum RailTab: String, CaseIterable {
 struct ContentView: View {
     @Environment(AskcalStore.self) private var store
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @AppStorage("themeMode") private var themeRaw = ThemeMode.light.rawValue
+    @AppStorage("themeMode") private var themeRaw = ThemeMode.storageDefault
     @State private var tab: RailTab = .today
     @State private var showComposer = false
     @State private var isAddingRoutine = false
@@ -30,7 +30,7 @@ struct ContentView: View {
     @State private var didLaunch = false
     @Namespace private var railNS
 
-    private var mode: ThemeMode { ThemeMode(rawValue: themeRaw) ?? .light }
+    private var mode: ThemeMode { ThemeMode.stored(themeRaw) }
     private var mono: MonoPalette { .palette(for: mode) }
 
     /// Rail + content share one clock so the glass slide and the content
@@ -92,7 +92,7 @@ struct ContentView: View {
                 .environment(\.mono, mono)
         }
         .environment(\.mono, mono)
-        .preferredColorScheme(mode == .light ? .light : .dark)
+        .preferredColorScheme(mode.polarity)
         .animation(.easeInOut(duration: 0.25), value: themeRaw)
         .onAppear {
             if !didLaunch { didLaunch = true; showGreeting = true }
