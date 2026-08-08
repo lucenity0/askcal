@@ -39,15 +39,31 @@ struct GreetingView: View {
 
     var body: some View {
         ZStack {
-            mono.bg.ignoresSafeArea()
-            VStack(spacing: 34) {
-                HeartbeatLine()
-                    .trim(from: 0, to: lineProgress)
-                    .stroke(mono.fill, style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
-                    .frame(height: 110)
-                    .padding(.horizontal, 44)
+            // Explicit and full-bleed. A Color inside the ZStack was letting
+            // Today read through underneath — the greeting is meant to be the
+            // whole screen, not a layer over it.
+            Rectangle()
+                .fill(mono.paper)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .ignoresSafeArea(.all)
 
-                VStack(spacing: 8) {
+            VStack(spacing: MonoSpace.section) {
+                // The room fades up rather than drawing itself on. A scene
+                // assembling pixel by pixel would be a second animation
+                // competing with the one inside it — the cat is already
+                // breathing, the clouds are already moving.
+                LaunchScene()
+                    .frame(height: 190)
+                    .clipShape(RoundedRectangle(cornerRadius: MonoRadius.card))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: MonoRadius.card)
+                            .strokeBorder(mono.rule, lineWidth: MonoStroke.hair)
+                    )
+                    .padding(.horizontal, MonoSpace.gutter)
+                    .opacity(lineProgress)
+                    .scaleEffect(0.97 + 0.03 * lineProgress, anchor: .bottom)
+
+                VStack(spacing: MonoSpace.md) {
                     Text(dateKicker)
                         .font(MonoType.kicker(12))
                         .foregroundStyle(mono.textSecondary)

@@ -83,7 +83,10 @@ struct ContentView: View {
                 GreetingView(loggedIn: APIClient.shared.isConnected) {
                     withAnimation(.easeInOut(duration: 0.55)) { showGreeting = false }
                 }
-                .transition(.move(edge: .top).combined(with: .opacity))
+                // Move only. Fading the greeting fades its background too, so
+                // Today read through it the whole time it was on screen —
+                // the greeting is meant to be the screen, not a scrim over it.
+                .transition(.move(edge: .top))
                 .zIndex(2)
             }
         }

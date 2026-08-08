@@ -50,6 +50,24 @@ final class DarkModeSnapshotTests: XCTestCase {
         add(attachment)
     }
 
+    /// The launch scene is on screen for about two and a half seconds, so this
+    /// deliberately does not use `launchDark()` — that waits the greeting out.
+    func testLaunchSceneInDarkMode() throws {
+        let app = XCUIApplication()
+        app.launchArguments += ["-themeMode", "slate"]
+        app.launch()
+        Thread.sleep(forTimeInterval: 0.9)
+        snapshot(app, "05-launch-scene-slate")
+    }
+
+    func testLaunchSceneInPaperMode() throws {
+        let app = XCUIApplication()
+        app.launchArguments += ["-themeMode", "paper"]
+        app.launch()
+        Thread.sleep(forTimeInterval: 0.9)
+        snapshot(app, "06-launch-scene-paper")
+    }
+
     func testMoreScreenInDarkMode() throws {
         let app = launchDark()
         snapshot(app, "01-today-dark")
