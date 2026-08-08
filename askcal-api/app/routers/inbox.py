@@ -7,7 +7,7 @@ from sqlalchemy import and_, func, or_, select
 
 from app.core.errors import AskcalError
 from app.deps import CurrentUser, DbSession
-from app.models import Email, Task, Track, TrackKey
+from app.models import Email, Track, TrackKey
 from app.schemas.inbox import (
     EmailOut,
     HandleRequest,
@@ -18,8 +18,8 @@ from app.schemas.inbox import (
 )
 from app.routers.tasks import _task_full_out
 from app.schemas.tasks import TaskFullOut
+from app.services.autotask import build_task
 from app.services.brew_engine import temp_for_score
-from app.services.classifier import parse_deadline
 from app.services.gmail import mark_as_read
 from app.services.scheduling import local_midnight, user_today
 from app.services.sync import run_sync_for_user
@@ -130,18 +130,13 @@ async def handle_email(
     if track is None:
         raise AskcalError(422, "INVALID_TRACK", f"No '{track_key.value}' track on this account")
 
+    # Same constructor the sync pipeline uses. These were two copies that had
+    # already drifted — this one read the JSONB dict, that one the typed model —
+    # so deadline sanitising and deadline-driven scheduling only ever reached
+    # half the tasks Askcal creates.
     signals = email.signals or {}
-    task = Task(
-        user_id=user.id,
-        track_id=track.id,
-        source_email_id=email.id,
-        title=email.subject or (email.snippet or "untitled")[:200],
-        regret_score=email.regret_score or 0,
-        estimated_hours=(
-            round(email.estimated_minutes / 60, 1) if email.estimated_minutes else None
-        ),
-        due_at=parse_deadline(signals.get("deadline_utc")),
-        scheduled_for=user_today(user.timezone),
+    task = build_task(
+        email, signals.get("deadline_utc"), track, user_today(user.timezone)
     )
     email.handled = True
     db.add(task)

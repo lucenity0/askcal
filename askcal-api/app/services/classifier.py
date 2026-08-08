@@ -1,14 +1,19 @@
-"""Email classification via Gemini (free tier).
+"""Email classification: signals in, EmailSignals out.
 
-One Gemini call classifies a BATCH of emails (classify_batch_size, default 10)
-to stay inside free-tier rate limits. The model extracts structured signals
-only — the regret score itself comes from the deterministic formula in
+One LLM call classifies a BATCH of emails. The model extracts structured
+signals only — the regret score itself comes from the deterministic formula in
 regret.py, so scores stay reproducible and tunable.
 
-If ASKCAL_GEMINI_API_KEY is unset, classification is skipped entirely and
-emails stay unranked until a later sync.
+The transport is pluggable (see app/llm/): Claude Code drives the local CLI
+against a Claude subscription, Gemini uses an API key or Vertex. Everything
+Askcal-specific stays here — the prompt, the schema, reconciliation by gmail_id,
+the retry policy — so a new provider can never fork the classifier's judgment.
+
+If no provider is configured, classification is skipped entirely and emails stay
+unranked until a later sync.
 """
 
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Literal
@@ -16,9 +21,26 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
 from app.config import get_settings
+from app.llm.registry import classifier_configured, provider_or_none
+from app.llm.structured import (
+    StructuredOutputError,
+    as_item_list,
+    extract_json,
+    schema_block,
+    validate_items,
+)
 from app.models import Email, TrackKey
 
 logger = logging.getLogger("askcal.classifier")
+
+__all__ = [
+    "EmailSignals",
+    "classifier_configured",
+    "classify_batch",
+    "classify_pacing",
+    "parse_deadline",
+    "signals_track_key",
+]
 
 SenderType = Literal[
     "client", "recruiter", "professor", "automated_system", "peer", "newsletter", "other"
@@ -29,7 +51,7 @@ Consequence = Literal[
 
 
 class EmailSignals(BaseModel):
-    """Structured signals Gemini extracts per email. Stored as JSONB on the
+    """Structured signals the model extracts per email. Stored as JSONB on the
     email row — audit trail now, training labels for the ML model later."""
 
     gmail_id: str
@@ -37,7 +59,7 @@ class EmailSignals(BaseModel):
     sender_type: SenderType
     consequence: Consequence
     action_required: bool
-    # ISO 8601 string (Gemini output is more reliable as a string field)
+    # ISO 8601 string (model output is more reliable as a string field)
     deadline_utc: str | None = None
     # NOTE: no ge=0 here — Gemini's structured-output schema translator 500s
     # on "optional int with a numeric constraint" (anyOf + minimum). Clamp
@@ -51,7 +73,11 @@ class EmailSignals(BaseModel):
         return None if v is None else max(v, 0)
 
 
-PROMPT_TEMPLATE = """\
+# The rules half. Provider-independent and stable across calls — deliberately
+# free of the current date, which used to live in the deadline bullet: a system
+# prompt that changes daily is fine for the CLI's --system-prompt but destroys
+# prompt caching for any SDK-based provider, and it is the wrong layer besides.
+_RULES = """\
 You are the email classifier for Askcal, a daily scheduler for a student
 freelancer who is simultaneously: a university student, a freelance designer,
 and a job/placement candidate.
@@ -92,13 +118,27 @@ Rules:
   for a real person writing to the user.
 - consequence = what the user loses by IGNORING the email, not how urgent it feels
 - deadline_utc: only if a concrete deadline is stated or strongly implied
-  (ISO 8601, UTC). Today is {today_utc}.
+  (ISO 8601, UTC), resolved against the date given with the emails below.
 - estimated_minutes: rough effort to fully handle the email's ask, null if no ask
 - confidence: how sure you are about the track + consequence overall
 - Return one result object per input email, echoing its gmail_id exactly.
+"""
+
+# Schema rendered from the model itself, so prompt and validator cannot drift.
+SYSTEM_PROMPT = _RULES + "\n" + schema_block(EmailSignals, as_list=True)
+
+USER_TEMPLATE = """\
+Today is {today_utc}.
 
 Emails:
 {emails_json}
+"""
+
+RETRY_SUFFIX = """
+
+Your previous answer could not be used. Fix these problems and return ONLY the
+corrected JSON array, one object per email listed above:
+{errors}
 """
 
 EXCERPT_CHARS = 1500
@@ -113,6 +153,13 @@ def _email_payload(e: Email) -> dict:
         "received_at": e.received_at.isoformat(),
         "body_excerpt": body,
     }
+
+
+def _build_user_prompt(emails: list[Email]) -> str:
+    return USER_TEMPLATE.format(
+        today_utc=datetime.now(timezone.utc).date().isoformat(),
+        emails_json=json.dumps([_email_payload(e) for e in emails], indent=2),
+    )
 
 
 def parse_deadline(value: str | None) -> datetime | None:
@@ -132,52 +179,96 @@ def signals_track_key(signals: EmailSignals) -> TrackKey | None:
     return None if signals.track == "none" else TrackKey(signals.track)
 
 
+def classify_pacing() -> tuple[int, float]:
+    """(emails per call, seconds between calls) for the active provider.
+
+    An explicitly-set ASKCAL_CLASSIFY_BATCH_SIZE / _DELAY_SECONDS always wins:
+    model_fields_set holds only fields that actually came from the environment
+    or .env, so a deployment that tuned these keeps its tuning across a provider
+    change, while an untouched install gets the provider's own economics.
+    """
+    s = get_settings()
+    provider = provider_or_none()
+    size = (
+        s.classify_batch_size
+        if "classify_batch_size" in s.model_fields_set or provider is None
+        else provider.batch_size
+    )
+    delay = (
+        s.classify_delay_seconds
+        if "classify_delay_seconds" in s.model_fields_set or provider is None
+        else provider.inter_batch_delay_seconds
+    )
+    return size, delay
+
+
 async def classify_batch(emails: list[Email]) -> dict[str, EmailSignals]:
-    """One Gemini call for up to classify_batch_size emails.
+    """One LLM call (plus up to classify_max_retries follow-ups) for a batch.
 
     Returns signals keyed by gmail_id. Emails missing from the response stay
     unclassified and get retried on the next sync pass.
     """
-    s = get_settings()
-    if not s.gemini_api_key and not s.gemini_use_vertex:
-        logger.info("no Gemini backend configured — skipping classification")
+    if not emails:
+        return {}
+    provider = provider_or_none()
+    if provider is None:
         return {}
 
-    from google import genai  # deferred: import cost + optional dependency at runtime
-
-    import json
-
-    prompt = PROMPT_TEMPLATE.format(
-        today_utc=datetime.now(timezone.utc).date().isoformat(),
-        emails_json=json.dumps([_email_payload(e) for e in emails], indent=2),
-    )
-
-    if s.gemini_use_vertex:
-        client = genai.Client(
-            vertexai=True,
-            project=s.gemini_vertex_project,
-            location=s.gemini_vertex_location,
-        )
-    else:
-        client = genai.Client(api_key=s.gemini_api_key)
-    response = await client.aio.models.generate_content(
-        model=s.gemini_model,
-        contents=prompt,
-        config={
-            "response_mime_type": "application/json",
-            "response_schema": list[EmailSignals],
-        },
-    )
-    parsed: list[EmailSignals] = response.parsed or []
-
-    known_ids = {e.gmail_id for e in emails}
+    retries = get_settings().classify_max_retries
     out: dict[str, EmailSignals] = {}
-    for sig in parsed:
-        if sig.gmail_id in known_ids:
-            out[sig.gmail_id] = sig
-        else:
-            logger.warning("Gemini returned unknown gmail_id %s", sig.gmail_id)
-    missing = known_ids - out.keys()
-    if missing:
-        logger.warning("Gemini omitted %d email(s); will retry next sync", len(missing))
+    pending = list(emails)
+    tokens: int | None = 0
+    errors: list[str] = []
+
+    for attempt in range(retries + 1):
+        user = _build_user_prompt(pending)
+        if attempt:
+            user += RETRY_SUFFIX.format(errors="\n".join(f"- {e}" for e in errors))
+
+        response = await provider.complete(
+            SYSTEM_PROMPT, user, response_schema=list[EmailSignals]
+        )
+        # A single unknown poisons the sum to unknown — a partial total would
+        # read as a real number and quietly understate usage.
+        tokens = (
+            None
+            if tokens is None or response.tokens_used is None
+            else tokens + response.tokens_used
+        )
+
+        try:
+            items = as_item_list(extract_json(response.text), key_field="gmail_id")
+        except StructuredOutputError as exc:
+            errors = [str(exc)]
+            continue
+
+        accepted, errors = validate_items(
+            items,
+            EmailSignals,
+            key_field="gmail_id",
+            known_keys={e.gmail_id for e in pending},
+        )
+        out.update(accepted)
+        # Retry only the stragglers: the follow-up prompt is smaller than the
+        # original, already-accepted work is never put at risk, and the second
+        # call is cheap in exactly the currency the default provider is metered in.
+        pending = [e for e in pending if e.gmail_id not in out]
+        if not pending:
+            break
+
+    if pending:
+        logger.warning(
+            "%s omitted or mangled %d/%d email(s) after %d attempt(s); will retry next sync",
+            provider.model_name,
+            len(pending),
+            len(emails),
+            retries + 1,
+        )
+    logger.info(
+        "classified %d/%d via %s (%s tokens)",
+        len(out),
+        len(emails),
+        provider.model_name,
+        tokens if tokens is not None else "unknown",
+    )
     return out

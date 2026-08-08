@@ -1,7 +1,7 @@
 # askcal-api
 
 FastAPI backend for [Askcal](../) — context-aware daily scheduler for student freelancers.
-Serves `api.lucenity.dev`.
+Serves `api.askcal.lucenity.dev`.
 
 ## Stack
 
@@ -44,12 +44,34 @@ lazy download + OCR is a later phase.
 
 ## Classification, regret scoring, auto-tasking
 
-`app/services/classifier.py` sends batches of `ASKCAL_CLASSIFY_BATCH_SIZE`
-emails per Gemini call (free-tier key from https://aistudio.google.com/apikey →
-`ASKCAL_GEMINI_API_KEY`; classification is skipped while unset). Gemini
-extracts structured signals only — track, sender type, consequence-of-
-ignoring, deadline, effort, confidence — stored on `emails.signals` (JSONB,
-future ML training data).
+`app/services/classifier.py` sends batches of emails to whichever transport
+`ASKCAL_LLM_PROVIDER` selects. The model extracts structured signals only —
+track, sender type, consequence-of-ignoring, deadline, effort, confidence —
+stored on `emails.signals` (JSONB, future ML training data).
+
+Two providers, both behind the one `LLMProvider` protocol in `app/llm/base.py`,
+so switching is config rather than code:
+
+| | Setup | Notes |
+|---|---|---|
+| `claude_code` (default) | `npm i -g @anthropic-ai/claude-code && claude` | No API key — drives the local CLI against your own Claude subscription. In Docker, also needs `ASKCAL_CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token`. |
+| `gemini` | `ASKCAL_GEMINI_API_KEY`, or Vertex via the VM service account | Constrained decoding via `response_schema`, so its output is shape-guaranteed. |
+
+The prompt, the JSON schema, gmail_id reconciliation and the retry policy all
+live in `classifier.py`, above the transport — a provider is a dumb
+`complete(system, user) -> text`, so adding one can never fork the classifier's
+judgment. Because the CLI has no constrained decoding, `app/llm/structured.py`
+renders the schema into the prompt from `EmailSignals.model_json_schema()` and
+validates **per item**, so one malformed entry in a batch of 25 costs one email
+rather than all of them; only the stragglers are retried.
+
+Classification is skipped entirely (mail is still ingested) when no provider is
+usable. `GET /health` reports `llm_provider` and `classifier_configured`, and a
+bad setup is logged as an error at startup.
+
+Note: the Claude Code CLI writes session transcripts under `~/.claude/projects/`,
+so email excerpts touch local disk — a difference from Gemini, which only sends
+them over TLS.
 
 The 0–100 regret score comes from the deterministic formula in
 `app/services/regret.py` (consequence base + deadline proximity + sender +
@@ -87,6 +109,27 @@ differently for two different users. Finance is always active at neutral
 weight; urgency comes from the regret formula's `money_loss` consequence, not
 the profile.
 
+## Deployment
+
+```bash
+# lean image — use when ASKCAL_LLM_PROVIDER=gemini
+docker compose -f docker-compose.prod.yml up -d --build
+
+# with the Claude Code CLI — required when ASKCAL_LLM_PROVIDER=claude_code
+docker compose -f docker-compose.prod.yml -f docker-compose.subscription.yml up -d --build
+```
+
+The subscription overlay is separate because Node plus the CLI takes the image
+from 556MB to 1.26GB, and that is only worth carrying when the CLI is the
+transport.
+It needs `ASKCAL_CLAUDE_CODE_OAUTH_TOKEN` in `.env.prod` — a container has no
+home directory holding CLI credentials, so `claude setup-token` on your own
+machine is the only way in. Without it the provider refuses to construct at
+startup with a message naming the fix.
+
+Confirm a deploy with `curl https://api.askcal.lucenity.dev/health`, which
+reports `llm_provider` and `classifier_configured`.
+
 ## Layout
 
 ```
@@ -98,9 +141,12 @@ app/
 ├── core/             security (JWT/refresh tokens), error shape (AskcalError)
 ├── models/           users, tracks, tasks, emails, routines, refresh_tokens, day_logs
 ├── schemas/          camelCase API models
+├── llm/              provider protocol + transports (claude_code, gemini),
+│                      structured-output parsing, provider registry
 ├── services/          gmail (OAuth + ingestion), gcal (calendar read), classifier
-│                      (Gemini), regret (scoring formula), sync (orchestration +
-│                      auto-tasking), scheduling (day-plan + humanized deadlines)
+│                      (prompt + schema + retry policy), regret (scoring formula),
+│                      sync (orchestration + auto-tasking), scheduling (day-plan
+│                      + humanized deadlines)
 └── routers/          /auth/*, /api/today, /api/tasks, /api/inbox (+ sync/handle/
                        snooze), /api/calendar, /api/tracks, /api/routines, /api/me,
                        /api/closing-time, /api/carry-forward

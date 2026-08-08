@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -19,12 +20,27 @@ from app.routers import (
     today,
     tracks,
 )
+from app.llm.registry import classifier_configured
 from app.services.sync import sync_loop
+
+logger = logging.getLogger("askcal")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    task = asyncio.create_task(sync_loop()) if get_settings().sync_enabled else None
+    s = get_settings()
+    # Log, don't raise: an unclassifiable inbox is degraded, not dead — ingestion,
+    # tasks and the calendar all still work. But it has to be *visible*, because
+    # the failure mode otherwise is mail that silently never gets ranked.
+    if not classifier_configured():
+        logger.error(
+            "LLM provider %r is not usable — mail will be ingested but never classified.",
+            s.llm_provider,
+        )
+    if s.jwt_secret == "change-me":
+        logger.error("ASKCAL_JWT_SECRET is still the default — tokens are forgeable.")
+
+    task = asyncio.create_task(sync_loop()) if s.sync_enabled else None
     yield
     if task:
         task.cancel()
@@ -58,4 +74,9 @@ app.include_router(me.router)
 
 @app.get("/health", tags=["meta"])
 async def health() -> dict:
-    return {"status": "ok"}
+    """Includes classifier state so a deploy is verifiable without shelling in."""
+    return {
+        "status": "ok",
+        "llm_provider": get_settings().llm_provider,
+        "classifier_configured": classifier_configured(),
+    }

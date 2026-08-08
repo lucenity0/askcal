@@ -14,7 +14,7 @@ The fetch is scoped to the user's current local day, so a re-sync re-checks
 today's mail only; the gmail_id unique constraint keeps it duplicate-free.
 
 Auto-task rule (owner decision): an email becomes a task the moment it's
-classified IF Gemini says action_required AND its track is real work
+classified IF the model says action_required AND its track is real work
 (not feed) AND that track is active for this user. Auto-tasked emails are
 marked handled — the inbox only ever shows what still needs a human.
 """
@@ -26,35 +26,48 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.core.errors import AskcalError
 from app.db import SessionLocal
-from app.models import Email, Task, Track, TrackKey, User
-from app.services.classifier import classify_batch, parse_deadline, signals_track_key
+from app.llm.base import LLMLimitError
+from app.models import Email, Track, User
+from app.services.autotask import (
+    AUTO_TASK_TRACKS,
+    NON_TASKING_CONSEQUENCES,
+    build_task,
+    open_task_exists_for_thread,
+    should_auto_task,
+)
+from app.services.classifier import (
+    classifier_configured,
+    classify_batch,
+    classify_pacing,
+    signals_track_key,
+)
 from app.services.gmail import fetch_recent_messages
 from app.services.regret import compute_regret
 from app.services.scheduling import local_midnight, user_today
 
 logger = logging.getLogger("askcal.sync")
 
+# Re-exported: the gating rule lives in autotask.py (shared with the manual
+# swipe path) but has always been imported from here.
+__all__ = [
+    "AUTO_TASK_TRACKS",
+    "NON_TASKING_CONSEQUENCES",
+    "CLASSIFY_PASS_LIMIT",
+    "SyncResult",
+    "run_sync_for_user",
+    "should_auto_task",
+    "sync_all_users",
+    "sync_loop",
+    "sync_user",
+]
+
 CLASSIFY_PASS_LIMIT = 50  # max unclassified emails handled per sync pass
-
-# tracks whose actionable mail turns into tasks automatically; feed is
-# read-later by definition and never auto-tasks
-AUTO_TASK_TRACKS = {TrackKey.career, TrackKey.design, TrackKey.uni, TrackKey.finance}
-
-# A real task always has real stakes: social notifications ("add X", "someone
-# viewed you") and zero-consequence FYIs are never work, even when the model
-# marks them action_required — so gate on consequence.
-#
-# sender_type is deliberately NOT a gate. Legitimate tasks — assignment due,
-# online assessment, bill payable — arrive from no-reply/automated systems
-# exactly like noise does; filtering automated_system out silently drops real
-# work (the original assignment-not-tasking bug). The prompt's action_required
-# judgment is what separates a genuine ask from a notification.
-NON_TASKING_CONSEQUENCES = {"social", "none"}
 
 
 @dataclass
@@ -105,52 +118,36 @@ async def _store_new_messages(db: AsyncSession, user: User) -> SyncResult:
     return result
 
 
-def should_auto_task(signals, track: TrackKey | None, track_row: Track | None) -> bool:
-    """A mail auto-tasks when the model says the user must personally do a
-    concrete task (action_required) with a real consequence, in a real
-    (non-feed) work track that's active for this user. Channel/sender is not a
-    gate — an assignment from a no-reply LMS is as real as a client email."""
-    return bool(
-        signals.action_required
-        and signals.consequence not in NON_TASKING_CONSEQUENCES
-        and track in AUTO_TASK_TRACKS
-        and track_row is not None
-        and track_row.active
-    )
-
-
-def _auto_task(email: Email, signals, track_row: Track, today) -> Task:
-    """The daily-pipeline payoff: an actionable classified email becomes a
-    task for today, no swipe needed."""
-    return Task(
-        user_id=email.user_id,
-        track_id=track_row.id,
-        source_email_id=email.id,
-        title=email.subject or (email.snippet or "untitled")[:200],
-        regret_score=email.regret_score or 0,
-        estimated_hours=(
-            round(email.estimated_minutes / 60, 1) if email.estimated_minutes else None
-        ),
-        due_at=parse_deadline(signals.deadline_utc),
-        scheduled_for=today,
-    )
-
-
 async def _classify_pending(db: AsyncSession, user: User) -> tuple[int, int]:
     """→ (classified count, auto-created task count)."""
-    s = get_settings()
-    if not s.gemini_api_key and not s.gemini_use_vertex:
+    # Guards the SELECT below, not just the LLM call: with no provider there is
+    # no point querying pending mail every sync interval.
+    if not classifier_configured():
         return 0, 0
 
-    pending = (
+    s = get_settings()
+    # Pass-level shortlist, deliberately UNLOCKED. Locks taken here would be
+    # released by the first chunk's commit anyway — a transaction cannot hold
+    # row locks past its own end — so locking the whole pass would protect only
+    # chunk 1 while reading as though it protected all of them. The claim
+    # happens per chunk, below.
+    pending_ids = (
         await db.scalars(
-            select(Email)
-            .where(Email.user_id == user.id, Email.classified_at.is_(None))
+            select(Email.id)
+            .where(
+                Email.user_id == user.id,
+                Email.classified_at.is_(None),
+                # Give up on mail that keeps failing. Without this a message the
+                # model can never parse sits at the head of this queue forever,
+                # is re-sent every sync interval, and — at LIMIT 50 — crowds out
+                # real work while burning quota indefinitely.
+                Email.classify_attempts < s.classify_max_attempts,
+            )
             .order_by(Email.received_at.desc())
             .limit(CLASSIFY_PASS_LIMIT)
         )
     ).all()
-    if not pending:
+    if not pending_ids:
         return 0, 0
 
     tracks_by_key = {
@@ -162,18 +159,56 @@ async def _classify_pending(db: AsyncSession, user: User) -> tuple[int, int]:
     auto_tasked = 0
     now = datetime.now(timezone.utc)
     today = user_today(user.timezone)
-    for start in range(0, len(pending), s.classify_batch_size):
-        chunk = list(pending[start : start + s.classify_batch_size])
-        if start > 0:
-            await asyncio.sleep(s.classify_delay_seconds)
+    tasked_threads: set[str] = set()
+    batch_size, delay = classify_pacing()
+    for start in range(0, len(pending_ids), batch_size):
+        id_slice = pending_ids[start : start + batch_size]
+        if start > 0 and delay:
+            await asyncio.sleep(delay)
+
+        # Claim this chunk inside the transaction that will process it, so the
+        # lock actually spans the LLM call it is protecting. SKIP LOCKED means a
+        # concurrent pass — the background loop racing an on-demand
+        # POST /api/inbox/sync, i.e. the user pulling to refresh mid-batch —
+        # takes different rows instead of duplicating this call. Re-checking
+        # classified_at catches rows a concurrent pass finished and committed
+        # after the shortlist above was taken.
+        chunk = list(
+            (
+                await db.scalars(
+                    select(Email)
+                    .where(Email.id.in_(id_slice), Email.classified_at.is_(None))
+                    .with_for_update(skip_locked=True)
+                )
+            ).all()
+        )
+        if not chunk:
+            continue
+
         try:
             signals_by_id = await classify_batch(chunk)
+        except LLMLimitError:
+            # Out of allowance, not broken. Grinding the remaining chunks against
+            # the wall just burns retries against a limit that only time fixes.
+            logger.warning("LLM quota reached — stopping this pass, resuming next sync")
+            break
         except Exception:
-            logger.exception("Gemini classification call failed; will retry next sync")
+            # Deliberately NOT counted against classify_attempts. This catches
+            # transport failures — a wedged CLI, a subprocess crash, a network
+            # blip — which say nothing about whether the mail is classifiable.
+            # Charging them would let three unlucky passes permanently and
+            # silently drop 25 emails from the queue, recoverable only by hand
+            # in SQL. The attempt counter exists for mail the model cannot
+            # parse, and that case is counted per-email below.
+            logger.exception("classification call failed; will retry next sync")
+            await db.rollback()
             continue
         for email in chunk:
             signals = signals_by_id.get(email.gmail_id)
             if signals is None:
+                # Omitted or mangled. Counted so a message the model can never
+                # produce valid signals for eventually stops being retried.
+                email.classify_attempts += 1
                 continue
             track = signals_track_key(signals)
             track_row = tracks_by_key.get(track) if track else None
@@ -188,10 +223,39 @@ async def _classify_pending(db: AsyncSession, user: User) -> tuple[int, int]:
             email.classified_at = now
             classified += 1
 
-            if should_auto_task(signals, track, track_row):
-                db.add(_auto_task(email, signals, track_row, today))
+            if not should_auto_task(signals, track, track_row, email.regret_score):
+                continue
+            # Thread dedup. Checked against both the database and this pass,
+            # because tasks added below are not flushed until the chunk commits —
+            # two reminders about the same assignment can easily land in one batch.
+            if email.thread_id and email.thread_id in tasked_threads:
+                continue
+            if await open_task_exists_for_thread(db, email):
+                logger.info(
+                    "skipping auto-task for %s — open task already exists on thread %s",
+                    email.gmail_id,
+                    email.thread_id,
+                )
+                continue
+            # Savepoint per task, so losing the duplicate race costs one task
+            # rather than the chunk. Without it the failing INSERT surfaces at
+            # the chunk commit below, taking every classified_at/signals update
+            # in the chunk down with it — the emails would be re-classified from
+            # scratch next pass, paying for the same LLM call twice.
+            try:
+                async with db.begin_nested():
+                    db.add(build_task(email, signals.deadline_utc, track_row, today))
+            except IntegrityError:
+                logger.info(
+                    "task already exists for %s — a concurrent pass won the race",
+                    email.gmail_id,
+                )
                 email.handled = True
-                auto_tasked += 1
+                continue
+            if email.thread_id:
+                tasked_threads.add(email.thread_id)
+            email.handled = True
+            auto_tasked += 1
         await db.commit()
     return classified, auto_tasked
 
@@ -230,6 +294,12 @@ async def sync_all_users() -> None:
             try:
                 await sync_user(db, user)
             except Exception:
+                # The rollback is the point. One user raising mid-transaction
+                # used to leave the shared session in a failed state, so every
+                # subsequent user died with PendingRollbackError — one bad
+                # mailbox silently starved everyone after it, while the log line
+                # below read as though the rest were fine.
+                await db.rollback()
                 logger.exception("sync failed for %s — continuing", user.email)
 
 

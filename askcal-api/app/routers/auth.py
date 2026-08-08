@@ -1,4 +1,3 @@
-import re
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 
@@ -80,17 +79,30 @@ async def google_auth(body: GoogleAuthRequest, db: DbSession) -> AuthResponse:
 # brokers the exchange and hands tokens back via the app's custom scheme.
 # Requires {api_base_url}/auth/google/callback in the Google console client.
 
-_SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*$")
-
-
 def _callback_url() -> str:
     return f"{get_settings().api_base_url}/auth/google/callback"
 
 
+def _check_scheme(scheme: str) -> None:
+    """Only schemes this deployment owns may receive tokens.
+
+    This used to be a syntax check (`^[a-zA-Z][a-zA-Z0-9+.-]*$`), which accepts
+    essentially any scheme. Since the callback redirects a freshly minted access
+    token AND a 30-day refresh token into f"{scheme}://oauth#...", a link to
+    /auth/google/start?scheme=evil made the API itself hand a victim's
+    credentials to any app that had registered evil://.
+
+    An allowlist, not a pattern: the set of schemes Askcal ships is known and
+    tiny, and a pattern can only ever describe what a scheme looks like, never
+    whether we meant it.
+    """
+    if scheme not in get_settings().oauth_callback_schemes:
+        raise AskcalError(422, "INVALID_SCHEME", "Unknown callback scheme")
+
+
 @router.get("/google/start")
 async def google_start(scheme: str = "askcal") -> RedirectResponse:
-    if not _SCHEME_RE.match(scheme):
-        raise AskcalError(422, "INVALID_SCHEME", "Bad callback scheme")
+    _check_scheme(scheme)
     s = get_settings()
     state = jwt.encode(
         {
@@ -114,6 +126,11 @@ async def google_callback(code: str, state: str, db: DbSession) -> RedirectRespo
         scheme = payload["scheme"]
     except jwt.InvalidTokenError:
         raise AskcalError(401, "AUTH_EXPIRED", "OAuth state invalid or expired")
+
+    # Re-checked on the way out, not just on the way in. The state is signed, so
+    # this should be unreachable — but it is the single line standing between a
+    # signing-key mistake and handing out refresh tokens, and it costs nothing.
+    _check_scheme(scheme)
 
     profile = await exchange_google_code(code, redirect_uri=_callback_url())
     user, access, raw_refresh = await _login(profile, db)

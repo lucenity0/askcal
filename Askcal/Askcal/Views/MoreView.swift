@@ -9,10 +9,17 @@ import AuthenticationServices
 import SwiftUI
 
 struct MoreView: View {
+    /// Read from the bundle, not hardcoded — the literal here said 0.1.0 while
+    /// MARKETING_VERSION had moved on to 1.0, so the settings screen quietly
+    /// reported the wrong build to the only person who would ever check it.
+    static var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
+    }
+
     @Environment(AskcalStore.self) private var store
     @Environment(\.mono) private var mono
     @Environment(\.webAuthenticationSession) private var webAuth
-    @AppStorage("themeMode") private var themeRaw = ThemeMode.light.rawValue
+    @AppStorage("themeMode") private var themeRaw = ThemeMode.storageDefault
     @AppStorage("userName") private var userName = ""
     @AppStorage("morningDigest") private var morningDigest = true
     @AppStorage("eveningNudge") private var eveningNudge = true
@@ -72,7 +79,7 @@ struct MoreView: View {
                 toggleRow("Evening nudge", subtitle: "21:00 — close the day", isOn: $eveningNudge)
 
                 settingRow("Tracks", value: "\(TrackKey.allCases.count) tracks")
-                settingRow("Version", value: "0.1.0")
+                settingRow("Version", value: Self.appVersion)
 
                 if !store.isLive {
                     Divider().overlay(mono.border)
