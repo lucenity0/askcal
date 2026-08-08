@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -125,9 +126,14 @@ async def _classify_pending(db: AsyncSession, user: User) -> tuple[int, int]:
         return 0, 0
 
     s = get_settings()
-    pending = (
+    # Pass-level shortlist, deliberately UNLOCKED. Locks taken here would be
+    # released by the first chunk's commit anyway — a transaction cannot hold
+    # row locks past its own end — so locking the whole pass would protect only
+    # chunk 1 while reading as though it protected all of them. The claim
+    # happens per chunk, below.
+    pending_ids = (
         await db.scalars(
-            select(Email)
+            select(Email.id)
             .where(
                 Email.user_id == user.id,
                 Email.classified_at.is_(None),
@@ -139,15 +145,9 @@ async def _classify_pending(db: AsyncSession, user: User) -> tuple[int, int]:
             )
             .order_by(Email.received_at.desc())
             .limit(CLASSIFY_PASS_LIMIT)
-            # Claim the rows. These are held across a multi-second LLM call, and
-            # the background loop and an on-demand POST /api/inbox/sync run in
-            # the same process — the user pulls to refresh while the loop is
-            # mid-batch. Without the lock both passes select the same email,
-            # both call the model, and both create a task for it.
-            .with_for_update(skip_locked=True)
         )
     ).all()
-    if not pending:
+    if not pending_ids:
         return 0, 0
 
     tracks_by_key = {
@@ -161,10 +161,30 @@ async def _classify_pending(db: AsyncSession, user: User) -> tuple[int, int]:
     today = user_today(user.timezone)
     tasked_threads: set[str] = set()
     batch_size, delay = classify_pacing()
-    for start in range(0, len(pending), batch_size):
-        chunk = list(pending[start : start + batch_size])
+    for start in range(0, len(pending_ids), batch_size):
+        id_slice = pending_ids[start : start + batch_size]
         if start > 0 and delay:
             await asyncio.sleep(delay)
+
+        # Claim this chunk inside the transaction that will process it, so the
+        # lock actually spans the LLM call it is protecting. SKIP LOCKED means a
+        # concurrent pass — the background loop racing an on-demand
+        # POST /api/inbox/sync, i.e. the user pulling to refresh mid-batch —
+        # takes different rows instead of duplicating this call. Re-checking
+        # classified_at catches rows a concurrent pass finished and committed
+        # after the shortlist above was taken.
+        chunk = list(
+            (
+                await db.scalars(
+                    select(Email)
+                    .where(Email.id.in_(id_slice), Email.classified_at.is_(None))
+                    .with_for_update(skip_locked=True)
+                )
+            ).all()
+        )
+        if not chunk:
+            continue
+
         try:
             signals_by_id = await classify_batch(chunk)
         except LLMLimitError:
@@ -173,9 +193,15 @@ async def _classify_pending(db: AsyncSession, user: User) -> tuple[int, int]:
             logger.warning("LLM quota reached — stopping this pass, resuming next sync")
             break
         except Exception:
+            # Deliberately NOT counted against classify_attempts. This catches
+            # transport failures — a wedged CLI, a subprocess crash, a network
+            # blip — which say nothing about whether the mail is classifiable.
+            # Charging them would let three unlucky passes permanently and
+            # silently drop 25 emails from the queue, recoverable only by hand
+            # in SQL. The attempt counter exists for mail the model cannot
+            # parse, and that case is counted per-email below.
             logger.exception("classification call failed; will retry next sync")
-            _record_attempt(chunk)
-            await db.commit()
+            await db.rollback()
             continue
         for email in chunk:
             signals = signals_by_id.get(email.gmail_id)
@@ -211,18 +237,27 @@ async def _classify_pending(db: AsyncSession, user: User) -> tuple[int, int]:
                     email.thread_id,
                 )
                 continue
-            db.add(build_task(email, signals.deadline_utc, track_row, today))
+            # Savepoint per task, so losing the duplicate race costs one task
+            # rather than the chunk. Without it the failing INSERT surfaces at
+            # the chunk commit below, taking every classified_at/signals update
+            # in the chunk down with it — the emails would be re-classified from
+            # scratch next pass, paying for the same LLM call twice.
+            try:
+                async with db.begin_nested():
+                    db.add(build_task(email, signals.deadline_utc, track_row, today))
+            except IntegrityError:
+                logger.info(
+                    "task already exists for %s — a concurrent pass won the race",
+                    email.gmail_id,
+                )
+                email.handled = True
+                continue
             if email.thread_id:
                 tasked_threads.add(email.thread_id)
             email.handled = True
             auto_tasked += 1
         await db.commit()
     return classified, auto_tasked
-
-
-def _record_attempt(chunk: list[Email]) -> None:
-    for email in chunk:
-        email.classify_attempts += 1
 
 
 async def sync_user(db: AsyncSession, user: User) -> SyncResult:

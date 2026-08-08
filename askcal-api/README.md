@@ -109,9 +109,6 @@ differently for two different users. Finance is always active at neutral
 weight; urgency comes from the regret formula's `money_loss` consequence, not
 the profile.
 
-## Layout
-
-```
 ## Deployment
 
 ```bash
