@@ -53,7 +53,10 @@ struct GreetingView: View {
                 // competing with the one inside it — the cat is already
                 // breathing, the clouds are already moving.
                 LaunchScene()
-                    .frame(height: 190)
+                    // The room's own ratio, not a round number: the frame and
+                    // the drawing have to agree or the scene letterboxes
+                    // inside its own card.
+                    .aspectRatio(LaunchScene.W / LaunchScene.H, contentMode: .fit)
                     .clipShape(RoundedRectangle(cornerRadius: MonoRadius.card))
                     .overlay(
                         RoundedRectangle(cornerRadius: MonoRadius.card)
