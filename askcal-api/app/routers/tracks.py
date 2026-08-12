@@ -4,7 +4,8 @@ from sqlalchemy.orm import selectinload
 
 from app.core.errors import AskcalError
 from app.deps import CurrentUser, DbSession
-from app.models import TaskStatus, Track
+from app.models import TaskStatus, Track, TrackKey
+from app.schemas.base import CamelModel
 from app.schemas.tracks import (
     ProfileRequest,
     ProfileResponse,
@@ -20,6 +21,37 @@ router = APIRouter(prefix="/api", tags=["tracks"])
 
 # "urgent" = high-consequence by itself (top scoring band)
 URGENT_THRESHOLD = SCORE_THRESHOLDS["long_black"]
+
+
+class TrackToggle(CamelModel):
+    active: bool
+
+
+@router.patch("/tracks/{key}", response_model=TrackSettingOut)
+async def set_track_active(
+    key: str, body: TrackToggle, user: CurrentUser, db: DbSession
+) -> TrackSettingOut:
+    """Turn a track on or off.
+
+    Exists because a track being inactive silently blocks auto-tasking for every
+    mail filed under it, and until now nothing in the app could turn one on.
+    Design ships inactive by default — so design mail scored 97, sat in the
+    inbox, and never became a task, with no way to find out why or change it.
+    """
+    try:
+        track_key = TrackKey(key)
+    except ValueError:
+        raise AskcalError(422, "INVALID_TRACK", f"Unknown track '{key}'")
+
+    track = await db.scalar(
+        select(Track).where(Track.user_id == user.id, Track.key == track_key)
+    )
+    if track is None:
+        raise AskcalError(404, "NOT_FOUND", f"No '{key}' track on this account")
+
+    track.active = body.active
+    await db.commit()
+    return TrackSettingOut(id=track.key.value, weight=track.weight, active=track.active)
 
 
 @router.get("/tracks", response_model=TracksResponse)

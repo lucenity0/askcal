@@ -309,6 +309,27 @@ final class APIClient {
                             body: ["timezone": TimeZone.current.identifier]) as MeOut
     }
 
+    struct TrackSetting: Decodable { let id: String; let active: Bool }
+
+    private struct TracksOut: Decodable {
+        struct Item: Decodable { let id: String }
+        let tracks: [Item]
+    }
+
+    /// Which tracks are on. `/api/tracks` returns only the active ones, so
+    /// anything absent from this is off.
+    func activeTracks() async throws -> Set<TrackKey> {
+        let out: TracksOut = try await send("GET", "/api/tracks")
+        return Set(out.tracks.compactMap { TrackKey(rawValue: $0.id) })
+    }
+
+    /// Turn a track on or off. An inactive track blocks auto-tasking for every
+    /// mail filed under it, which is invisible until you know to look.
+    @discardableResult
+    func setTrack(_ key: TrackKey, active: Bool) async throws -> TrackSetting {
+        try await send("PATCH", "/api/tracks/\(key.rawValue)", body: ["active": active])
+    }
+
     // MARK: - Settings and digests
 
     func settings() async throws -> AppSettings {

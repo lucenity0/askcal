@@ -1,3 +1,4 @@
+import datetime as dt
 from datetime import datetime, timezone
 
 from fastapi import APIRouter
@@ -55,7 +56,14 @@ async def closing_time(
         await db.execute(
             update(Task)
             .where(Task.user_id == user.id, Task.id.in_(body.remaining))
-            .values(status=TaskStatus.carried, carried_count=Task.carried_count + 1)
+            .values(
+                status=TaskStatus.carried,
+                carried_count=Task.carried_count + 1,
+                # Same reason as the single-task patch: without moving the day,
+                # closing the day filed everything unfinished against today in
+                # perpetuity and it never surfaced again.
+                scheduled_for=user_today(user.timezone) + dt.timedelta(days=1),
+            )
         )
 
     _, carried = await _open_state(user.id, db, user_today(user.timezone))

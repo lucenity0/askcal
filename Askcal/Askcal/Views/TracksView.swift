@@ -22,6 +22,10 @@ struct TracksView: View {
 
     @Binding var composing: ComposerIntent?
 
+    /// Which tracks auto-task. Unknown until the first load, and assumed on so
+    /// a toggle never flickers off before the truth arrives.
+    @State private var active: [TrackKey: Bool] = [:]
+
     var body: some View {
         NotebookPage {
             PageTitle(kicker: "Everything open", title: "Tracks") {
@@ -34,15 +38,36 @@ struct TracksView: View {
                 section(for: track)
             }
         }
+        .task {
+            guard active.isEmpty, store.isLive else { return }
+            guard let on = try? await APIClient.shared.activeTracks() else { return }
+            active = Dictionary(uniqueKeysWithValues: TrackKey.allCases.map {
+                ($0, on.contains($0))
+            })
+        }
     }
 
     @ViewBuilder
     private func section(for track: TrackKey) -> some View {
         let items = store.tasks(in: track)
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
+            HStack(spacing: Space.md) {
                 Rubric(track.title)
                 Spacer()
+                // An inactive track blocks auto-tasking for everything filed
+                // under it. That was previously invisible and unchangeable,
+                // which is how design mail could score 97 and never become a
+                // task.
+                Toggle("", isOn: Binding(
+                    get: { active[track] ?? true },
+                    set: { on in
+                        active[track] = on
+                        Task { try? await APIClient.shared.setTrack(track, active: on) }
+                    }
+                ))
+                .labelsHidden()
+                .toggleStyle(PaperToggleStyle())
+                .accessibilityLabel("Auto-task from \(track.title)")
                 Text("\(items.count)")
                     .font(BookType.meta(10))
                     .foregroundStyle(book.inkSub)

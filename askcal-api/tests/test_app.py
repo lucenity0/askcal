@@ -115,3 +115,12 @@ def test_all_contract_routes_registered():
         "/api/closing-time",
         "/api/carry-forward",
     } <= paths
+
+
+def test_a_track_can_be_turned_on():
+    """An inactive track silently blocks auto-tasking for everything filed
+    under it, and design ships inactive — so design mail scored 97, sat in the
+    inbox and never became a task, with nothing in the app able to change it."""
+    paths = client.get("/openapi.json").json()["paths"]
+    assert "/api/tracks/{key}" in paths
+    assert "patch" in paths["/api/tracks/{key}"]

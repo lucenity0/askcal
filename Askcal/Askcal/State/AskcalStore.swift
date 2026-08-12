@@ -93,11 +93,13 @@ final class AskcalStore {
     /// throws away the only evidence that the day is going well. Done work
     /// stays, struck through, until the day is closed.
     ///
-    /// Carried work is excluded: it has been explicitly moved to tomorrow, so
-    /// it is not on today any more.
+    /// Carried work is no longer filtered out by status. The server moves a
+    /// carried task's `scheduledFor` to tomorrow, so the day it belongs to now
+    /// does that job — and filtering on status as well made carried work
+    /// invisible on every day including the one it had been moved to.
     var dayEntries: [AskcalTask] {
         tasks
-            .filter { $0.status != .carried }
+            .filter { isToday($0.scheduledFor) }
             .sorted { lhs, rhs in
                 let l = minuteOfDay(lhs), r = minuteOfDay(rhs)
                 if l != r { return l < r }
@@ -504,13 +506,6 @@ final class AskcalStore {
         saveLocal()
     }
 
-    func rescheduleAllToToday() {
-        for idx in tasks.indices where tasks[idx].status == .carried {
-            tasks[idx].status = .pending
-            pushStatus(tasks[idx].id, .pending, revertingTo: .carried)
-        }
-        Haptics.medium()
-    }
 
     private func pushStatus(_ id: UUID, _ status: TaskStatus, revertingTo previous: TaskStatus) {
         guard isLive else { return }
@@ -676,6 +671,14 @@ final class AskcalStore {
         guard let idx = tasks.firstIndex(where: { $0.id == task.id }) else { return }
         let previous = tasks[idx].status
         tasks[idx].status = done ? .done : .carried
+        if !done {
+            // Matches what the server does with a carry: the task moves to
+            // tomorrow rather than merely being labelled. Without this the row
+            // stays on today until the next refetch quietly removes it.
+            tasks[idx].scheduledFor = Calendar.current.date(
+                byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: .now)
+            )
+        }
         Haptics.tick()
         // review marks must survive a relaunch even if the day is never
         // formally closed — push each one, don't wait for closing time

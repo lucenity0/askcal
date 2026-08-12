@@ -179,6 +179,12 @@ async def patch_task(
             task.completed_at = datetime.now(timezone.utc)
         elif status == TaskStatus.carried:
             task.carried_count += 1
+            # Move the day it lives on, not just the label. Marking it carried
+            # and leaving scheduled_for on today meant "move to tomorrow" moved
+            # nothing: the task stayed filed against today forever, dropped out
+            # of the day list because of its status, and never reappeared on any
+            # other day. Carried work was simply lost.
+            task.scheduled_for = user_today(user.timezone) + dt.timedelta(days=1)
 
     # editing the schedule / deadline (shift a task to another day or time)
     if "scheduled_at" in fields:
