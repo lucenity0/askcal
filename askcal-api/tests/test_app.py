@@ -42,6 +42,21 @@ def test_google_auth_without_credentials_is_503(monkeypatch):
         get_settings.cache_clear()
 
 
+def test_health_says_why_the_classifier_is_off():
+    """A bare `false` is not a diagnosis.
+
+    A deployment ran with no classifier at all — no regret scores, no
+    auto-tasking, an inbox sorted only by recency — and the only trace was one
+    startup line in the container logs. When it is off, /health has to say what
+    to fix; when it is on, it stays terse.
+    """
+    body = client.get("/health").json()
+    if body["classifier_configured"]:
+        assert "classifier_detail" not in body
+    else:
+        assert body["classifier_detail"], "unconfigured classifier gave no reason"
+
+
 def test_task_list_accepts_a_date_range():
     """The month grid asks for a whole month in one request.
 

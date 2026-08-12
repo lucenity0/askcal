@@ -20,7 +20,7 @@ from app.routers import (
     today,
     tracks,
 )
-from app.llm.registry import classifier_configured
+from app.llm.registry import classifier_configured, classifier_unavailable_reason
 from app.services.sync import sync_loop
 
 logger = logging.getLogger("askcal")
@@ -75,8 +75,14 @@ app.include_router(me.router)
 @app.get("/health", tags=["meta"])
 async def health() -> dict:
     """Includes classifier state so a deploy is verifiable without shelling in."""
-    return {
+    reason = classifier_unavailable_reason()
+    body = {
         "status": "ok",
         "llm_provider": get_settings().llm_provider,
-        "classifier_configured": classifier_configured(),
+        "classifier_configured": reason is None,
     }
+    # Only present when something is wrong, so a healthy deploy stays terse and
+    # an unhealthy one says what to fix without shelling into the VM.
+    if reason is not None:
+        body["classifier_detail"] = reason
+    return body

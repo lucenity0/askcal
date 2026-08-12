@@ -51,3 +51,21 @@ def classifier_configured() -> bool:
     both have gone stale the moment a second provider existed.
     """
     return provider_or_none() is not None
+
+
+def classifier_unavailable_reason() -> str | None:
+    """Why classification is off, in the provider's own words, or None if it
+    is on.
+
+    Exists because /health reported a bare `false` and nothing else. A
+    deployment ran for weeks with no classifier at all — no regret scores, no
+    auto-tasking, an inbox sorted only by recency — and the only trace was one
+    line in the container logs at startup. "Not configured" and "configured but
+    holding no credentials" are different problems with different fixes, and
+    the health check is where that difference has to be visible.
+    """
+    try:
+        build_provider()
+    except LLMUnavailableError as exc:
+        return str(exc) or type(exc).__name__
+    return None
