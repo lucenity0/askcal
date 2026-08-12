@@ -20,7 +20,7 @@ struct TracksView: View {
     @Environment(AskcalStore.self) private var store
     @Environment(\.book) private var book
 
-    @State private var editingTask: AskcalTask?
+    @Binding var composing: ComposerIntent?
 
     var body: some View {
         NotebookPage {
@@ -33,9 +33,6 @@ struct TracksView: View {
             ForEach(TrackKey.allCases) { track in
                 section(for: track)
             }
-        }
-        .sheet(item: $editingTask) { task in
-            TaskComposerSheet(editing: task)
         }
     }
 
@@ -68,7 +65,7 @@ struct TracksView: View {
                         toggle: {
                             withAnimation(.easeOut(duration: 0.2)) { store.toggleDone(task) }
                         },
-                        edit: { editingTask = task },
+                        edit: { composing = .edit(task) },
                         delete: {
                             withAnimation(.easeOut(duration: 0.2)) { store.deleteTask(task) }
                         }

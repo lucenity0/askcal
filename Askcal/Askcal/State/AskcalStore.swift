@@ -247,6 +247,8 @@ final class AskcalStore {
         // Distinguishes "still fetching" from "genuinely empty". Without it the
         // day surface rendered its empty copy over data in flight, which read
         // as an answer rather than a wait.
+        if Self.wantsCleanSlate { resetForTesting() }
+
         isBootstrapping = true
         defer { isBootstrapping = false }
 
@@ -264,6 +266,32 @@ final class AskcalStore {
 
     private static let localTasksKey = "localTasks"
     private static let localRoutinesKey = "localRoutines"
+
+    /// UI tests share one simulator, and the signed-out store persists to
+    /// UserDefaults — so without a way to ask for a clean slate each test
+    /// inherits whatever the last one wrote, and they only pass in isolation.
+    /// Test-only: nothing passes this argument in a shipped build.
+    private static var wantsCleanSlate: Bool {
+        ProcessInfo.processInfo.arguments.contains("-uiTestCleanSlate")
+    }
+
+    /// Wipe everything a previous test left behind.
+    ///
+    /// Done by clearing keys rather than by seeding them from launch
+    /// arguments: an argument lands in `NSArgumentDomain`, which outranks the
+    /// app's own domain and cannot be written over — so a preference seeded
+    /// that way is pinned for the life of the process and any control bound to
+    /// it silently stops working.
+    private func resetForTesting() {
+        let ud = UserDefaults.standard
+        for key in [Self.localTasksKey, Self.localRoutinesKey, Self.routinesDoneKey,
+                    "weekStripExpanded", "userName", "streakCount", "lastClosedDate"] {
+            ud.removeObject(forKey: key)
+        }
+        tasks = []
+        routines = []
+        routinesDone = []
+    }
 
     private func loadLocal() {
         let ud = UserDefaults.standard

@@ -17,8 +17,7 @@ struct TodayPage: View {
     @Environment(AskcalStore.self) private var store
     @Environment(\.book) private var book
 
-    @Binding var editingTask: AskcalTask?
-    @Binding var showComposer: Bool
+    @Binding var composing: ComposerIntent?
     var onConnect: () -> Void
     var onOpenReview: () -> Void
 
@@ -28,6 +27,9 @@ struct TodayPage: View {
     /// "yesterday, still loading" from "yesterday, genuinely empty", and shows
     /// the empty copy for a beat before the real entries arrive — the flash.
     @State private var loadedDay: String?
+    /// The last list actually shown, kept so the page has something to display
+    /// while the next day is in flight rather than emptying.
+    @State private var held: [AskcalTask] = []
     @State private var marked: Set<String> = []
 
     private var isLoadingDay: Bool {
@@ -47,8 +49,15 @@ struct TodayPage: View {
     /// Today reads live from the store so a tick lands immediately; other days
     /// come from their fetched copy. Both include completed work — a task that
     /// vanishes the moment you tick it looks like the checkbox deleted it.
+    ///
+    /// While a different day is loading, today's entries stay on screen. This is
+    /// the case the first flicker fix missed: leaving today swapped a populated
+    /// list for an empty one in the same frame, so the page emptied and refilled
+    /// even though the previous content was still perfectly good to look at.
     private var entries: [AskcalTask] {
-        isToday ? store.dayEntries : (loaded?.tasks ?? [])
+        if isToday { return store.dayEntries }
+        if let loaded, loadedDay == AskcalStore.dayString(selected) { return loaded.tasks }
+        return held
     }
 
     private var doneCount: Int {
@@ -93,7 +102,7 @@ struct TodayPage: View {
                 FocusCard(
                     focus: focus,
                     companion: store.companion,
-                    open: { editingTask = focus.task }
+                    open: { composing = .edit(focus.task) }
                 )
             }
         }
@@ -102,7 +111,12 @@ struct TodayPage: View {
     private var addRow: some View {
         AddTaskRow(
             onAdd: { store.quickAdd(title: $0, scheduledAt: startOfSelected) },
-            onExpand: { showComposer = true }
+            // Carries the line already typed into the composer. Reaching for
+            // the date button used to hand you an empty field and make you
+            // write it again.
+            onExpand: { typed in
+                composing = .new(title: typed, day: startOfSelected)
+            }
         )
     }
 
@@ -146,7 +160,7 @@ struct TodayPage: View {
                             toggle: {
                                 withAnimation(.easeOut(duration: 0.2)) { store.toggleDone(task) }
                             },
-                            edit: { editingTask = task },
+                            edit: { composing = .edit(task) },
                             delete: {
                                 withAnimation(.easeOut(duration: 0.2)) { store.deleteTask(task) }
                             }
@@ -245,9 +259,11 @@ struct TodayPage: View {
         guard !isToday else {
             loaded = nil
             loadedDay = nil
+            held = store.dayEntries
             return
         }
         let day = selected
+        held = entries          // whatever is on screen stays there meanwhile
         let data = await store.dayData(for: day)
         // The day can change again while this is in flight — a second tap on
         // the strip — and the slower answer must not overwrite the newer one.

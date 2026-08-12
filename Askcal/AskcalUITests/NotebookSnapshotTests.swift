@@ -27,6 +27,12 @@ final class NotebookSnapshotTests: XCTestCase {
     private func launch(theme: String, contentSize: String? = nil) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments += ["-themeMode", theme]
+        // Tests share a simulator and the signed-out store persists to
+        // UserDefaults, so each one starts from nothing rather than from the
+        // last test's leftovers. The app clears the keys itself — seeding them
+        // as launch arguments would pin them in NSArgumentDomain, where the app
+        // cannot write over them and any control bound to one stops working.
+        app.launchArguments += ["-uiTestCleanSlate"]
         if let contentSize {
             // The ruling is derived from scaled font metrics, so the largest
             // accessibility size is where misalignment would show.
@@ -47,6 +53,25 @@ final class NotebookSnapshotTests: XCTestCase {
         // The greeting plays on every launch and takes a couple of seconds.
         Thread.sleep(forTimeInterval: 5)
         return app
+    }
+
+    /// Wait for an element to report a value, rather than sleeping and hoping.
+    /// A fixed sleep is long enough alone and too short under a parallel run,
+    /// which is exactly how these tests started passing one at a time and
+    /// failing together.
+    private func expect(_ element: XCUIElement, value: String, _ message: String) {
+        expectation(for: NSPredicate(format: "value == %@", value),
+                    evaluatedWith: element)
+        waitForExpectations(timeout: 10) { error in
+            XCTAssertNil(error, message)
+        }
+    }
+
+    private func expectGone(_ element: XCUIElement, _ message: String) {
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: element)
+        waitForExpectations(timeout: 10) { error in
+            XCTAssertNil(error, message)
+        }
     }
 
     private func snapshot(_ app: XCUIApplication, _ name: String) {
@@ -89,20 +114,15 @@ final class NotebookSnapshotTests: XCTestCase {
         XCTAssertTrue(mark.waitForExistence(timeout: 5), "check mark not found")
         XCTAssertEqual(mark.value as? String, "Not done")
 
-        mark.tap()
-        Thread.sleep(forTimeInterval: 2)
-        snapshot(app, "21-checked")
-
         // The value is what the row reports about itself, so this fails if the
         // tap lands nowhere as well as if the store refuses the change.
-        XCTAssertEqual(mark.value as? String, "Done",
-                       "tapping the check mark did not complete the task")
+        mark.tap()
+        expect(mark, value: "Done", "tapping the check mark did not complete it")
+        snapshot(app, "21-checked")
 
         // And back, so a mistaken tick isn't permanent.
         mark.tap()
-        let becameOpen = NSPredicate(format: "value == %@", "Not done")
-        expectation(for: becameOpen, evaluatedWith: mark)
-        waitForExpectations(timeout: 5)
+        expect(mark, value: "Not done", "unticking did not reopen the task")
     }
 
     /// Writing a task down must not push the rest of the app off the screen.
@@ -130,20 +150,21 @@ final class NotebookSnapshotTests: XCTestCase {
     /// folds away now, and the choice is remembered.
     func testCollapsingTheWeekStrip() throws {
         let app = launch(theme: "day")
-        let heading = app.buttons.matching(
-            NSPredicate(format: "label CONTAINS[c] %@", "AUGUST")
-        ).firstMatch
-        XCTAssertTrue(heading.waitForExistence(timeout: 10), "month heading not found")
+        // By identifier, not by label: every day cell in the strip has the
+        // month in its label too, so matching on that picks a date.
+        let heading = app.buttons["weekStripToggle"]
+        XCTAssertTrue(heading.waitForExistence(timeout: 10), "week toggle not found")
 
-        XCTAssertTrue(app.buttons["Next week"].exists, "week should start expanded")
+        XCTAssertTrue(app.buttons["Next week"].waitForExistence(timeout: 5),
+                      "week should start expanded")
+
         heading.tap()
-        Thread.sleep(forTimeInterval: 1)
-        XCTAssertFalse(app.buttons["Next week"].exists, "week did not collapse")
+        expectGone(app.buttons["Next week"], "week did not collapse")
         snapshot(app, "27-week-collapsed")
 
         heading.tap()
-        Thread.sleep(forTimeInterval: 1)
-        XCTAssertTrue(app.buttons["Next week"].exists, "week did not expand again")
+        XCTAssertTrue(app.buttons["Next week"].waitForExistence(timeout: 5),
+                      "week did not expand again")
     }
 
     /// The calendar is the month grid plus the selected day, in the same rows

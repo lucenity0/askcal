@@ -24,8 +24,9 @@ struct ContentView: View {
     @AppStorage("themeMode") private var themeRaw = ThemeMode.storageDefault
 
     @State private var tab: PageDestination = .today
-    @State private var showComposer = false
-    @State private var editingTask: AskcalTask?
+    @State private var composing: ComposerIntent?
+    @State private var openedEmail: EmailItem?
+    @State private var showReview = false
     @State private var isAddingRoutine = false
     @State private var showGreeting = false
     @State private var didLaunch = false
@@ -47,11 +48,27 @@ struct ContentView: View {
                 .zIndex(2)
             }
         }
-        .sheet(isPresented: $showComposer) {
-            TaskComposerSheet().environment(\.book, book)
+        // Popups live at the root so they cover the tab bar. Presented lower
+        // down, the bar stays tappable underneath and you can end up on another
+        // tab with a modal still open over it.
+        .popup(item: $composing) { intent in
+            TaskComposer(intent: intent) { composing = nil }
         }
-        .sheet(item: $editingTask) { task in
-            TaskComposerSheet(editing: task).environment(\.book, book)
+        .popup(item: $openedEmail) { email in
+            EmailDetail(
+                email: email,
+                makeTask: { store.handleEmail(email); openedEmail = nil },
+                snooze: { store.snoozeEmail(email); openedEmail = nil },
+                onClose: { openedEmail = nil }
+            )
+        }
+        // Review is a whole page, not a card, so it gets a sheet. It used to be
+        // a hidden tab that "Review day" selected — which silently did nothing,
+        // because a hidden tab is not selectable.
+        .sheet(isPresented: $showReview) {
+            ReviewView()
+                .environment(\.book, book)
+                .presentationBackground(book.paper)
         }
         .environment(\.book, book)
         .preferredColorScheme(mode.polarity)
@@ -70,32 +87,24 @@ struct ContentView: View {
             Tab(PageDestination.today.title, systemImage: "calendar.day.timeline.left",
                 value: .today) {
                 TodayPage(
-                    editingTask: $editingTask,
-                    showComposer: $showComposer,
+                    composing: $composing,
                     onConnect: connect,
-                    onOpenReview: { tab = .review }
+                    onOpenReview: { showReview = true }
                 )
             }
 
             Tab(PageDestination.inbox.title, systemImage: "tray", value: .inbox) {
-                InboxView()
+                InboxView(opened: $openedEmail)
             }
             .badge(store.inboxEmails.count)
 
             Tab(PageDestination.calendar.title, systemImage: "calendar", value: .calendar) {
-                CalendarView()
+                CalendarView(composing: $composing)
             }
 
             Tab(PageDestination.more.title, systemImage: "ellipsis.circle", value: .more) {
-                MoreView(isAddingRoutine: $isAddingRoutine)
+                MoreView(isAddingRoutine: $isAddingRoutine, composing: $composing)
             }
-
-            // Reached from the day's end-of-day card rather than from the bar:
-            // closing the day is something you do once, not a place you live.
-            Tab(PageDestination.review.title, systemImage: "moon", value: .review) {
-                ReviewView()
-            }
-            .hidden()
         }
         .tint(book.ink)
         .toolbarBackground(book.recessed, for: .tabBar)

@@ -91,8 +91,9 @@ struct WeekStrip: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(monthLabel)
-        .accessibilityHint(expanded ? "Collapses the week" : "Expands the week")
+        .accessibilityIdentifier("weekStripToggle")
+        .accessibilityLabel(expanded ? "Hide the week" : "Show the week")
+        .accessibilityValue(monthLabel)
     }
 
     private func chevron(_ symbol: String, label: String, weeks: Int) -> some View {

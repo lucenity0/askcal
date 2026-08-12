@@ -19,8 +19,10 @@ import SwiftUI
 struct AddTaskRow: View {
     /// Called with the typed title when the row is submitted.
     var onAdd: (String) -> Void
-    /// Called when the user wants the full composer instead.
-    var onExpand: () -> Void
+    /// Called with whatever is typed so far when the user wants the full
+    /// composer. Passing the text is the point: opening the composer used to
+    /// discard it.
+    var onExpand: (String) -> Void
 
     @Environment(\.book) private var book
     @State private var title = ""
@@ -42,7 +44,7 @@ struct AddTaskRow: View {
             // Only offered once there is something to schedule. An empty row
             // has nothing to open the composer with.
             if !title.trimmingCharacters(in: .whitespaces).isEmpty {
-                Button(action: onExpand) {
+                Button { onExpand(title) } label: {
                     Image(systemName: "calendar.badge.plus")
                         .font(BookType.icon(15))
                         .foregroundStyle(book.inkSub)

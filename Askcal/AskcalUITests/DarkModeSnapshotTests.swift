@@ -28,7 +28,7 @@ final class DarkModeSnapshotTests: XCTestCase {
 
     private func launchDark(themeName: String = "dark") -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments += ["-themeMode", themeName]
+        app.launchArguments += ["-themeMode", themeName, "-uiTestCleanSlate"]
         app.launch()
 
         // The notification permission alert belongs to SpringBoard, not us.

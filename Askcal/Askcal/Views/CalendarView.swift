@@ -29,7 +29,7 @@ struct CalendarView: View {
     /// Which day `day` holds, so "loading" and "empty" are distinguishable.
     @State private var loadedDay: String?
     @State private var marks: [String: AskcalStore.DayMarks] = [:]
-    @State private var editingTask: AskcalTask?
+    @Binding var composing: ComposerIntent?
 
     private var cal: Calendar { Calendar.current }
     private var isToday: Bool { cal.isDateInToday(selected) }
@@ -51,9 +51,18 @@ struct CalendarView: View {
         }
         .task(id: selected) { await loadDay() }
         .task(id: monthKey) { await loadMarks() }
-        .sheet(item: $editingTask) { task in
-            TaskComposerSheet(editing: task).environment(\.book, book)
+    }
+
+    private var dayCount: String {
+        var parts: [String] = []
+        if !entries.isEmpty {
+            let done = entries.filter { $0.status == .done }.count
+            parts.append("\(done) of \(entries.count) done")
         }
+        if !events.isEmpty {
+            parts.append("\(events.count) event\(events.count == 1 ? "" : "s")")
+        }
+        return parts.isEmpty ? "clear" : parts.joined(separator: " · ")
     }
 
     private var monthKey: Date {
@@ -63,7 +72,7 @@ struct CalendarView: View {
     // MARK: - Month
 
     private var monthBlock: some View {
-        VStack(spacing: Space.xl) {
+        VStack(spacing: Space.lg) {
             HStack {
                 navButton("chevron.left") { shiftMonth(-1) }
                 Spacer()
@@ -101,12 +110,12 @@ struct CalendarView: View {
         // over a runtime range makes SwiftUI drop cells rather than misplace
         // them, which is how this grid silently lost the first week of every
         // month.
-        return LazyVGrid(columns: columns, spacing: Space.lg) {
+        return LazyVGrid(columns: columns, spacing: Space.md) {
             ForEach(Array(layout.slots.enumerated()), id: \.offset) { _, number in
                 if let number {
                     cell(number)
                 } else {
-                    Color.clear.frame(height: 40)
+                    Color.clear.frame(height: 36)
                 }
             }
         }
@@ -149,7 +158,7 @@ struct CalendarView: View {
                 }
                 .frame(height: 5)
             }
-            .frame(height: 40)
+            .frame(height: 36)
             .frame(maxWidth: .infinity)
             .contentShape(Rectangle())
         }
@@ -175,7 +184,16 @@ struct CalendarView: View {
     @ViewBuilder
     private var dayBlock: some View {
         VStack(alignment: .leading, spacing: Space.lg) {
-            Rubric(isToday ? "today" : selected.formatted(.dateTime.weekday(.wide).month().day()))
+            HStack(alignment: .firstTextBaseline, spacing: Space.md) {
+                Rubric(isToday ? "today" : selected.formatted(.dateTime.weekday(.wide).month().day()))
+                Spacer()
+                // A month of dots tells you which days have something; this
+                // says what, so the page below the grid is not just a heading
+                // over a lot of blank paper.
+                Text(dayCount)
+                    .font(BookType.meta(10))
+                    .foregroundStyle(book.inkSub)
+            }
 
             if isLoading && entries.isEmpty && events.isEmpty {
                 SkeletonRows(rows: 3)
@@ -230,7 +248,7 @@ struct CalendarView: View {
                     toggle: {
                         withAnimation(.easeOut(duration: 0.2)) { store.toggleDone(task) }
                     },
-                    edit: { editingTask = task },
+                    edit: { composing = .edit(task) },
                     delete: {
                         withAnimation(.easeOut(duration: 0.2)) { store.deleteTask(task) }
                     }

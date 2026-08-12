@@ -28,6 +28,7 @@ struct MoreView: View {
     /// Routine's inline add field is opened from this screen's toolbar, so the
     /// flag has to live above the pushed view.
     @Binding var isAddingRoutine: Bool
+    @Binding var composing: ComposerIntent?
 
     @State private var nameDraft = ""
     @State private var savingName = false
@@ -54,7 +55,7 @@ struct MoreView: View {
                 .navigationDestination(for: MoreDestination.self) { destination in
                     switch destination {
                     case .routine: RoutineView(isAdding: $isAddingRoutine)
-                    case .tracks: TracksView()
+                    case .tracks: TracksView(composing: $composing)
                     }
                 }
         }
