@@ -2,716 +2,291 @@
 //  CalendarView.swift
 //  Askcal
 //
-//  Day / Month / Year views in the same monochrome language.
-//  Day: Askcal task blocks (plain surface cards) overlaid with external
-//  calendar blocks (diagonal hairline hatching); conflicts render
-//  side-by-side with an "overlaps" marker.
-//  Month: grid with solid dot = tasks, hollow dot = calendar events.
-//  Year: twelve mini-months; tap one to open it.
-//  Mock data only — the real Google sync builds against this scaffold.
+//  The month, and what is on the day you pick.
+//
+//  This replaces a Day/Month/Year switcher wrapped around a hand-drawn
+//  timeline: task blocks laid out by the minute, external events hatched with
+//  diagonal lines, overlap resolution, a legend explaining the hatching, and a
+//  twelve-month grid behind it. Roughly five hundred lines to show a day, in a
+//  visual language used nowhere else in the app — you left the day surface and
+//  arrived somewhere that drew tasks as boxes instead of lines.
+//
+//  A calendar's job here is to answer "which day" and "what is on it". The
+//  month grid answers the first, the same timeline rows the day uses answer the
+//  second, and Google events sit in that list rather than in a parallel
+//  notation you have to learn.
 //
 
 import SwiftUI
-
-enum CalViewMode: String, CaseIterable {
-    case day = "Day"
-    case month = "Month"
-    case year = "Year"
-}
 
 struct CalendarView: View {
     @Environment(AskcalStore.self) private var store
     @Environment(\.book) private var book
 
-    @State private var mode: CalViewMode = .day
-    @State private var displayedMonth: Date = .now
-    @State private var displayedYear: Int = Calendar.current.component(.year, from: .now)
-    @State private var selectedDate: Date = .now
-    @State private var dayTasks: [AskcalTask] = []
-    @State private var dayEvents: [CalendarEvent] = []
+    @State private var month: Date = .now
+    @State private var selected = Calendar.current.startOfDay(for: .now)
+    @State private var day: AskcalStore.DayData?
+    /// Which day `day` holds, so "loading" and "empty" are distinguishable.
+    @State private var loadedDay: String?
+    @State private var marks: [String: AskcalStore.DayMarks] = [:]
     @State private var editingTask: AskcalTask?
-    /// Which days of `displayedMonth` have anything on them, keyed by day
-    /// string. Fetched for the whole month in one request.
-    @State private var monthMarks: [String: AskcalStore.DayMarks] = [:]
-
-    private let pxPerMin: CGFloat = 1.05
-    private let gutter: CGFloat = 50
-
-    private var isToday: Bool { cal.isDateInToday(selectedDate) }
-
-    // The visible window is 08:00–22:00 but stretches (to whole hours) when
-    // real blocks fall outside it — a 07:00 lecture or 23:00 call must render
-    // inside the timeline, never at a negative offset over the header.
-    private var dayStartMin: Int {
-        let earliest = allBlocks.map(\.startMin).min() ?? 8 * 60
-        return min(8 * 60, (earliest / 60) * 60)
-    }
-
-    private var dayEndMin: Int {
-        let latest = allBlocks.map(\.endMin).max() ?? 22 * 60
-        return max(22 * 60, Int(ceil(Double(latest) / 60)) * 60)
-    }
 
     private var cal: Calendar { Calendar.current }
+    private var isToday: Bool { cal.isDateInToday(selected) }
+    private var isLoading: Bool { loadedDay != AskcalStore.dayString(selected) }
+
+    private var entries: [AskcalTask] {
+        isToday ? store.dayEntries : (day?.tasks ?? [])
+    }
+
+    private var events: [CalendarEvent] {
+        isToday ? store.calendarEvents : (day?.events ?? [])
+    }
 
     var body: some View {
-        NotebookPage(scrollable: mode == .day) {
-            PageTitle(kicker: kicker, title: "Calendar")
-            HStack {
-                modeSwitcher
-                Spacer()
-                if mode == .day { legend }
-            }
-            switch mode {
-            case .day: daySection
-            case .month: monthView
-            case .year: yearView
-            }
+        NotebookPage {
+            PageTitle(kicker: "The month", title: month.formatted(.dateTime.month(.wide).year()))
+            monthBlock
+            dayBlock
         }
-        .task(id: selectedDate) { await loadSelectedDay() }
-        .task(id: displayedMonth) { await loadMonthMarks() }
+        .task(id: selected) { await loadDay() }
+        .task(id: monthKey) { await loadMarks() }
         .sheet(item: $editingTask) { task in
-            TaskComposerSheet(editing: task)
-                .environment(\.book, book)
-                .onDisappear { Task { await loadSelectedDay() } }
+            TaskComposerSheet(editing: task).environment(\.book, book)
         }
     }
 
-    // Today reads straight from the store so new tasks appear immediately;
-    // other days use the on-demand fetch cached in dayTasks/dayEvents.
-    private var activeTasks: [AskcalTask] { isToday ? store.scheduledTasks : dayTasks }
-    private var activeEvents: [CalendarEvent] { isToday ? store.calendarEvents : dayEvents }
-
-    /// Today's marks come from the live store rather than the fetched map, so
-    /// ticking something off updates the grid without a refetch.
-    private func marks(for date: Date) -> AskcalStore.DayMarks {
-        if cal.isDateInToday(date) {
-            return .init(hasTasks: !store.scheduledTasks.isEmpty,
-                         hasEvents: !store.calendarEvents.isEmpty)
-        }
-        return monthMarks[AskcalStore.dayString(date)] ?? .init()
+    private var monthKey: Date {
+        cal.date(from: cal.dateComponents([.year, .month], from: month)) ?? month
     }
 
-    private func loadMonthMarks() async {
-        let layout = MonthLayout(month: displayedMonth, calendar: cal)
-        guard let first = dateFor(day: 1, in: displayedMonth),
-              let last = dateFor(day: layout.days, in: displayedMonth) else { return }
-        monthMarks = await store.marks(from: first, to: last)
-    }
+    // MARK: - Month
 
-    private func loadSelectedDay() async {
-        guard !isToday else { return }
-        let data = await store.loadDay(selectedDate)
-        dayTasks = data.tasks
-        dayEvents = data.events
-    }
-
-    private var kicker: String {
-        switch mode {
-        case .day: return isToday ? "Your day, mapped" : selectedDate.formatted(.dateTime.weekday(.wide))
-        case .month: return "The month ahead"
-        case .year: return "The long view"
-        }
-    }
-
-    // MARK: - Mode switcher
-
-    private var modeSwitcher: some View {
-        ChipPicker(options: CalViewMode.allCases,
-                   title: \.rawValue,
-                   selection: $mode)
-    }
-
-    private var legend: some View {
-        HStack(spacing: 12) {
-            HStack(spacing: 5) {
-                RoundedRectangle(cornerRadius: 3)
-                    .strokeBorder(book.rule, lineWidth: 1)
-                    .background(RoundedRectangle(cornerRadius: 3).fill(book.card))
-                    .frame(width: 16, height: 11)
-                Text("askcal")
-            }
-            HStack(spacing: 5) {
-                DiagonalHatch(spacing: 4)
-                    .stroke(book.inkSub.opacity(0.6), lineWidth: 0.7)
-                    .clipShape(RoundedRectangle(cornerRadius: 3))
-                    .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(book.rule, lineWidth: 1))
-                    .frame(width: 16, height: 11)
-                Text("calendar")
-            }
-        }
-        .font(BookType.meta(9))
-        .foregroundStyle(book.inkSub)
-    }
-
-    // MARK: - Day view (nav + timeline + anytime list)
-
-    private var daySection: some View {
-        VStack(spacing: 0) {
-            dayNav
-            ScrollView(showsIndicators: false) {
-                GeometryReader { geo in
-                    timeline(width: geo.size.width)
+    private var monthBlock: some View {
+        VStack(spacing: Space.xl) {
+            HStack {
+                navButton("chevron.left") { shiftMonth(-1) }
+                Spacer()
+                Button("Today") {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        month = .now
+                        selected = cal.startOfDay(for: .now)
+                    }
                 }
-                .frame(height: CGFloat(dayEndMin - dayStartMin) * pxPerMin)
-                .padding(.horizontal, 0)
-                .padding(.top, 6)
+                .font(BookType.meta(11))
+                .foregroundStyle(book.inkDim)
+                .buttonStyle(.plain)
+                Spacer()
+                navButton("chevron.right") { shiftMonth(1) }
+            }
 
-                if !anytimeTasks.isEmpty {
-                    anytimeSection
-                        .padding(.horizontal, 0)
-                        .padding(.top, 10)
-                }
-
-                if activeTasks.isEmpty && activeEvents.isEmpty {
-                    Text(isToday ? "nothing scheduled today."
-                                 : "nothing scheduled this day.")
-                        .font(BookType.body(14))
+            HStack(spacing: Space.xs) {
+                ForEach(MonthLayout.weekdaySymbols(cal), id: \.self) { symbol in
+                    Text(symbol)
+                        .font(BookType.meta(9))
                         .foregroundStyle(book.inkSub)
                         .frame(maxWidth: .infinity)
-                        .padding(.top, 40)
                 }
             }
-            .padding(.bottom, 100)
+
+            grid
+            PageRule()
         }
     }
 
-    private var dayNav: some View {
-        HStack(spacing: 8) {
-            navButton("chevron.left") { shiftDay(-1) }
-            Spacer(minLength: 4)
-            VStack(spacing: 1) {
-                Text(selectedDate.formatted(.dateTime.weekday(.abbreviated).month().day()))
-                    .font(BookType.entry(13))
-                    .foregroundStyle(book.ink)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                if !isToday {
-                    Button("jump to today") {
-                        withAnimation(.easeOut(duration: 0.2)) { selectedDate = .now }
+    private var grid: some View {
+        let layout = MonthLayout(month: month, calendar: cal)
+        let columns = Array(repeating: GridItem(.flexible(), spacing: Space.xs), count: 7)
+        // One flat list of slots. A run of blanks followed by a separate ForEach
+        // over a runtime range makes SwiftUI drop cells rather than misplace
+        // them, which is how this grid silently lost the first week of every
+        // month.
+        return LazyVGrid(columns: columns, spacing: Space.lg) {
+            ForEach(Array(layout.slots.enumerated()), id: \.offset) { _, number in
+                if let number {
+                    cell(number)
+                } else {
+                    Color.clear.frame(height: 40)
+                }
+            }
+        }
+    }
+
+    private func cell(_ number: Int) -> some View {
+        let date = dateFor(number)
+        let isSelected = date.map { cal.isDate($0, inSameDayAs: selected) } ?? false
+        let today = date.map { cal.isDateInToday($0) } ?? false
+        let mark = date.map { self.mark(for: $0) } ?? AskcalStore.DayMarks()
+
+        return Button {
+            guard let date else { return }
+            withAnimation(.easeOut(duration: 0.2)) { selected = cal.startOfDay(for: date) }
+            Haptics.tick()
+        } label: {
+            VStack(spacing: Space.xs) {
+                ZStack {
+                    if isSelected {
+                        Circle().fill(book.fill).frame(width: 28, height: 28)
+                    } else if today {
+                        Circle().strokeBorder(book.ruleStrong, lineWidth: Stroke.hair)
+                            .frame(width: 28, height: 28)
                     }
-                    .font(BookType.meta(9))
+                    Text("\(number)")
+                        .font(BookType.meta(12))
+                        .foregroundStyle(isSelected ? book.fillText : book.ink)
+                }
+                .frame(height: 28)
+
+                // Solid = work filed on that day, hollow = a calendar event.
+                HStack(spacing: 3) {
+                    if mark.hasTasks {
+                        Circle().fill(book.inkSub).frame(width: 4, height: 4)
+                    }
+                    if mark.hasEvents {
+                        Circle().strokeBorder(book.inkSub, lineWidth: 1)
+                            .frame(width: 4, height: 4)
+                    }
+                }
+                .frame(height: 5)
+            }
+            .frame(height: 40)
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(date?.formatted(.dateTime.weekday(.wide).month(.wide).day()) ?? "\(number)")
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+    }
+
+    private func navButton(_ symbol: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(BookType.icon(12))
+                .foregroundStyle(book.inkDim)
+                .frame(width: 44, height: 34)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(symbol == "chevron.left" ? "Previous month" : "Next month")
+    }
+
+    // MARK: - The selected day
+
+    @ViewBuilder
+    private var dayBlock: some View {
+        VStack(alignment: .leading, spacing: Space.lg) {
+            Rubric(isToday ? "today" : selected.formatted(.dateTime.weekday(.wide).month().day()))
+
+            if isLoading && entries.isEmpty && events.isEmpty {
+                SkeletonRows(rows: 3)
+            } else if entries.isEmpty && events.isEmpty {
+                Text("nothing on this day.")
+                    .font(BookType.body(15))
                     .foregroundStyle(book.inkSub)
-                    .buttonStyle(.plain)
-                }
+                    .padding(.vertical, Space.md)
+            } else {
+                if !events.isEmpty { eventList }
+                if !entries.isEmpty { taskList }
             }
-            Spacer(minLength: 4)
-            navButton("chevron.right") { shiftDay(1) }
         }
-        .padding(.horizontal, 0)
-        .padding(.top, 4)
-        .padding(.bottom, 8)
     }
 
-    private var anytimeSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("ANYTIME")
-                .font(BookType.kicker(10))
-                .foregroundStyle(book.inkSub)
-            ForEach(anytimeTasks) { task in
-                Button { editingTask = task } label: {
-                    HStack(spacing: 10) {
-                        PriorityDot(band: task.priority)
-                        Text(task.title)
-                            .font(BookType.entry(13))
-                            .foregroundStyle(book.ink)
-                            .lineLimit(1)
-                        Spacer()
-                        if let d = task.deadlineLabel {
-                            Text(d).font(BookType.meta(9)).foregroundStyle(book.inkSub)
-                        }
+    /// Google events are read-only here, so they carry no check — a mark you
+    /// cannot tick is worse than no mark.
+    private var eventList: some View {
+        VStack(spacing: 0) {
+            ForEach(events) { event in
+                HStack(alignment: .top, spacing: Space.lg) {
+                    Text(event.start)
+                        .font(BookType.meta(12))
+                        .foregroundStyle(book.inkSub)
+                        .frame(width: 44, alignment: .leading)
+                    VStack(alignment: .leading, spacing: Space.hair) {
+                        Text(event.title)
+                            .font(BookType.entry(16))
+                            .foregroundStyle(book.inkDim)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text("\(event.start)–\(event.end) · calendar")
+                            .font(BookType.meta(10))
+                            .foregroundStyle(book.inkSub)
                     }
-                    .padding(.vertical, 7)
+                    Spacer(minLength: 0)
                 }
-                .buttonStyle(.plain)
-                Divider().overlay(book.rule)
+                .padding(.vertical, Space.lg)
+                .ruled()
+                .accessibilityElement(children: .combine)
             }
         }
     }
 
-    private func shiftDay(_ delta: Int) {
-        if let next = cal.date(byAdding: .day, value: delta, to: selectedDate) {
-            withAnimation(.easeOut(duration: 0.18)) { selectedDate = next }
-        }
-    }
-
-    private func timeline(width: CGFloat) -> some View {
-        let contentWidth = width - gutter
-        let columnGap: CGFloat = 4
-        return ZStack(alignment: .topLeading) {
-            ForEach(Array(stride(from: dayStartMin, through: dayEndMin, by: 60)), id: \.self) { minute in
-                HStack(spacing: 8) {
-                    Text(String(format: "%02d:00", minute / 60))
-                        .font(BookType.meta(10))
-                        .foregroundStyle(book.inkSub.opacity(0.8))
-                        .frame(width: gutter - 8, alignment: .trailing)
-                    Rectangle()
-                        .fill(book.rule)
-                        .frame(height: 1)
-                }
-                .offset(y: y(for: minute) - 6)
-            }
-
-            ForEach(positionedBlocks) { positioned in
-                let cols = CGFloat(positioned.colCount)
-                let blockWidth = (contentWidth - columnGap * (cols - 1)) / cols
-                Group {
-                    switch positioned.block.kind {
-                    case .task(let task):
-                        Button { editingTask = task } label: {
-                            TaskBlockView(block: positioned.block)
-                        }
-                        .buttonStyle(.plain)
-                    case .event:
-                        EventBlockView(block: positioned.block)
+    private var taskList: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(entries.enumerated()), id: \.element.id) { index, task in
+                TimelineRow(
+                    task: task,
+                    time: store.slot(for: task)?.time ?? pinnedTime(task),
+                    isFirst: index == 0,
+                    isLast: index == entries.count - 1,
+                    toggle: {
+                        withAnimation(.easeOut(duration: 0.2)) { store.toggleDone(task) }
+                    },
+                    edit: { editingTask = task },
+                    delete: {
+                        withAnimation(.easeOut(duration: 0.2)) { store.deleteTask(task) }
                     }
-                }
-                .frame(width: blockWidth,
-                       height: positioned.block.height(pxPerMin: pxPerMin))
-                .offset(
-                    x: gutter + CGFloat(positioned.col) * (blockWidth + columnGap),
-                    y: y(for: positioned.block.startMin)
                 )
             }
         }
     }
 
-    private func y(for minute: Int) -> CGFloat {
-        CGFloat(minute - dayStartMin) * pxPerMin
+    private func pinnedTime(_ task: AskcalTask) -> String? {
+        guard let at = task.scheduledAt else { return nil }
+        return at.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute())
     }
 
-    // MARK: - Month view
+    // MARK: - Data
 
-    /// No ScrollView and no gutter of its own: the page provides both. Nesting
-    /// a scroll view with its own 22pt inset inside the page's inset squeezed
-    /// the seven columns and clipped the first rows of the grid off the top.
-    private var monthView: some View {
-        VStack(spacing: Space.xl) {
-            monthNav
-            weekdayHeader
-            monthGrid(for: displayedMonth)
-        }
+    private func dateFor(_ number: Int) -> Date? {
+        var parts = cal.dateComponents([.year, .month], from: month)
+        parts.day = number
+        return cal.date(from: parts)
     }
 
-    private var monthNav: some View {
-        HStack(spacing: 8) {
-            navButton("chevron.left") { shiftMonth(-1) }
-            Spacer(minLength: 4)
-            Text(displayedMonth.formatted(.dateTime.month(.wide).year()))
-                .font(BookType.entry(14))
-                .foregroundStyle(book.ink)
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-            Spacer(minLength: 4)
-            navButton("chevron.right") { shiftMonth(1) }
+    /// Today's marks come from the live store, so ticking something updates the
+    /// grid without a refetch.
+    private func mark(for date: Date) -> AskcalStore.DayMarks {
+        if cal.isDateInToday(date) {
+            return .init(hasTasks: !store.dayEntries.isEmpty,
+                         hasEvents: !store.calendarEvents.isEmpty)
         }
-    }
-
-    private var weekdayHeader: some View {
-        let symbols = MonthLayout.weekdaySymbols(cal)
-        return HStack(spacing: 4) {
-            ForEach(symbols, id: \.self) { s in
-                Text(s)
-                    .font(BookType.meta(9))
-                    .foregroundStyle(book.inkSub)
-                    .frame(maxWidth: .infinity)
-            }
-        }
-    }
-
-    private func monthGrid(for month: Date) -> some View {
-        let layout = MonthLayout(month: month, calendar: cal)
-        let columns = Array(repeating: GridItem(.flexible(), spacing: Space.xs), count: 7)
-        return LazyVGrid(columns: columns, spacing: Space.lg) {
-            ForEach(Array(layout.slots.enumerated()), id: \.offset) { _, day in
-                if let day {
-                    monthDayCell(day: day, month: month)
-                } else {
-                    Color.clear.frame(height: 42)
-                }
-            }
-        }
-    }
-
-    private func monthDayCell(day: Int, month: Date) -> some View {
-        let date = dateFor(day: day, in: month)
-        let today = date.map { cal.isDateInToday($0) } ?? false
-        let selected = date.map { cal.isDate($0, inSameDayAs: selectedDate) } ?? false
-        return Button {
-            // tap any day → open its timeline
-            if let date {
-                withAnimation(.easeOut(duration: 0.2)) {
-                    selectedDate = date
-                    mode = .day
-                }
-            }
-        } label: {
-            VStack(spacing: 4) {
-                ZStack {
-                    if today {
-                        Circle().fill(book.fill).frame(width: 27, height: 27)
-                    } else if selected {
-                        Circle().strokeBorder(book.fill, lineWidth: 1.5).frame(width: 27, height: 27)
-                    }
-                    Text("\(day)")
-                        .font(BookType.meta(12))
-                        .foregroundStyle(today ? book.fillText : book.ink)
-                }
-                .frame(height: 27)
-                // Solid = work filed on that day, hollow = a calendar event.
-                // Both used to be gated on `today &&`, which meant every other
-                // cell in the grid was blank whatever was on it.
-                let marks = date.map { self.marks(for: $0) } ?? AskcalStore.DayMarks()
-                HStack(spacing: 3) {
-                    if marks.hasTasks {
-                        Circle().fill(book.fill).frame(width: 4, height: 4)
-                    }
-                    if marks.hasEvents {
-                        Circle().strokeBorder(book.fill, lineWidth: 1).frame(width: 4, height: 4)
-                    }
-                }
-                .frame(height: 5)
-            }
-            .frame(height: 42)
-            .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.plain)
-    }
-
-    // MARK: - Year view
-
-    private var yearView: some View {
-        VStack(spacing: Space.xl) {
-            HStack(spacing: Space.md) {
-                navButton("chevron.left") { displayedYear -= 1 }
-                Spacer(minLength: Space.xs)
-                Text(String(displayedYear))
-                    .font(BookType.entry(14))
-                    .foregroundStyle(book.ink)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                Spacer(minLength: Space.xs)
-                navButton("chevron.right") { displayedYear += 1 }
-            }
-            let columns = Array(repeating: GridItem(.flexible(), spacing: Space.lg), count: 3)
-            LazyVGrid(columns: columns, spacing: Space.xl) {
-                ForEach(1...12, id: \.self) { monthNum in
-                    miniMonth(monthNum)
-                }
-            }
-        }
-    }
-
-    private func miniMonth(_ monthNum: Int) -> some View {
-        let month = cal.date(from: DateComponents(year: displayedYear, month: monthNum, day: 1)) ?? .now
-        let layout = MonthLayout(month: month, calendar: cal)
-        let columns = Array(repeating: GridItem(.flexible(), spacing: 2), count: 7)
-
-        return Button {
-            withAnimation(.easeOut(duration: 0.2)) {
-                displayedMonth = month
-                mode = .month
-            }
-        } label: {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(month.formatted(.dateTime.month(.abbreviated)))
-                    .font(BookType.entry(12))
-                    .foregroundStyle(book.ink)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                LazyVGrid(columns: columns, spacing: 3) {
-                    ForEach(Array(layout.slots.enumerated()), id: \.offset) { _, day in
-                        if let day {
-                            let isToday = dateFor(day: day, in: month)
-                                .map { cal.isDateInToday($0) } ?? false
-                            RoundedRectangle(cornerRadius: 1)
-                                .fill(isToday ? book.fill : book.card)
-                                .frame(height: 4)
-                        } else {
-                            Color.clear.frame(height: 4)
-                        }
-                    }
-                }
-            }
-            .padding(10)
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .strokeBorder(book.rule, lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
-    }
-
-    // MARK: - Date helpers
-
-    private func navButton(_ icon: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(book.ink)
-                .frame(width: 34, height: 34)
-                .background(Circle().strokeBorder(book.rule, lineWidth: 1))
-        }
-        .buttonStyle(.plain)
+        return marks[AskcalStore.dayString(date)] ?? .init()
     }
 
     private func shiftMonth(_ delta: Int) {
-        if let next = cal.date(byAdding: .month, value: delta, to: displayedMonth) {
-            withAnimation(.easeOut(duration: 0.18)) { displayedMonth = next }
+        guard let moved = cal.date(byAdding: .month, value: delta, to: month) else { return }
+        withAnimation(.easeOut(duration: 0.2)) { month = moved }
+    }
+
+    /// Leaves the previous day on screen until the next is in hand. Blanking
+    /// first and filling afterwards is what made every date tap flicker.
+    private func loadDay() async {
+        guard !isToday else {
+            day = nil
+            loadedDay = AskcalStore.dayString(selected)
+            return
+        }
+        let target = selected
+        let data = await store.dayData(for: target)
+        guard target == selected else { return }   // a newer tap won
+        withAnimation(.easeInOut(duration: 0.18)) {
+            day = data
+            loadedDay = AskcalStore.dayString(target)
         }
     }
 
-    private func dateFor(day: Int, in month: Date) -> Date? {
-        var comps = cal.dateComponents([.year, .month], from: month)
-        comps.day = day
-        return cal.date(from: comps)
-    }
-
-
-    // MARK: - Day-view block building
-
-    struct DayBlock: Identifiable {
-        enum Kind {
-            case task(AskcalTask)
-            case event(CalendarEvent)
-        }
-
-        let id: String
-        let kind: Kind
-        let title: String
-        let startMin: Int
-        let endMin: Int
-        var conflicted = false
-
-        func height(pxPerMin: CGFloat) -> CGFloat {
-            max(CGFloat(endMin - startMin) * pxPerMin - 4, 30)
-        }
-
-        func overlaps(_ other: DayBlock) -> Bool {
-            startMin < other.endMin && other.startMin < endMin
-        }
-    }
-
-    /// A block placed into a column: `col` of `colCount` side-by-side slots.
-    struct PositionedBlock: Identifiable {
-        let block: DayBlock
-        let col: Int
-        let colCount: Int
-        var id: String { block.id }
-    }
-
-    /// The task's start minute on the timeline: today's auto-scheduled slot if
-    /// present, else a user-pinned time. Untimed tasks return nil → they land
-    /// in the "anytime" list instead of the timeline.
-    private func startMinute(for task: AskcalTask) -> Int? {
-        if isToday, let slot = store.slot(for: task) {
-            return minutesSinceMidnight(slot.time)
-        }
-        if let at = task.scheduledAt {
-            let c = cal.dateComponents([.hour, .minute], from: at)
-            return (c.hour ?? 0) * 60 + (c.minute ?? 0)
-        }
-        return nil
-    }
-
-    private func durationMinutes(for task: AskcalTask) -> Int {
-        if isToday, let slot = store.slot(for: task) { return slot.duration }
-        return max(Int((task.estimatedHours ?? 1.0) * 60), 30)
-    }
-
-    private var taskBlocks: [DayBlock] {
-        activeTasks.compactMap { task in
-            guard let start = startMinute(for: task) else { return nil }
-            return DayBlock(
-                id: "task-\(task.id)",
-                kind: .task(task),
-                title: task.title,
-                startMin: start,
-                endMin: start + durationMinutes(for: task)
-            )
-        }
-    }
-
-    private var anytimeTasks: [AskcalTask] {
-        activeTasks.filter { startMinute(for: $0) == nil }
-    }
-
-    private var eventBlocks: [DayBlock] {
-        activeEvents.compactMap { event in
-            guard let start = minutesSinceMidnight(event.start),
-                  let end = minutesSinceMidnight(event.end) else { return nil }
-            return DayBlock(
-                id: "event-\(event.id)",
-                kind: .event(event),
-                title: event.title,
-                startMin: start,
-                endMin: end
-            )
-        }
-    }
-
-    private var allBlocks: [DayBlock] {
-        taskBlocks + eventBlocks
-    }
-
-    /// Column-pack every overlapping run (tasks and events alike). Blocks that
-    /// share a time window are grouped into a cluster and greedily assigned to
-    /// the fewest columns that keep them non-overlapping — handling task↔event,
-    /// event↔event, and 3+ concurrent items uniformly. Single blocks stay
-    /// full-width.
-    private var positionedBlocks: [PositionedBlock] {
-        let blocks = allBlocks.sorted {
-            $0.startMin != $1.startMin ? $0.startMin < $1.startMin : $0.endMin < $1.endMin
-        }
-        guard !blocks.isEmpty else { return [] }
-
-        var result: [PositionedBlock] = []
-
-        func flush(_ group: [DayBlock]) {
-            guard !group.isEmpty else { return }
-            var columnEnds: [Int] = []   // last end-minute placed in each column
-            var cols: [Int] = []
-            for b in group {
-                if let free = columnEnds.firstIndex(where: { $0 <= b.startMin }) {
-                    columnEnds[free] = b.endMin
-                    cols.append(free)
-                } else {
-                    columnEnds.append(b.endMin)
-                    cols.append(columnEnds.count - 1)
-                }
-            }
-            let colCount = columnEnds.count
-            for (b, col) in zip(group, cols) {
-                var block = b
-                block.conflicted = colCount > 1
-                result.append(PositionedBlock(block: block, col: col, colCount: colCount))
-            }
-        }
-
-        // sweep blocks into maximal connected overlap clusters
-        var cluster: [DayBlock] = []
-        var clusterEnd = Int.min
-        for b in blocks {
-            if cluster.isEmpty || b.startMin < clusterEnd {
-                cluster.append(b)
-                clusterEnd = max(clusterEnd, b.endMin)
-            } else {
-                flush(cluster)
-                cluster = [b]
-                clusterEnd = b.endMin
-            }
-        }
-        flush(cluster)
-        return result
-    }
-}
-
-// MARK: - Block views
-
-private struct TaskBlockView: View {
-    let block: CalendarView.DayBlock
-    @Environment(\.book) private var book
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(alignment: .top, spacing: 6) {
-                Text(block.title)
-                    .font(BookType.entry(12))
-                    .foregroundStyle(book.ink)
-                    .lineLimit(2)
-                Spacer(minLength: 0)
-                if case .task(let task) = block.kind {
-                    PriorityDot(band: task.priority)
-                }
-            }
-            Text(metaLine)
-                .font(BookType.meta(9))
-                .foregroundStyle(book.inkSub)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-            Spacer(minLength: 0)
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(book.card)
-                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(book.rule, lineWidth: 1))
-        )
-    }
-
-    private var metaLine: String {
-        let time = "\(timeString(block.startMin))–\(timeString(block.endMin))"
-        return block.conflicted ? "\(time) · overlaps" : time
-    }
-}
-
-private struct EventBlockView: View {
-    let block: CalendarView.DayBlock
-    @Environment(\.book) private var book
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(block.title)
-                .font(BookType.entry(11))
-                .foregroundStyle(book.ink)
-                .lineLimit(2)
-                .padding(.horizontal, 4)
-                .padding(.vertical, 2)
-                .background(RoundedRectangle(cornerRadius: 4).fill(book.paper.opacity(0.9)))
-            Text(metaLine)
-                .font(BookType.meta(8))
-                .foregroundStyle(book.inkSub)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-                .padding(.horizontal, 4)
-                .padding(.vertical, 1)
-                .background(RoundedRectangle(cornerRadius: 3).fill(book.paper.opacity(0.9)))
-            Spacer(minLength: 0)
-        }
-        .padding(8)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(
-            ZStack {
-                DiagonalHatch(spacing: 5)
-                    .stroke(book.inkSub.opacity(0.45), lineWidth: 0.7)
-                if block.conflicted {
-                    HStack(spacing: 0) {
-                        Rectangle().fill(book.fill).frame(width: 3)
-                        Spacer()
-                    }
-                }
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 10).strokeBorder(book.rule, lineWidth: 1)
-        )
-    }
-
-    private var metaLine: String {
-        let time = "\(timeString(block.startMin))–\(timeString(block.endMin))"
-        return block.conflicted ? "\(time) · overlaps" : time
-    }
-}
-
-private func timeString(_ minutes: Int) -> String {
-    String(format: "%02d:%02d", minutes / 60, minutes % 60)
-}
-
-// MARK: - Hatch pattern
-
-struct DiagonalHatch: Shape {
-    var spacing: CGFloat = 6
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        var x = -rect.height
-        while x < rect.width {
-            path.move(to: CGPoint(x: rect.minX + x, y: rect.maxY))
-            path.addLine(to: CGPoint(x: rect.minX + x + rect.height, y: rect.minY))
-            x += spacing
-        }
-        return path
+    private func loadMarks() async {
+        let layout = MonthLayout(month: month, calendar: cal)
+        guard let first = dateFor(1), let last = dateFor(layout.days) else { return }
+        marks = await store.marks(from: first, to: last)
     }
 }

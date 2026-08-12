@@ -126,6 +126,36 @@ final class NotebookSnapshotTests: XCTestCase {
         snapshot(app, "23-next-week")
     }
 
+    /// The strip hung at the top with nothing dividing it from the date. It
+    /// folds away now, and the choice is remembered.
+    func testCollapsingTheWeekStrip() throws {
+        let app = launch(theme: "day")
+        let heading = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS[c] %@", "AUGUST")
+        ).firstMatch
+        XCTAssertTrue(heading.waitForExistence(timeout: 10), "month heading not found")
+
+        XCTAssertTrue(app.buttons["Next week"].exists, "week should start expanded")
+        heading.tap()
+        Thread.sleep(forTimeInterval: 1)
+        XCTAssertFalse(app.buttons["Next week"].exists, "week did not collapse")
+        snapshot(app, "27-week-collapsed")
+
+        heading.tap()
+        Thread.sleep(forTimeInterval: 1)
+        XCTAssertTrue(app.buttons["Next week"].exists, "week did not expand again")
+    }
+
+    /// The calendar is the month grid plus the selected day, in the same rows
+    /// the day itself uses — not the hand-drawn timeline it used to be.
+    func testCalendar() throws {
+        let app = launch(theme: "day")
+        addTask(app, "seminar")
+        app.buttons["Calendar"].firstMatch.tap()
+        Thread.sleep(forTimeInterval: 2)
+        snapshot(app, "28-calendar")
+    }
+
     // MARK: - Appearance
 
     func testDayOnPaper() throws {

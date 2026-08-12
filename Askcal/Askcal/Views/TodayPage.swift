@@ -24,7 +24,22 @@ struct TodayPage: View {
 
     @State private var selected = Calendar.current.startOfDay(for: .now)
     @State private var loaded: AskcalStore.DayData?
+    /// Which day `loaded` actually holds. Without it the page cannot tell
+    /// "yesterday, still loading" from "yesterday, genuinely empty", and shows
+    /// the empty copy for a beat before the real entries arrive — the flash.
+    @State private var loadedDay: String?
     @State private var marked: Set<String> = []
+
+    private var isLoadingDay: Bool {
+        !isToday && loadedDay != AskcalStore.dayString(selected)
+    }
+
+    /// Changes only when the visible week does. Marks used to reload on every
+    /// change to the task count, so writing a task down fired a network request
+    /// and re-laid out the strip underneath you.
+    private var weekKey: Date {
+        cal.dateInterval(of: .weekOfYear, for: selected)?.start ?? selected
+    }
 
     private var cal: Calendar { Calendar.current }
     private var isToday: Bool { cal.isDateInToday(selected) }
@@ -57,7 +72,7 @@ struct TodayPage: View {
             endOfDay
         }
         .task(id: selected) { await load() }
-        .task(id: store.tasks.count) { await loadMarks() }
+        .task(id: weekKey) { await loadMarks() }
     }
 
     private var header: some View {
@@ -77,7 +92,7 @@ struct TodayPage: View {
             if let focus = store.focus {
                 FocusCard(
                     focus: focus,
-                    toggle: { store.toggleDone(focus.task) },
+                    companion: store.companion,
                     open: { editingTask = focus.task }
                 )
             }
@@ -110,7 +125,7 @@ struct TodayPage: View {
         VStack(alignment: .leading, spacing: Space.lg) {
             Rubric(isToday ? "today" : selected.formatted(.dateTime.weekday(.wide)))
 
-            if isToday && store.isBootstrapping {
+            if (isToday && store.isBootstrapping) || (isLoadingDay && entries.isEmpty) {
                 // The empty copy is true only once the fetch is done. Rendering
                 // it mid-flight told the user their day was clear before we had
                 // looked.
@@ -223,9 +238,24 @@ struct TodayPage: View {
     }
 
 
+    /// Loads the selected day, leaving whatever is on screen in place until the
+    /// new day is actually in hand. Blanking first and filling afterwards is
+    /// what made every date change flicker.
     private func load() async {
-        guard !isToday else { loaded = nil; return }
-        loaded = await store.dayData(for: selected)
+        guard !isToday else {
+            loaded = nil
+            loadedDay = nil
+            return
+        }
+        let day = selected
+        let data = await store.dayData(for: day)
+        // The day can change again while this is in flight — a second tap on
+        // the strip — and the slower answer must not overwrite the newer one.
+        guard day == selected else { return }
+        withAnimation(.easeInOut(duration: 0.18)) {
+            loaded = data
+            loadedDay = AskcalStore.dayString(day)
+        }
     }
 
     /// Which days of the visible week have anything on them, for the strip's

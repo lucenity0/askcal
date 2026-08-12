@@ -17,7 +17,7 @@ import SwiftUI
 
 struct FocusCard: View {
     let focus: AskcalStore.FocusInfo
-    var toggle: () -> Void
+    let companion: CompanionMotif
     var open: () -> Void
 
     @Environment(\.book) private var book
@@ -43,11 +43,7 @@ struct FocusCard: View {
                 }
             }
 
-            HStack(alignment: .top, spacing: Space.lg) {
-                CheckCircle(checked: focus.task.status == .done, action: toggle)
-                    .accessibilityLabel(focus.task.title)
-                    .accessibilityValue(focus.task.status == .done ? "Done" : "Not done")
-
+            HStack(alignment: .center, spacing: Space.lg) {
                 VStack(alignment: .leading, spacing: Space.sm) {
                     Text(focus.task.title)
                         .font(BookType.entry(20))
@@ -63,10 +59,16 @@ struct FocusCard: View {
                         .font(BookType.meta(11))
                         .foregroundStyle(book.inkSub)
                 }
-                .padding(.top, Space.md)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
                 .onTapGesture(perform: open)
+
+                // No check here. Completing is what the timeline row below is
+                // for, and a card whose job is "what now" should not be
+                // offering to make itself disappear. The space goes to the
+                // companion instead, which is the only thing in the app that
+                // moves when nothing is happening.
+                PixelSprite(motif: companion, size: 56)
             }
         }
         .padding(Space.xl)

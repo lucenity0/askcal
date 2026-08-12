@@ -20,6 +20,7 @@ struct WeekStrip: View {
 
     @Environment(\.book) private var book
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage("weekStripExpanded") private var expanded = true
 
     private var cal: Calendar { Calendar.current }
 
@@ -40,21 +41,58 @@ struct WeekStrip: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.md) {
-            Text(monthLabel)
-                .font(BookType.meta(10))
-                .tracking(1.2)
-                .foregroundStyle(book.inkSub)
-                .padding(.leading, 34)   // clears the back chevron
+            heading
 
-            HStack(spacing: 0) {
-                chevron("chevron.left", label: "Previous week", weeks: -1)
-                ForEach(week, id: \.timeIntervalSince1970) { day in
-                    dayCell(day)
+            if expanded {
+                HStack(spacing: 0) {
+                    chevron("chevron.left", label: "Previous week", weeks: -1)
+                    ForEach(week, id: \.timeIntervalSince1970) { day in
+                        dayCell(day)
+                    }
+                    chevron("chevron.right", label: "Next week", weeks: 1)
                 }
-                chevron("chevron.right", label: "Next week", weeks: 1)
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
+
+            // The strip used to end in mid-air with the date heading right
+            // under it and nothing between them, so it read as floating rather
+            // than as a band the page begins with.
+            PageRule()
         }
+        .clipped()   // the collapsing row must not draw past the rule
         .accessibilityElement(children: .contain)
+    }
+
+    /// The month, and the control that folds the week away. Collapsed, the day
+    /// gets the room back; the choice is remembered, because whichever way you
+    /// prefer it you will prefer it every time.
+    private var heading: some View {
+        Button {
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.22)) {
+                expanded.toggle()
+            }
+        } label: {
+            HStack(spacing: Space.md) {
+                Text(monthLabel)
+                    .font(BookType.meta(10))
+                    .tracking(1.2)
+                    .foregroundStyle(book.inkSub)
+                if !expanded {
+                    Text(selected.formatted(.dateTime.weekday(.abbreviated).day()))
+                        .font(BookType.meta(10))
+                        .foregroundStyle(book.inkDim)
+                }
+                Spacer()
+                Image(systemName: "chevron.down")
+                    .font(BookType.icon(10))
+                    .foregroundStyle(book.inkSub)
+                    .rotationEffect(.degrees(expanded ? 0 : -90))
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(monthLabel)
+        .accessibilityHint(expanded ? "Collapses the week" : "Expands the week")
     }
 
     private func chevron(_ symbol: String, label: String, weeks: Int) -> some View {

@@ -51,6 +51,10 @@ final class AskcalStore {
     /// here if the server refuses it.
     var actionError: String?
 
+    /// The idle companion on the now-working card. One motif per app open, so
+    /// the card has a small life of its own and is not the same twice.
+    let companion: CompanionMotif = CompanionMotif.allCases.randomElement() ?? .cat
+
 
     init(
         tasks: [AskcalTask] = [],
