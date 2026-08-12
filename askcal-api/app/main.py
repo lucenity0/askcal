@@ -13,6 +13,7 @@ from app.routers import (
     auth,
     calendar,
     closing_time,
+    digest,
     inbox,
     me,
     routines,
@@ -68,6 +69,7 @@ app.include_router(tracks.router)
 app.include_router(tasks.router)
 app.include_router(calendar.router)
 app.include_router(closing_time.router)
+app.include_router(digest.router)
 app.include_router(routines.router)
 app.include_router(me.router)
 

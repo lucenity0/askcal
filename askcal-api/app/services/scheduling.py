@@ -30,6 +30,20 @@ def user_today(tz_name: str) -> dt.date:
     return dt.datetime.now(tz).date()
 
 
+def user_now(tz_name: str) -> dt.datetime:
+    """Now, in the user's own timezone.
+
+    Aware and localised, because the digests compare deadlines against "today"
+    — in UTC that boundary moves by hours and a late-evening deadline falls out
+    of the day it belongs to.
+    """
+    try:
+        tz = ZoneInfo(tz_name)
+    except (KeyError, ValueError):
+        tz = dt.timezone.utc
+    return dt.datetime.now(tz)
+
+
 def local_midnight(tz_name: str) -> dt.datetime:
     """Start of the user's current day, as an aware datetime."""
     try:

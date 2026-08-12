@@ -80,6 +80,13 @@ def test_task_delete_is_registered():
     assert "delete" in client.get("/openapi.json").json()["paths"]["/api/tasks/{task_id}"]
 
 
+def test_digest_routes_are_registered():
+    """Both notifications open onto these. A push that lands on a 404 is worse
+    than one that never fires."""
+    paths = set(client.get("/openapi.json").json()["paths"])
+    assert {"/api/digest/morning", "/api/digest/evening"} <= paths
+
+
 def test_all_contract_routes_registered():
     paths = set(client.get("/openapi.json").json()["paths"])
     assert {
