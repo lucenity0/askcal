@@ -55,24 +55,6 @@ struct PillButtonStyle: ButtonStyle {
 
 
 
-// ─── Floating action button ───────────────────────────────────────────────────
-
-struct FAB: View {
-    let action: () -> Void
-    @Environment(\.book) private var book
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: "plus")
-                .font(.system(size: 20, weight: .medium))
-                .foregroundStyle(book.fillText)
-                .frame(width: 56, height: 56)
-                .background(Circle().fill(book.fill))
-                .shadow(color: .black.opacity(0.18), radius: 10, x: 0, y: 4)
-        }
-        .buttonStyle(.plain)
-    }
-}
 
 // ─── Toggle: outlined capsule off, filled + contrasting thumb on ─────────────
 // (the system Toggle's white-on-white track is invisible in dark mode)

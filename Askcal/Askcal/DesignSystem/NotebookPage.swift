@@ -5,62 +5,42 @@
 //  One page of the notebook. Every screen is one of these.
 //
 //  This exists because the app had grown two design systems: the day surface
-//  used one set of tokens and every screen you could reach *from* it used
-//  another, with its own gutters and its own heading block. Tapping a row landed
-//  you somewhere that looked like a different app, which is most of what "it
-//  looks broken" actually was. A single container is the fix — the page is
-//  assembled in one place, so no screen can drift from the others without
-//  changing this file.
+//  used one set of tokens and every screen you could reach from it used
+//  another, with its own gutters and its own heading block. Tapping a row
+//  landed you somewhere that looked like a different app. A single container is
+//  the fix — the page is assembled in one place, so no screen can drift from
+//  the others without changing this file.
 //
-//  Layout, leading edge inward: the wire, the paper, the margin rule, and then
-//  the writing. Marks that belong to an entry rather than to its text — the
-//  checkbox, the priority dot — live in the margin, which is what the margin is
-//  for.
+//  The paper is the notebook. The spiral binding that used to run down the edge
+//  is gone: it took real width on every screen, it was the loudest thing on a
+//  page whose point is the writing, and it forced entries to hang their
+//  checkboxes out into a margin — which is what put those checkboxes outside
+//  their parent's hit-test bounds and stopped them working at all. Warm paper,
+//  a serif, and ruled separators carry the character on their own.
 //
 
 import SwiftUI
 
 struct NotebookPage<Content: View>: View {
-    /// Whether this page shows the wire. Off for sheets and for the right-hand
-    /// page of a spread, which shares the binding with the left.
-    var bound: Bool = true
-    var placement: BindingPlacement = .leading
     /// Off for pages whose content scrolls itself (a `List`, a timeline).
     var scrollable: Bool = true
     var onRefresh: (() async -> Void)?
 
     @ViewBuilder var content: () -> Content
 
-    /// Set to false around the facing page of a spread. A screen builds its own
-    /// `NotebookPage` and has no idea whether it is standing alone or sharing a
-    /// binding, so the container that put it there says so through the
-    /// environment rather than every screen taking a parameter it can't answer.
-    @Environment(\.boundPage) private var boundPage
-
     var body: some View {
         ZStack(alignment: .topLeading) {
             PaperSurface()
                 .ignoresSafeArea()
 
-            MarginRule()
-                .padding(.leading, Space.margin)
-                .ignoresSafeArea(edges: .vertical)
-
-            Group {
-                if scrollable {
-                    if let onRefresh {
-                        scroll.refreshable { await onRefresh() }
-                    } else {
-                        scroll
-                    }
+            if scrollable {
+                if let onRefresh {
+                    scroll.refreshable { await onRefresh() }
                 } else {
-                    padded
+                    scroll
                 }
-            }
-
-            if bound && boundPage {
-                BindingEdge(placement: placement)
-                    .ignoresSafeArea(edges: .vertical)
+            } else {
+                padded
             }
         }
     }
@@ -77,34 +57,19 @@ struct NotebookPage<Content: View>: View {
         }
         // A line of text stops being readable somewhere around 70 characters,
         // and an iPad page is far wider than that. The writing keeps its left
-        // edge on the margin and simply stops short of the outer edge — which
-        // is what you do on a wide page anyway.
+        // edge and simply stops short of the outer edge.
         .frame(maxWidth: Space.measure, alignment: .leading)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.leading, Space.textInset)
-        .padding(.trailing, Space.gutter)
+        .padding(.horizontal, Space.gutter)
         .padding(.top, Space.md)
-        .padding(.bottom, Space.fabClearance)
-    }
-}
-
-private struct BoundPageKey: EnvironmentKey {
-    static let defaultValue = true
-}
-
-extension EnvironmentValues {
-    /// Whether a page draws its own binding. False for the facing page of a
-    /// spread, which shares the wire in the gutter.
-    var boundPage: Bool {
-        get { self[BoundPageKey.self] }
-        set { self[BoundPageKey.self] = newValue }
+        .padding(.bottom, Space.xl)
     }
 }
 
 // MARK: - The heading block
 
-/// The one heading hierarchy: a mono kicker over a serif title. Every page uses
-/// this; heading styles are never re-specified per screen.
+/// The one heading hierarchy: a small weekday over the date in serif. Every
+/// screen uses this; heading styles are never re-specified per page.
 struct PageTitle<Trailing: View>: View {
     let kicker: String
     let title: String
@@ -126,11 +91,11 @@ struct PageTitle<Trailing: View>: View {
     }
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
+        HStack(alignment: .lastTextBaseline) {
             VStack(alignment: .leading, spacing: Space.hair) {
                 Text(kicker)
-                    .font(BookType.kicker())
-                    .foregroundStyle(book.inkSub)
+                    .font(BookType.heading(17))
+                    .foregroundStyle(book.inkDim)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
                 Text(title)
@@ -142,11 +107,43 @@ struct PageTitle<Trailing: View>: View {
             Spacer(minLength: Space.lg)
             trailing()
         }
-        .accessibilityElement(children: .combine)
     }
 }
 
-/// A small mono rubric opening a section, set in the margin.
+/// "Routine    3 of 5 ›" — a screen that lives elsewhere, summarised here so
+/// the count is visible without the trip.
+struct SettingsRow: View {
+    let title: String
+    let value: String
+    @Environment(\.book) private var book
+
+    var body: some View {
+        HStack {
+            Text(title)
+                .font(BookType.entry(16))
+                .foregroundStyle(book.ink)
+            Spacer()
+            Text(value)
+                .font(BookType.meta())
+                .foregroundStyle(book.inkSub)
+            Image(systemName: "chevron.right")
+                .font(BookType.icon(11))
+                .foregroundStyle(book.inkSub)
+        }
+        .padding(.vertical, Space.lg)
+        .contentShape(Rectangle())
+        .ruled()
+        // Title and value are a label and a value. Combining them produced
+        // "Routine 3 of 5" as one string, which no test or VoiceOver user could
+        // identify the row by.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(value)
+        .accessibilityHint("Opens \(title)")
+    }
+}
+
+/// A small mono rubric opening a section.
 struct Rubric: View {
     let text: String
     @Environment(\.book) private var book

@@ -91,19 +91,3 @@ struct PageRule: View {
     }
 }
 
-// MARK: - The margin
-
-/// The vertical rule down the left of the page. A guide, not a border — it
-/// gives the checkboxes and priority marks somewhere to live and gives the
-/// writing a left edge to start from.
-struct MarginRule: View {
-    @Environment(\.book) private var book
-
-    var body: some View {
-        Rectangle()
-            .fill(book.margin.opacity(PaperTexture.marginOpacity))
-            .frame(width: Stroke.hair)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
-    }
-}

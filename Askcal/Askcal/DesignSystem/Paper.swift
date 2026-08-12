@@ -81,7 +81,7 @@ struct PaperPalette: Equatable {
     let board: Color      // the cover behind the page; the iPad backdrop
     let binding: Color    // the wire
 
-    // ── Inversion: filled buttons, checked boxes, the FAB ────────────────
+    // ── Inversion: filled buttons, checked marks ─────────────────────────
     let fill: Color
     let fillText: Color
 

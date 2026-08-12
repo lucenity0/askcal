@@ -98,6 +98,40 @@ final class AskcalStore {
         tasks.filter { $0.status == .pending }.sorted { $0.regretScore > $1.regretScore }
     }
 
+    /// Everything on today, ticked ones included, in the order the day happens.
+    ///
+    /// The day list used to be `scheduledTasks`, which is pending-only — so
+    /// ticking something made it disappear off the page entirely. That reads as
+    /// the checkbox having deleted your task rather than completed it, and it
+    /// throws away the only evidence that the day is going well. Done work
+    /// stays, struck through, until the day is closed.
+    ///
+    /// Carried work is excluded: it has been explicitly moved to tomorrow, so
+    /// it is not on today any more.
+    var dayEntries: [AskcalTask] {
+        tasks
+            .filter { $0.status != .carried }
+            .sorted { lhs, rhs in
+                let l = minuteOfDay(lhs), r = minuteOfDay(rhs)
+                if l != r { return l < r }
+                return lhs.regretScore > rhs.regretScore
+            }
+    }
+
+    /// When a task happens, in minutes past midnight. Its plan slot first, then
+    /// a time the user pinned themselves; anything with neither sorts to the
+    /// end, because "sometime today" comes after everything with an hour.
+    private func minuteOfDay(_ task: AskcalTask) -> Int {
+        if let slot = slot(for: task), let minutes = minutesSinceMidnight(slot.time) {
+            return minutes
+        }
+        if let at = task.scheduledAt {
+            let parts = Calendar.current.dateComponents([.hour, .minute], from: at)
+            return (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
+        }
+        return .max
+    }
+
     var inboxEmails: [EmailItem] {
         // score first, then recency — the recency tiebreak matters because
         // Swift's sort is unstable and equal scores reshuffled every refresh

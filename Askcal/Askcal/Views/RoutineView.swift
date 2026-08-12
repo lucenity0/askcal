@@ -55,11 +55,14 @@ struct RoutineView: View {
 
     private func row(for routine: Routine) -> some View {
         let done = store.routinesDone.contains(routine.id)
-        return HStack(alignment: .top, spacing: 0) {
-            EntryMark(checked: done) {
+        // Nothing reaches outside this row. The previous version pulled the
+        // mark 48pt into the page margin with negative padding, which draws
+        // fine and cannot be tapped — SwiftUI does not hit-test outside a
+        // parent's bounds.
+        return HStack(alignment: .top, spacing: Space.md) {
+            CheckCircle(checked: done) {
                 withAnimation(.easeOut(duration: 0.2)) { store.toggleRoutine(routine) }
             }
-            .frame(width: Space.markReach, alignment: .leading)
             .accessibilityLabel(routine.title)
             .accessibilityValue(done ? "Done today" : "Not done today")
 
@@ -78,7 +81,6 @@ struct RoutineView: View {
                 .padding(.top, Space.xl)
         }
         .padding(.bottom, Space.md)
-        .padding(.leading, -Space.markReach)
         .contentShape(Rectangle())
         .contextMenu {
             Button(role: .destructive) {
@@ -91,11 +93,11 @@ struct RoutineView: View {
     }
 
     private var addRow: some View {
-        HStack(alignment: .top, spacing: 0) {
-            RoundedRectangle(cornerRadius: Radius.mark)
-                .strokeBorder(book.inkSub, lineWidth: Stroke.strong)
-                .frame(width: 19, height: 19)
-                .frame(width: Space.markReach, height: 44, alignment: .leading)
+        HStack(alignment: .top, spacing: Space.md) {
+            Circle()
+                .strokeBorder(book.ruleStrong, lineWidth: Stroke.strong)
+                .frame(width: 24, height: 24)
+                .frame(width: 44, height: 44)
 
             TextField("new routine", text: $newTitle)
                 .font(BookType.entry())
@@ -110,7 +112,6 @@ struct RoutineView: View {
                 .padding(.top, Space.lg)
         }
         .padding(.bottom, Space.md)
-        .padding(.leading, -Space.markReach)
         .onAppear { addFocused = true }
         .onChange(of: addFocused) { _, focused in
             // dismissing the keyboard ends the add — it must not come back

@@ -59,24 +59,20 @@ struct TracksView: View {
                     .padding(.bottom, Space.lg)
                     .ruled()
             } else {
-                ForEach(items) { task in
-                    EntryRow(
+                ForEach(Array(items.enumerated()), id: \.element.id) { index, task in
+                    TimelineRow(
                         task: task,
+                        time: nil,
+                        isFirst: index == 0,
+                        isLast: index == items.count - 1,
                         toggle: {
                             withAnimation(.easeOut(duration: 0.2)) { store.toggleDone(task) }
                         },
-                        tap: { editingTask = task }
-                    )
-                    .contextMenu {
-                        Button { editingTask = task } label: {
-                            Label("Edit", systemImage: "pencil")
-                        }
-                        Button(role: .destructive) {
+                        edit: { editingTask = task },
+                        delete: {
                             withAnimation(.easeOut(duration: 0.2)) { store.deleteTask(task) }
-                        } label: {
-                            Label("Delete", systemImage: "trash")
                         }
-                    }
+                    )
                 }
             }
         }

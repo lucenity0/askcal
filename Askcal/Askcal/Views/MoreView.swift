@@ -25,6 +25,10 @@ struct MoreView: View {
     @AppStorage("eveningNudge") private var eveningNudge = true
     @State private var connectError: String?
 
+    /// Routine's inline add field is opened from this screen's toolbar, so the
+    /// flag has to live above the pushed view.
+    @Binding var isAddingRoutine: Bool
+
     @State private var nameDraft = ""
     @State private var savingName = false
     @State private var nameStatus: SaveStatus = .idle
@@ -45,8 +49,43 @@ struct MoreView: View {
     }
 
     var body: some View {
+        NavigationStack {
+            page
+                .navigationDestination(for: MoreDestination.self) { destination in
+                    switch destination {
+                    case .routine: RoutineView(isAdding: $isAddingRoutine)
+                    case .tracks: TracksView()
+                    }
+                }
+        }
+    }
+
+    /// Where the reference material lives now.
+    ///
+    /// Routine and Tracks used to be rows under the day's entries, which meant
+    /// writing anything down pushed them further off the screen. They are
+    /// things you consult, so they sit behind More rather than competing with
+    /// the day for the top of it.
+    private enum MoreDestination: Hashable { case routine, tracks }
+
+    private var page: some View {
         NotebookPage {
             PageTitle(kicker: "Settings", title: "More")
+
+                VStack(spacing: 0) {
+                    NavigationLink(value: MoreDestination.routine) {
+                        SettingsRow(title: "Routine",
+                                    value: store.routines.isEmpty
+                                        ? "none set"
+                                        : "\(store.routinesDone.count) of \(store.routines.count)")
+                    }
+                    .buttonStyle(.plain)
+                    NavigationLink(value: MoreDestination.tracks) {
+                        SettingsRow(title: "Tracks", value: "\(store.openTasks.count) open")
+                    }
+                    .buttonStyle(.plain)
+                }
+
                 accountSection
                 PageRule()
 

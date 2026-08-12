@@ -2,8 +2,8 @@
 //  GreetingView.swift
 //  Askcal
 //
-//  Once-a-day greeting: a heartbeat line draws itself, the greeting fades up,
-//  then the whole screen retreats to reveal Today. Tap anywhere to skip.
+//  The launch greeting: the room fades up, the greeting with it, then the
+//  whole screen retreats to reveal the day. Tap anywhere to skip.
 //
 
 import SwiftUI

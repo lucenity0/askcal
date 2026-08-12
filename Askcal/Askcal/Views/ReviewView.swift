@@ -104,10 +104,9 @@ private struct ReviewRow: View {
             // Done is the same square used everywhere else — the round
             // StatusCircle that used to live here was a second check-off shape
             // for the same idea on a different screen.
-            EntryMark(checked: isDone) {
+            CheckCircle(checked: isDone) {
                 withAnimation(.easeOut(duration: 0.2)) { store.review(task, done: true) }
             }
-            .frame(width: Space.markColumn)
             .accessibilityLabel("\(task.title), done")
 
             Button {

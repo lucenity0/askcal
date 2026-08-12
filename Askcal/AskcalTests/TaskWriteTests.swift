@@ -124,6 +124,59 @@ struct DeleteTaskTests {
 @MainActor
 struct ToggleDoneTests {
 
+    /// The day list was pending-only, so ticking something removed it from the
+    /// page. That reads as the checkbox having deleted the task rather than
+    /// completed it — and it throws away the only evidence the day is going
+    /// well.
+    @Test func tickingATaskKeepsItOnTheDay() throws {
+        let store = freshStore()
+        store.quickAdd(title: "tick me", scheduledAt: .now)
+        let task = try #require(store.tasks.first)
+
+        store.toggleDone(task)
+
+        #expect(store.dayEntries.count == 1)
+        #expect(store.dayEntries.first?.status == .done)
+    }
+
+    /// Work moved to tomorrow is genuinely not on today any more, so it is the
+    /// one status the day list does drop.
+    @Test func carriedWorkLeavesTheDay() throws {
+        let store = freshStore()
+        store.quickAdd(title: "not today", scheduledAt: .now)
+        let task = try #require(store.tasks.first)
+
+        store.review(task, done: false)
+
+        #expect(store.dayEntries.isEmpty)
+    }
+
+    /// The day reads in the order it happens, not by score.
+    @Test func theDayIsOrderedByTheClock() throws {
+        let store = freshStore()
+        let cal = Calendar.current
+        let nine = try #require(cal.date(bySettingHour: 9, minute: 0, second: 0, of: .now))
+        let five = try #require(cal.date(bySettingHour: 17, minute: 0, second: 0, of: .now))
+
+        store.quickAdd(title: "evening", scheduledAt: five)
+        store.quickAdd(title: "morning", scheduledAt: nine)
+
+        #expect(store.dayEntries.map(\.title) == ["morning", "evening"])
+    }
+
+    /// Something with no hour on it is still on the day — it just sorts after
+    /// everything that does, rather than dropping out of the list.
+    @Test func untimedWorkSortsToTheEnd() throws {
+        let store = freshStore()
+        let cal = Calendar.current
+        let nine = try #require(cal.date(bySettingHour: 9, minute: 0, second: 0, of: .now))
+
+        store.quickAdd(title: "sometime", scheduledFor: cal.startOfDay(for: .now))
+        store.quickAdd(title: "at nine", scheduledAt: nine)
+
+        #expect(store.dayEntries.map(\.title) == ["at nine", "sometime"])
+    }
+
     @Test func togglingMarksDoneAndBack() throws {
         let store = freshStore()
         store.quickAdd(title: "tick me", scheduledAt: .now)

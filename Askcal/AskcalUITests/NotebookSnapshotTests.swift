@@ -2,12 +2,13 @@
 //  NotebookSnapshotTests.swift
 //  AskcalUITests
 //
-//  Renders the notebook so it can be looked at.
+//  Drives the day the way a person does, and renders it so it can be looked at.
 //
-//  Two things in this design cannot be settled by reading the code. The ruling
-//  has to line up with the writing at every Dynamic Type size, and the grain and
-//  binding have to read as paper rather than as noise. Both are judgements about
-//  pixels, so they need pixels.
+//  The checkbox test is the important one. Every check mark in the app rendered
+//  perfectly and could not be tapped, because the row hung it out into the page
+//  margin with negative padding and SwiftUI does not hit-test outside a
+//  parent's bounds. Nothing about that is visible in a screenshot or catchable
+//  by a unit test — only a real tap finds it.
 //
 //  Run with:
 //    xcodebuild test -scheme Askcal -destination '...' \
@@ -43,7 +44,8 @@ final class NotebookSnapshotTests: XCTestCase {
             }
         }
 
-        Thread.sleep(forTimeInterval: 4)
+        // The greeting plays on every launch and takes a couple of seconds.
+        Thread.sleep(forTimeInterval: 5)
         return app
     }
 
@@ -54,96 +56,91 @@ final class NotebookSnapshotTests: XCTestCase {
         add(attachment)
     }
 
-    func testDayPageOnPaper() throws {
-        let app = launch(theme: "day")
-        snapshot(app, "10-day-page")
-    }
-
-    func testDayPageAtNight() throws {
-        let app = launch(theme: "night")
-        snapshot(app, "11-day-page-night")
-    }
-
-    /// Entries carry their own rule, so alignment should survive this. If the
-    /// ruling ever moves back to a fixed background grid, this is the test that
-    /// catches it.
-    func testDayPageAtLargestAccessibilitySize() throws {
-        let app = launch(theme: "day",
-                         contentSize: "UICTContentSizeCategoryAccessibilityXXXL")
-        snapshot(app, "12-day-page-largest-type")
-    }
-
-    /// The reported bug, through the real UI: tap +, type, tap Add, and the
-    /// entry is on the page. It used to close the sheet and do nothing visible,
-    /// because every failure was swallowed and nothing was shown until a round
-    /// trip returned.
-    func testAddingATaskPutsItOnThePage() throws {
-        let app = launch(theme: "day")
-
-        app.buttons["New task"].tap()
-
-        let field = app.textFields["what needs doing?"]
-        XCTAssertTrue(field.waitForExistence(timeout: 5), "composer field not found")
+    /// Write a task down and get it onto the page.
+    @discardableResult
+    private func addTask(_ app: XCUIApplication, _ title: String) -> XCUIElement {
+        let field = app.textFields["Add task"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10), "add-task row not found")
         field.tap()
-        field.typeText("finish the brief")
+        field.typeText(title)
+        app.typeText("\n")
 
-        app.buttons["Add task"].tap()
-
-        let entry = app.staticTexts["finish the brief"]
+        let entry = app.staticTexts[title]
         XCTAssertTrue(entry.waitForExistence(timeout: 5),
                       "the task did not appear on the page after being added")
-        snapshot(app, "14-entry-added")
+        return entry
     }
 
-    /// Tracks was the worst of the two-design-systems problem: six full page
-    /// headers, each with its own serif title and underline stub, stacked
-    /// inside a page that already had one.
-    func testTracksIsOnTheSamePaper() throws {
+    // MARK: - Behaviour
+
+    /// The originally reported bug: adding a task appeared to do nothing.
+    func testAddingATaskPutsItOnThePage() throws {
         let app = launch(theme: "day")
-        let tracks = app.buttons["Tracks"].firstMatch
-        XCTAssertTrue(tracks.waitForExistence(timeout: 10), "Tracks row not found")
-        tracks.tap()
-        Thread.sleep(forTimeInterval: 1.5)
-        snapshot(app, "15-tracks")
+        addTask(app, "finish the brief")
+        snapshot(app, "20-entry-added")
     }
 
-    /// The month grid, whose dots used to draw for today and no other day.
-    func testCalendarMonthGrid() throws {
+    /// The second reported bug: the check marks could not be tapped at all.
+    func testTappingTheCheckMarkCompletesTheTask() throws {
         let app = launch(theme: "day")
-        app.buttons["Calendar"].firstMatch.tap()
-        Thread.sleep(forTimeInterval: 1.5)
-        app.buttons["Month"].firstMatch.tap()
-        Thread.sleep(forTimeInterval: 1.5)
-        snapshot(app, "16-calendar-month")
-    }
+        addTask(app, "tick me")
 
-    /// The spread. Only meaningful on an iPad wide enough for two pages, so it
-    /// skips rather than fails elsewhere — a phone has nothing to say here.
-    func testTwoPageSpreadInLandscape() throws {
-        let app = launch(theme: "day")
-        XCUIDevice.shared.orientation = .landscapeLeft
+        let mark = app.buttons["tick me"]
+        XCTAssertTrue(mark.waitForExistence(timeout: 5), "check mark not found")
+        XCTAssertEqual(mark.value as? String, "Not done")
+
+        mark.tap()
         Thread.sleep(forTimeInterval: 2)
+        snapshot(app, "21-checked")
 
-        guard app.windows.firstMatch.frame.width >= 880 else {
-            throw XCTSkip("not wide enough for a spread")
+        // The value is what the row reports about itself, so this fails if the
+        // tap lands nowhere as well as if the store refuses the change.
+        XCTAssertEqual(mark.value as? String, "Done",
+                       "tapping the check mark did not complete the task")
+
+        // And back, so a mistaken tick isn't permanent.
+        mark.tap()
+        let becameOpen = NSPredicate(format: "value == %@", "Not done")
+        expectation(for: becameOpen, evaluatedWith: mark)
+        waitForExpectations(timeout: 5)
+    }
+
+    /// Writing a task down must not push the rest of the app off the screen.
+    /// Inbox, Calendar and More are tabs, so they stay where they are.
+    func testTabsStayPutWhenTheDayFillsUp() throws {
+        let app = launch(theme: "day")
+        for title in ["one", "two", "three", "four", "five"] {
+            addTask(app, title)
         }
-
-        app.buttons["Tracks"].firstMatch.tap()
-        Thread.sleep(forTimeInterval: 1.5)
-        snapshot(app, "17-spread")
-
-        XCUIDevice.shared.orientation = .portrait
-        Thread.sleep(forTimeInterval: 2)
-        snapshot(app, "18-ipad-portrait")
+        XCTAssertTrue(app.buttons["Inbox"].exists, "Inbox tab left the screen")
+        XCTAssertTrue(app.buttons["Calendar"].exists, "Calendar tab left the screen")
+        snapshot(app, "22-full-day")
     }
 
-    /// The page turn, and the destination rows below the writing.
-    func testTurningToTomorrow() throws {
+    func testMovingAroundTheWeek() throws {
         let app = launch(theme: "day")
-        let next = app.buttons["Next day"]
-        XCTAssertTrue(next.waitForExistence(timeout: 10), "next-day chevron not found")
-        next.tap()
-        Thread.sleep(forTimeInterval: 1.5)
-        snapshot(app, "13-tomorrow")
+        let nextWeek = app.buttons["Next week"]
+        XCTAssertTrue(nextWeek.waitForExistence(timeout: 10), "week strip not found")
+        nextWeek.tap()
+        Thread.sleep(forTimeInterval: 1)
+        snapshot(app, "23-next-week")
+    }
+
+    // MARK: - Appearance
+
+    func testDayOnPaper() throws {
+        snapshot(launch(theme: "day"), "24-day")
+    }
+
+    func testDayAtNight() throws {
+        snapshot(launch(theme: "night"), "25-day-night")
+    }
+
+    /// Rows carry their own rule, so alignment should survive this. If the
+    /// ruling ever moves to a fixed background grid, this is what catches it.
+    func testDayAtLargestAccessibilitySize() throws {
+        let app = launch(theme: "day",
+                         contentSize: "UICTContentSizeCategoryAccessibilityXXXL")
+        snapshot(app, "26-largest-type")
     }
 }
