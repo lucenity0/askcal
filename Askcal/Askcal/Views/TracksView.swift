@@ -9,14 +9,14 @@ import SwiftUI
 
 struct TracksView: View {
     @Environment(AskcalStore.self) private var store
-    @Environment(\.mono) private var mono
+    @Environment(\.book) private var book
 
     var body: some View {
         PageScaffold {
             PageHeader(kicker: "My tracks", title: "Tracks") {
                 Text("\(store.openTasks.count)")
-                    .font(MonoType.meta(13))
-                    .foregroundStyle(mono.textSecondary)
+                    .font(BookType.meta(13))
+                    .foregroundStyle(book.textSecondary)
             }
             SectionUnderline()
         } content: {
@@ -27,16 +27,16 @@ struct TracksView: View {
                             icon: track.icon, titleSize: 28
                         ) {
                             Text("\(store.tasks(in: track).count)")
-                                .font(MonoType.meta(12))
-                                .foregroundStyle(mono.textSecondary)
+                                .font(BookType.meta(12))
+                                .foregroundStyle(book.textSecondary)
                         }
                         SectionUnderline()
 
                         let items = store.tasks(in: track)
                         if items.isEmpty {
                             Text(track == .career ? "nothing in the pipeline yet." : "nothing here yet.")
-                                .font(MonoType.body())
-                                .foregroundStyle(mono.textSecondary)
+                                .font(BookType.body())
+                                .foregroundStyle(book.textSecondary)
                                 .padding(.vertical, 8)
                         } else {
                             VStack(spacing: 0) {
@@ -49,19 +49,19 @@ struct TracksView: View {
                                         }
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text(task.title)
-                                                .font(MonoType.item())
-                                                .foregroundStyle(mono.textPrimary)
+                                                .font(BookType.entry())
+                                                .foregroundStyle(book.textPrimary)
                                             if let detail = detailLine(for: task) {
                                                 Text(detail)
-                                                    .font(MonoType.meta(10))
-                                                    .foregroundStyle(mono.textSecondary)
+                                                    .font(BookType.meta(10))
+                                                    .foregroundStyle(book.textSecondary)
                                             }
                                         }
                                         Spacer()
                                         PriorityDot(band: task.priority)
                                     }
                                     .padding(.vertical, 6)
-                                    Divider().overlay(mono.border)
+                                    Divider().overlay(book.border)
                                 }
                             }
                         }

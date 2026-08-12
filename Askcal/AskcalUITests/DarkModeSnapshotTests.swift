@@ -6,9 +6,9 @@
 //  toggle styles.
 //
 //  These exist because `PillButtonStyle` and `MonoToggleStyle` read
-//  `@Environment(\.mono)` from a `ButtonStyle`/`ToggleStyle` struct. Those are
+//  `@Environment(\.book)` from a `ButtonStyle`/`ToggleStyle` struct. Those are
 //  not Views, and if SwiftUI does not inject into them the palette silently
-//  falls back to `MonoPaletteKey.defaultValue` — which is `.light`, whose
+//  falls back to `PaperPaletteKey.defaultValue` — which is `.light`, whose
 //  `fill` is #000000. On the dark theme's #000000 background that makes every
 //  filled pill disappear. Reading the code cannot settle it; rendering can.
 //

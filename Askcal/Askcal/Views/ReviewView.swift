@@ -10,7 +10,7 @@ import SwiftUI
 
 struct ReviewView: View {
     @Environment(AskcalStore.self) private var store
-    @Environment(\.mono) private var mono
+    @Environment(\.book) private var book
 
     var body: some View {
         PageScaffold {
@@ -22,40 +22,40 @@ struct ReviewView: View {
                 if store.dayClosed {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("day closed. see you tomorrow.")
-                            .font(MonoType.item())
-                            .foregroundStyle(mono.textPrimary)
+                            .font(BookType.entry())
+                            .foregroundStyle(book.textPrimary)
                         Text(store.reviewSummary)
-                            .font(MonoType.meta())
-                            .foregroundStyle(mono.textSecondary)
+                            .font(BookType.meta())
+                            .foregroundStyle(book.textSecondary)
                         if store.streak > 1 {
                             Text("\(store.streak) days in a row.")
-                                .font(MonoType.meta())
-                                .foregroundStyle(mono.textSecondary)
+                                .font(BookType.meta())
+                                .foregroundStyle(book.textSecondary)
                         }
                     }
                     .padding(16)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(
                         RoundedRectangle(cornerRadius: 14)
-                            .fill(mono.surface)
-                            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(mono.border, lineWidth: 1))
+                            .fill(book.surface)
+                            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(book.border, lineWidth: 1))
                     )
                 } else if store.openTasks.isEmpty {
                     Text("clean slate. nothing to review.")
-                        .font(MonoType.body(14))
-                        .foregroundStyle(mono.textSecondary)
+                        .font(BookType.body(14))
+                        .foregroundStyle(book.textSecondary)
                         .padding(.vertical, 24)
                 } else {
                     VStack(spacing: 0) {
                         ForEach(store.openTasks) { task in
                             ReviewRow(task: task)
-                            Divider().overlay(mono.border)
+                            Divider().overlay(book.border)
                         }
                     }
 
                     Text(store.reviewSummary)
-                        .font(MonoType.meta())
-                        .foregroundStyle(mono.textSecondary)
+                        .font(BookType.meta())
+                        .foregroundStyle(book.textSecondary)
                         .padding(.top, 4)
 
                     Button("Close the day") {
@@ -70,7 +70,7 @@ struct ReviewView: View {
 private struct ReviewRow: View {
     let task: AskcalTask
     @Environment(AskcalStore.self) private var store
-    @Environment(\.mono) private var mono
+    @Environment(\.book) private var book
 
     private var isCarried: Bool { task.status == .carried }
 
@@ -78,11 +78,11 @@ private struct ReviewRow: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(task.title)
-                    .font(MonoType.item())
-                    .foregroundStyle(mono.textPrimary)
+                    .font(BookType.entry())
+                    .foregroundStyle(book.textPrimary)
                 Text(task.track.title.lowercased())
-                    .font(MonoType.meta(10))
-                    .foregroundStyle(mono.textSecondary)
+                    .font(BookType.meta(10))
+                    .foregroundStyle(book.textSecondary)
             }
             Spacer()
             // done — circle; tomorrow — outlined chip
@@ -93,12 +93,12 @@ private struct ReviewRow: View {
                 withAnimation(.easeOut(duration: 0.2)) { store.review(task, done: false) }
             } label: {
                 Text("→ tmrw")
-                    .font(MonoType.meta(11))
-                    .foregroundStyle(isCarried ? mono.fillText : mono.textSecondary)
+                    .font(BookType.meta(11))
+                    .foregroundStyle(isCarried ? book.fillText : book.textSecondary)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
-                    .background(Capsule().fill(isCarried ? mono.fill : .clear))
-                    .overlay(Capsule().strokeBorder(isCarried ? .clear : mono.border, lineWidth: 1))
+                    .background(Capsule().fill(isCarried ? book.fill : .clear))
+                    .overlay(Capsule().strokeBorder(isCarried ? .clear : book.border, lineWidth: 1))
             }
             .buttonStyle(.plain)
         }
@@ -109,17 +109,17 @@ private struct ReviewRow: View {
 /// Quiet streak indicator — up to 7 dots, then just the number.
 struct StreakDots: View {
     let count: Int
-    @Environment(\.mono) private var mono
+    @Environment(\.book) private var book
 
     var body: some View {
         if count > 0 {
             HStack(spacing: 4) {
                 ForEach(0..<min(count, 7), id: \.self) { _ in
-                    Circle().fill(mono.fill).frame(width: 5, height: 5)
+                    Circle().fill(book.fill).frame(width: 5, height: 5)
                 }
                 Text("×\(count)")
-                    .font(MonoType.meta(10))
-                    .foregroundStyle(mono.textSecondary)
+                    .font(BookType.meta(10))
+                    .foregroundStyle(book.textSecondary)
             }
         }
     }

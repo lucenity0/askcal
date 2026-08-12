@@ -21,7 +21,7 @@ enum CalViewMode: String, CaseIterable {
 
 struct CalendarView: View {
     @Environment(AskcalStore.self) private var store
-    @Environment(\.mono) private var mono
+    @Environment(\.book) private var book
 
     @State private var mode: CalViewMode = .day
     @State private var displayedMonth: Date = .now
@@ -70,7 +70,7 @@ struct CalendarView: View {
         .task(id: selectedDate) { await loadSelectedDay() }
         .sheet(item: $editingTask) { task in
             TaskComposerSheet(editing: task)
-                .environment(\.mono, mono)
+                .environment(\.book, book)
                 .onDisappear { Task { await loadSelectedDay() } }
         }
     }
@@ -104,41 +104,41 @@ struct CalendarView: View {
                     withAnimation(.easeOut(duration: 0.2)) { mode = m }
                 } label: {
                     Text(m.rawValue)
-                        .font(MonoType.meta(10))
+                        .font(BookType.meta(10))
                         .lineLimit(1)
                         .fixedSize() // "Month" must never wrap to "Mont/h"
-                        .foregroundStyle(mode == m ? mono.fillText : mono.textSecondary)
+                        .foregroundStyle(mode == m ? book.fillText : book.textSecondary)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
-                        .background(Capsule().fill(mode == m ? mono.fill : .clear))
+                        .background(Capsule().fill(mode == m ? book.fill : .clear))
                 }
                 .buttonStyle(.plain)
             }
         }
         .padding(2)
-        .background(Capsule().strokeBorder(mono.border, lineWidth: 1))
+        .background(Capsule().strokeBorder(book.border, lineWidth: 1))
     }
 
     private var legend: some View {
         HStack(spacing: 12) {
             HStack(spacing: 5) {
                 RoundedRectangle(cornerRadius: 3)
-                    .strokeBorder(mono.border, lineWidth: 1)
-                    .background(RoundedRectangle(cornerRadius: 3).fill(mono.surface))
+                    .strokeBorder(book.border, lineWidth: 1)
+                    .background(RoundedRectangle(cornerRadius: 3).fill(book.surface))
                     .frame(width: 16, height: 11)
                 Text("askcal")
             }
             HStack(spacing: 5) {
                 DiagonalHatch(spacing: 4)
-                    .stroke(mono.textSecondary.opacity(0.6), lineWidth: 0.7)
+                    .stroke(book.textSecondary.opacity(0.6), lineWidth: 0.7)
                     .clipShape(RoundedRectangle(cornerRadius: 3))
-                    .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(mono.border, lineWidth: 1))
+                    .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(book.border, lineWidth: 1))
                     .frame(width: 16, height: 11)
                 Text("calendar")
             }
         }
-        .font(MonoType.meta(9))
-        .foregroundStyle(mono.textSecondary)
+        .font(BookType.meta(9))
+        .foregroundStyle(book.textSecondary)
     }
 
     // MARK: - Day view (nav + timeline + anytime list)
@@ -163,8 +163,8 @@ struct CalendarView: View {
                 if activeTasks.isEmpty && activeEvents.isEmpty {
                     Text(isToday ? "nothing scheduled today."
                                  : "nothing scheduled this day.")
-                        .font(MonoType.body(14))
-                        .foregroundStyle(mono.textSecondary)
+                        .font(BookType.body(14))
+                        .foregroundStyle(book.textSecondary)
                         .frame(maxWidth: .infinity)
                         .padding(.top, 40)
                 }
@@ -179,16 +179,16 @@ struct CalendarView: View {
             Spacer(minLength: 4)
             VStack(spacing: 1) {
                 Text(selectedDate.formatted(.dateTime.weekday(.abbreviated).month().day()))
-                    .font(MonoType.item(13))
-                    .foregroundStyle(mono.textPrimary)
+                    .font(BookType.entry(13))
+                    .foregroundStyle(book.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
                 if !isToday {
                     Button("jump to today") {
                         withAnimation(.easeOut(duration: 0.2)) { selectedDate = .now }
                     }
-                    .font(MonoType.meta(9))
-                    .foregroundStyle(mono.textSecondary)
+                    .font(BookType.meta(9))
+                    .foregroundStyle(book.textSecondary)
                     .buttonStyle(.plain)
                 }
             }
@@ -203,25 +203,25 @@ struct CalendarView: View {
     private var anytimeSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("ANYTIME")
-                .font(MonoType.kicker(10))
-                .foregroundStyle(mono.textSecondary)
+                .font(BookType.kicker(10))
+                .foregroundStyle(book.textSecondary)
             ForEach(anytimeTasks) { task in
                 Button { editingTask = task } label: {
                     HStack(spacing: 10) {
                         PriorityDot(band: task.priority)
                         Text(task.title)
-                            .font(MonoType.item(13))
-                            .foregroundStyle(mono.textPrimary)
+                            .font(BookType.entry(13))
+                            .foregroundStyle(book.textPrimary)
                             .lineLimit(1)
                         Spacer()
                         if let d = task.deadlineLabel {
-                            Text(d).font(MonoType.meta(9)).foregroundStyle(mono.textSecondary)
+                            Text(d).font(BookType.meta(9)).foregroundStyle(book.textSecondary)
                         }
                     }
                     .padding(.vertical, 7)
                 }
                 .buttonStyle(.plain)
-                Divider().overlay(mono.border)
+                Divider().overlay(book.border)
             }
         }
     }
@@ -239,11 +239,11 @@ struct CalendarView: View {
             ForEach(Array(stride(from: dayStartMin, through: dayEndMin, by: 60)), id: \.self) { minute in
                 HStack(spacing: 8) {
                     Text(String(format: "%02d:00", minute / 60))
-                        .font(MonoType.meta(10))
-                        .foregroundStyle(mono.textSecondary.opacity(0.8))
+                        .font(BookType.meta(10))
+                        .foregroundStyle(book.textSecondary.opacity(0.8))
                         .frame(width: gutter - 8, alignment: .trailing)
                     Rectangle()
-                        .fill(mono.border)
+                        .fill(book.border)
                         .frame(height: 1)
                 }
                 .offset(y: y(for: minute) - 6)
@@ -297,8 +297,8 @@ struct CalendarView: View {
             navButton("chevron.left") { shiftMonth(-1) }
             Spacer(minLength: 4)
             Text(displayedMonth.formatted(.dateTime.month(.wide).year()))
-                .font(MonoType.item(14))
-                .foregroundStyle(mono.textPrimary)
+                .font(BookType.entry(14))
+                .foregroundStyle(book.textPrimary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
             Spacer(minLength: 4)
@@ -311,8 +311,8 @@ struct CalendarView: View {
         return HStack(spacing: 4) {
             ForEach(symbols, id: \.self) { s in
                 Text(s)
-                    .font(MonoType.meta(9))
-                    .foregroundStyle(mono.textSecondary)
+                    .font(BookType.meta(9))
+                    .foregroundStyle(book.textSecondary)
                     .frame(maxWidth: .infinity)
             }
         }
@@ -348,21 +348,21 @@ struct CalendarView: View {
             VStack(spacing: 4) {
                 ZStack {
                     if today {
-                        Circle().fill(mono.fill).frame(width: 27, height: 27)
+                        Circle().fill(book.fill).frame(width: 27, height: 27)
                     } else if selected {
-                        Circle().strokeBorder(mono.fill, lineWidth: 1.5).frame(width: 27, height: 27)
+                        Circle().strokeBorder(book.fill, lineWidth: 1.5).frame(width: 27, height: 27)
                     }
                     Text("\(day)")
-                        .font(MonoType.meta(12))
-                        .foregroundStyle(today ? mono.fillText : mono.textPrimary)
+                        .font(BookType.meta(12))
+                        .foregroundStyle(today ? book.fillText : book.textPrimary)
                 }
                 .frame(height: 27)
                 HStack(spacing: 3) {
                     if today && !store.scheduledTasks.isEmpty {
-                        Circle().fill(mono.fill).frame(width: 4, height: 4)
+                        Circle().fill(book.fill).frame(width: 4, height: 4)
                     }
                     if today && !store.calendarEvents.isEmpty {
-                        Circle().strokeBorder(mono.fill, lineWidth: 1).frame(width: 4, height: 4)
+                        Circle().strokeBorder(book.fill, lineWidth: 1).frame(width: 4, height: 4)
                     }
                 }
                 .frame(height: 5)
@@ -382,8 +382,8 @@ struct CalendarView: View {
                     navButton("chevron.left") { displayedYear -= 1 }
                     Spacer(minLength: 4)
                     Text(String(displayedYear))
-                        .font(MonoType.item(14))
-                        .foregroundStyle(mono.textPrimary)
+                        .font(BookType.entry(14))
+                        .foregroundStyle(book.textPrimary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                     Spacer(minLength: 4)
@@ -416,8 +416,8 @@ struct CalendarView: View {
         } label: {
             VStack(alignment: .leading, spacing: 8) {
                 Text(month.formatted(.dateTime.month(.abbreviated)))
-                    .font(MonoType.item(12))
-                    .foregroundStyle(mono.textPrimary)
+                    .font(BookType.entry(12))
+                    .foregroundStyle(book.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
                 LazyVGrid(columns: columns, spacing: 3) {
@@ -428,7 +428,7 @@ struct CalendarView: View {
                         let isToday = dateFor(day: day, in: month)
                             .map { cal.isDateInToday($0) } ?? false
                         RoundedRectangle(cornerRadius: 1)
-                            .fill(isToday ? mono.fill : mono.surface)
+                            .fill(isToday ? book.fill : book.surface)
                             .frame(height: 4)
                     }
                 }
@@ -436,7 +436,7 @@ struct CalendarView: View {
             .padding(10)
             .background(
                 RoundedRectangle(cornerRadius: 10)
-                    .strokeBorder(mono.border, lineWidth: 1)
+                    .strokeBorder(book.border, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -448,9 +448,9 @@ struct CalendarView: View {
         Button(action: action) {
             Image(systemName: icon)
                 .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(mono.textPrimary)
+                .foregroundStyle(book.textPrimary)
                 .frame(width: 34, height: 34)
-                .background(Circle().strokeBorder(mono.border, lineWidth: 1))
+                .background(Circle().strokeBorder(book.border, lineWidth: 1))
         }
         .buttonStyle(.plain)
     }
@@ -626,14 +626,14 @@ struct CalendarView: View {
 
 private struct TaskBlockView: View {
     let block: CalendarView.DayBlock
-    @Environment(\.mono) private var mono
+    @Environment(\.book) private var book
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .top, spacing: 6) {
                 Text(block.title)
-                    .font(MonoType.item(12))
-                    .foregroundStyle(mono.textPrimary)
+                    .font(BookType.entry(12))
+                    .foregroundStyle(book.textPrimary)
                     .lineLimit(2)
                 Spacer(minLength: 0)
                 if case .task(let task) = block.kind {
@@ -641,8 +641,8 @@ private struct TaskBlockView: View {
                 }
             }
             Text(metaLine)
-                .font(MonoType.meta(9))
-                .foregroundStyle(mono.textSecondary)
+                .font(BookType.meta(9))
+                .foregroundStyle(book.textSecondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
             Spacer(minLength: 0)
@@ -651,8 +651,8 @@ private struct TaskBlockView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(mono.surface)
-                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(mono.border, lineWidth: 1))
+                .fill(book.surface)
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(book.border, lineWidth: 1))
         )
     }
 
@@ -664,25 +664,25 @@ private struct TaskBlockView: View {
 
 private struct EventBlockView: View {
     let block: CalendarView.DayBlock
-    @Environment(\.mono) private var mono
+    @Environment(\.book) private var book
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(block.title)
-                .font(MonoType.item(11))
-                .foregroundStyle(mono.textPrimary)
+                .font(BookType.entry(11))
+                .foregroundStyle(book.textPrimary)
                 .lineLimit(2)
                 .padding(.horizontal, 4)
                 .padding(.vertical, 2)
-                .background(RoundedRectangle(cornerRadius: 4).fill(mono.bg.opacity(0.9)))
+                .background(RoundedRectangle(cornerRadius: 4).fill(book.bg.opacity(0.9)))
             Text(metaLine)
-                .font(MonoType.meta(8))
-                .foregroundStyle(mono.textSecondary)
+                .font(BookType.meta(8))
+                .foregroundStyle(book.textSecondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
                 .padding(.horizontal, 4)
                 .padding(.vertical, 1)
-                .background(RoundedRectangle(cornerRadius: 3).fill(mono.bg.opacity(0.9)))
+                .background(RoundedRectangle(cornerRadius: 3).fill(book.bg.opacity(0.9)))
             Spacer(minLength: 0)
         }
         .padding(8)
@@ -690,10 +690,10 @@ private struct EventBlockView: View {
         .background(
             ZStack {
                 DiagonalHatch(spacing: 5)
-                    .stroke(mono.textSecondary.opacity(0.45), lineWidth: 0.7)
+                    .stroke(book.textSecondary.opacity(0.45), lineWidth: 0.7)
                 if block.conflicted {
                     HStack(spacing: 0) {
-                        Rectangle().fill(mono.fill).frame(width: 3)
+                        Rectangle().fill(book.fill).frame(width: 3)
                         Spacer()
                     }
                 }
@@ -701,7 +701,7 @@ private struct EventBlockView: View {
             .clipShape(RoundedRectangle(cornerRadius: 10))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 10).strokeBorder(mono.border, lineWidth: 1)
+            RoundedRectangle(cornerRadius: 10).strokeBorder(book.border, lineWidth: 1)
         )
     }
 

@@ -164,7 +164,7 @@ struct PixelSprite: View {
     let motif: CompanionMotif
     var size: CGFloat = 56
 
-    @Environment(\.mono) private var mono
+    @Environment(\.book) private var book
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -202,7 +202,7 @@ struct PixelSprite: View {
                         y: offsetY + CGFloat(r) * px,
                         width: px + 0.4, height: px + 0.4
                     )
-                    context.fill(Path(rect), with: .color(mono.fill.opacity(alpha)))
+                    context.fill(Path(rect), with: .color(book.fill.opacity(alpha)))
                 }
             }
         }

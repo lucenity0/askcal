@@ -35,7 +35,7 @@ struct LaunchScene: View {
     static let catH: CGFloat = 108
     static let deskY: CGFloat = 212
 
-    @Environment(\.mono) private var mono
+    @Environment(\.book) private var book
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -80,12 +80,12 @@ struct LaunchScene: View {
         px: (CGFloat, CGFloat, CGFloat, CGFloat, Color) -> Void,
         t: TimeInterval
     ) {
-        let wall = mono.sceneWall
-        let wallLo = mono.sceneWallLo
-        let sky = mono.sceneSky
-        let skyLo = mono.sceneSkyLo
-        let cloud = mono.sceneCloud
-        let ink = mono.sceneInk
+        let wall = book.sceneWall
+        let wallLo = book.sceneWallLo
+        let sky = book.sceneSky
+        let skyLo = book.sceneSkyLo
+        let cloud = book.sceneCloud
+        let ink = book.sceneInk
 
         px(0, 0, Self.W, Self.H, wall)
 

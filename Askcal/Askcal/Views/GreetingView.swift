@@ -11,7 +11,7 @@ import SwiftUI
 struct GreetingView: View {
     var loggedIn: Bool = false
     let onFinished: () -> Void
-    @Environment(\.mono) private var mono
+    @Environment(\.book) private var book
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("userName") private var userName = ""
 
@@ -43,11 +43,11 @@ struct GreetingView: View {
             // Today read through underneath — the greeting is meant to be the
             // whole screen, not a layer over it.
             Rectangle()
-                .fill(mono.paper)
+                .fill(book.paper)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .ignoresSafeArea(.all)
 
-            VStack(spacing: MonoSpace.section) {
+            VStack(spacing: Space.section) {
                 // The room fades up rather than drawing itself on. A scene
                 // assembling pixel by pixel would be a second animation
                 // competing with the one inside it — the cat is already
@@ -57,22 +57,22 @@ struct GreetingView: View {
                     // the drawing have to agree or the scene letterboxes
                     // inside its own card.
                     .aspectRatio(LaunchScene.W / LaunchScene.H, contentMode: .fit)
-                    .clipShape(RoundedRectangle(cornerRadius: MonoRadius.card))
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.card))
                     .overlay(
-                        RoundedRectangle(cornerRadius: MonoRadius.card)
-                            .strokeBorder(mono.rule, lineWidth: MonoStroke.hair)
+                        RoundedRectangle(cornerRadius: Radius.card)
+                            .strokeBorder(book.rule, lineWidth: Stroke.hair)
                     )
-                    .padding(.horizontal, MonoSpace.gutter)
+                    .padding(.horizontal, Space.gutter)
                     .opacity(lineProgress)
                     .scaleEffect(0.97 + 0.03 * lineProgress, anchor: .bottom)
 
-                VStack(spacing: MonoSpace.md) {
+                VStack(spacing: Space.md) {
                     Text(dateKicker)
-                        .font(MonoType.kicker(12))
-                        .foregroundStyle(mono.textSecondary)
+                        .font(BookType.kicker(12))
+                        .foregroundStyle(book.textSecondary)
                     Text(greeting)
-                        .font(MonoType.title(30))
-                        .foregroundStyle(mono.textPrimary)
+                        .font(BookType.display(30))
+                        .foregroundStyle(book.textPrimary)
                 }
                 .opacity(showText ? 1 : 0)
                 .offset(y: showText ? 0 : 10)

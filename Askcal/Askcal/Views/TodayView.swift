@@ -10,7 +10,7 @@ import SwiftUI
 
 struct TodayView: View {
     @Environment(AskcalStore.self) private var store
-    @Environment(\.mono) private var mono
+    @Environment(\.book) private var book
     @State private var showWeek = false
     @State private var selectedDate = Date.now
     @State private var otherDayTasks: [AskcalTask] = []
@@ -36,8 +36,8 @@ struct TodayView: View {
             header
             if showWeek { WeekStrip(selectedDate: $selectedDate) }
             Text(isToday ? store.loadLine : " ")
-                .font(MonoType.meta())
-                .foregroundStyle(mono.textSecondary)
+                .font(BookType.meta())
+                .foregroundStyle(book.textSecondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
             SectionUnderline()
@@ -56,7 +56,7 @@ struct TodayView: View {
         }
         .sheet(item: $editingTask) { task in
             TaskComposerSheet(editing: task)
-                .environment(\.mono, mono)
+                .environment(\.book, book)
                 .onDisappear {
                     Task { otherDayTasks = await store.loadDay(selectedDate).tasks }
                 }
@@ -79,9 +79,9 @@ struct TodayView: View {
                 } label: {
                     Image(systemName: "calendar")
                         .font(.system(size: 17))
-                        .foregroundStyle(showWeek ? mono.fillText : mono.textPrimary)
+                        .foregroundStyle(showWeek ? book.fillText : book.textPrimary)
                         .frame(width: 34, height: 34)
-                        .background(Circle().fill(showWeek ? mono.fill : .clear))
+                        .background(Circle().fill(showWeek ? book.fill : .clear))
                 }
                 .buttonStyle(.plain)
             }
@@ -103,23 +103,23 @@ struct TodayView: View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(store.groupedSchedule, id: \.part) { group in
                 Text(group.part.rawValue)
-                    .font(MonoType.kicker(11))
-                    .foregroundStyle(mono.textSecondary)
+                    .font(BookType.kicker(11))
+                    .foregroundStyle(book.textSecondary)
                     .padding(.top, 10)
                 VStack(spacing: 0) {
                     ForEach(group.tasks) { task in
                         ScheduledRow(task: task, slot: store.slot(for: task)) {
                             editingTask = task
                         }
-                        Divider().overlay(mono.border)
+                        Divider().overlay(book.border)
                     }
                 }
             }
 
             if store.scheduledTasks.isEmpty && store.carriedTasks.isEmpty {
                 Text("nothing here yet. the + adds your first.")
-                    .font(MonoType.body())
-                    .foregroundStyle(mono.textSecondary)
+                    .font(BookType.body())
+                    .foregroundStyle(book.textSecondary)
                     .padding(.vertical, 24)
             }
         }
@@ -134,15 +134,15 @@ struct TodayView: View {
         } else if otherDayTasks.isEmpty {
             let past = selectedDate < Calendar.current.startOfDay(for: .now)
             Text(past ? "that day's closed." : "nothing scheduled here yet. tap + to plan ahead.")
-                .font(MonoType.body(14))
-                .foregroundStyle(mono.textSecondary)
+                .font(BookType.body(14))
+                .foregroundStyle(book.textSecondary)
                 .padding(.vertical, 32)
         } else {
             VStack(spacing: 0) {
                 ForEach(otherDayTasks) { task in
                     Button { editingTask = task } label: { OtherDayRow(task: task) }
                         .buttonStyle(.plain)
-                    Divider().overlay(mono.border)
+                    Divider().overlay(book.border)
                 }
             }
         }
@@ -151,7 +151,7 @@ struct TodayView: View {
 
 private struct OtherDayRow: View {
     let task: AskcalTask
-    @Environment(\.mono) private var mono
+    @Environment(\.book) private var book
 
     private var timeLabel: String? {
         guard let at = task.scheduledAt else { return nil }
@@ -163,8 +163,8 @@ private struct OtherDayRow: View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(task.title)
-                    .font(MonoType.item())
-                    .foregroundStyle(mono.textPrimary)
+                    .font(BookType.entry())
+                    .foregroundStyle(book.textPrimary)
                     .lineLimit(1)
                 HStack(spacing: 6) {
                     if let timeLabel {
@@ -175,8 +175,8 @@ private struct OtherDayRow: View {
                     }
                     if let d = task.deadlineLabel { Text("·  \(d)") }
                 }
-                .font(MonoType.meta())
-                .foregroundStyle(mono.textSecondary)
+                .font(BookType.meta())
+                .foregroundStyle(book.textSecondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
             }
@@ -191,7 +191,7 @@ private struct OtherDayRow: View {
 
 private struct WeekStrip: View {
     @Binding var selectedDate: Date
-    @Environment(\.mono) private var mono
+    @Environment(\.book) private var book
 
     private var days: [Date] {
         let cal = Calendar.current
@@ -209,20 +209,20 @@ private struct WeekStrip: View {
                 } label: {
                     VStack(spacing: 4) {
                         Text(day.formatted(.dateTime.weekday(.narrow)))
-                            .font(MonoType.meta(9))
-                            .foregroundStyle(selected ? mono.fillText : mono.textSecondary)
+                            .font(BookType.meta(9))
+                            .foregroundStyle(selected ? book.fillText : book.textSecondary)
                         Text("\(Calendar.current.component(.day, from: day))")
-                            .font(MonoType.item(13))
-                            .foregroundStyle(selected ? mono.fillText : mono.textPrimary)
+                            .font(BookType.entry(13))
+                            .foregroundStyle(selected ? book.fillText : book.textPrimary)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 8)
                     .background(
-                        Capsule().fill(selected ? mono.fill : .clear)
+                        Capsule().fill(selected ? book.fill : .clear)
                     )
                     .overlay(
                         Capsule().strokeBorder(
-                            isToday && !selected ? mono.textSecondary.opacity(0.5) : .clear,
+                            isToday && !selected ? book.textSecondary.opacity(0.5) : .clear,
                             lineWidth: 1
                         )
                     )
@@ -233,7 +233,7 @@ private struct WeekStrip: View {
         .padding(4)
         .background(
             RoundedRectangle(cornerRadius: 100)
-                .strokeBorder(mono.border, lineWidth: 1)
+                .strokeBorder(book.border, lineWidth: 1)
         )
     }
 }
@@ -243,7 +243,7 @@ private struct WeekStrip: View {
 private struct FocusCard: View {
     let focus: AskcalStore.FocusInfo
     @Environment(AskcalStore.self) private var store
-    @Environment(\.mono) private var mono
+    @Environment(\.book) private var book
 
     private var timeLine: String? {
         if let slot = focus.slot { return "\(slot.time), \(slot.duration) mins" }
@@ -255,25 +255,25 @@ private struct FocusCard: View {
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(focus.kicker)
-                        .font(MonoType.meta(10))
-                        .foregroundStyle(mono.textSecondary)
+                        .font(BookType.meta(10))
+                        .foregroundStyle(book.textSecondary)
                         .kerning(1.0)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                     Text(focus.task.title)
-                        .font(MonoType.title(22))
-                        .foregroundStyle(mono.textPrimary)
+                        .font(BookType.display(22))
+                        .foregroundStyle(book.textPrimary)
                         .lineLimit(2)
                         .minimumScaleFactor(0.65)
                     if let timeLine {
                         HStack(spacing: 6) {
                             Image(systemName: "clock").font(.system(size: 9))
                             Text(timeLine)
-                                .font(MonoType.meta())
+                                .font(BookType.meta())
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.75)
                         }
-                        .foregroundStyle(mono.textSecondary)
+                        .foregroundStyle(book.textSecondary)
                     }
                 }
                 Spacer(minLength: 8)
@@ -287,8 +287,8 @@ private struct FocusCard: View {
             if let progress = focus.progress {
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
-                        Capsule().fill(mono.border).frame(height: 3)
-                        Capsule().fill(mono.fill)
+                        Capsule().fill(book.border).frame(height: 3)
+                        Capsule().fill(book.fill)
                             .frame(width: geo.size.width * progress, height: 3)
                     }
                 }
@@ -300,8 +300,8 @@ private struct FocusCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 14)
-                .fill(mono.surface)
-                .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(mono.fill, lineWidth: 1.5))
+                .fill(book.surface)
+                .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(book.fill, lineWidth: 1.5))
         )
     }
 }
@@ -310,7 +310,7 @@ private struct FocusCard: View {
 
 private struct UncompletedCard: View {
     @Environment(AskcalStore.self) private var store
-    @Environment(\.mono) private var mono
+    @Environment(\.book) private var book
     @State private var expanded = true
 
     var body: some View {
@@ -320,12 +320,12 @@ private struct UncompletedCard: View {
             } label: {
                 HStack {
                     Text("Uncompleted tasks")
-                        .font(MonoType.item())
-                        .foregroundStyle(mono.textPrimary)
+                        .font(BookType.entry())
+                        .foregroundStyle(book.textPrimary)
                     Spacer()
                     Image(systemName: "chevron.down")
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(mono.textSecondary)
+                        .foregroundStyle(book.textSecondary)
                         .rotationEffect(.degrees(expanded ? 0 : -90))
                 }
             }
@@ -335,8 +335,8 @@ private struct UncompletedCard: View {
                 ForEach(store.carriedTasks) { task in
                     HStack {
                         Text(task.title)
-                            .font(MonoType.body(14))
-                            .foregroundStyle(mono.textPrimary)
+                            .font(BookType.body(14))
+                            .foregroundStyle(book.textPrimary)
                         Spacer()
                         StatusCircle(done: false) { store.review(task, done: true) }
                     }
@@ -353,8 +353,8 @@ private struct UncompletedCard: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 14)
-                .fill(mono.surface)
-                .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(mono.border, lineWidth: 1))
+                .fill(book.surface)
+                .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(book.border, lineWidth: 1))
         )
     }
 }
@@ -366,7 +366,7 @@ private struct ScheduledRow: View {
     let slot: PlanSlot?
     var onEdit: (() -> Void)? = nil
     @Environment(AskcalStore.self) private var store
-    @Environment(\.mono) private var mono
+    @Environment(\.book) private var book
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
@@ -375,17 +375,17 @@ private struct ScheduledRow: View {
             }
             VStack(alignment: .leading, spacing: 3) {
                 Text(task.title)
-                    .font(MonoType.item())
-                    .foregroundStyle(mono.textPrimary)
+                    .font(BookType.entry())
+                    .foregroundStyle(book.textPrimary)
                 HStack(spacing: 5) {
                     Image(systemName: "clock")
                         .font(.system(size: 9))
                     Text(metaLine)
-                        .font(MonoType.meta())
+                        .font(BookType.meta())
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
                 }
-                .foregroundStyle(mono.textSecondary)
+                .foregroundStyle(book.textSecondary)
             }
             Spacer()
             PriorityDot(band: task.priority)

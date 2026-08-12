@@ -10,22 +10,22 @@ import SwiftUI
 
 struct InboxView: View {
     @Environment(AskcalStore.self) private var store
-    @Environment(\.mono) private var mono
+    @Environment(\.book) private var book
 
     var body: some View {
         PageScaffold(scrollable: false) {
             PageHeader(kicker: "Needs you", title: "Inbox", icon: "tray") {
                 Text("\(store.inboxEmails.count)")
-                    .font(MonoType.meta(13))
-                    .foregroundStyle(mono.textSecondary)
+                    .font(BookType.meta(13))
+                    .foregroundStyle(book.textSecondary)
             }
             SectionUnderline()
         } content: {
             if store.inboxEmails.isEmpty {
                 Spacer()
                 Text("inbox quiet. enjoy it.")
-                    .font(MonoType.body(14))
-                    .foregroundStyle(mono.textSecondary)
+                    .font(BookType.body(14))
+                    .foregroundStyle(book.textSecondary)
                     .frame(maxWidth: .infinity)
                 Spacer()
             } else {
@@ -33,7 +33,7 @@ struct InboxView: View {
                     ForEach(store.inboxEmails) { email in
                         EmailRow(email: email)
                             .listRowBackground(Color.clear)
-                            .listRowSeparatorTint(mono.border)
+                            .listRowSeparatorTint(book.border)
                             .listRowInsets(EdgeInsets(top: 10, leading: 22, bottom: 10, trailing: 22))
                             .swipeActions(edge: .leading, allowsFullSwipe: true) {
                                 Button {
@@ -41,7 +41,7 @@ struct InboxView: View {
                                 } label: {
                                     Label("to today", systemImage: "checkmark")
                                 }
-                                .tint(mono.swipeConfirm)
+                                .tint(book.swipeConfirm)
                             }
                             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                 Button {
@@ -49,7 +49,7 @@ struct InboxView: View {
                                 } label: {
                                     Label("tomorrow", systemImage: "arrow.uturn.right")
                                 }
-                                .tint(mono.swipeSnooze)
+                                .tint(book.swipeSnooze)
                             }
                     }
                 }
@@ -63,19 +63,19 @@ struct InboxView: View {
 
 private struct EmailRow: View {
     let email: EmailItem
-    @Environment(\.mono) private var mono
+    @Environment(\.book) private var book
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(email.subject ?? "(no subject)")
-                    .font(MonoType.item())
-                    .foregroundStyle(mono.textPrimary)
+                    .font(BookType.entry())
+                    .foregroundStyle(book.textPrimary)
                     .lineLimit(2)
                 if let snippet = email.snippet {
                     Text(snippet)
-                        .font(MonoType.body())
-                        .foregroundStyle(mono.textSecondary)
+                        .font(BookType.body())
+                        .foregroundStyle(book.textSecondary)
                         .lineLimit(2)
                 }
                 HStack(spacing: 8) {
@@ -86,8 +86,8 @@ private struct EmailRow: View {
                         Text("~\(mins)m")
                     }
                 }
-                .font(MonoType.meta(10))
-                .foregroundStyle(mono.textSecondary.opacity(0.8))
+                .font(BookType.meta(10))
+                .foregroundStyle(book.textSecondary.opacity(0.8))
             }
             Spacer()
             PriorityDot(band: email.priority)

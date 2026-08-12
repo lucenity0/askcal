@@ -27,18 +27,18 @@ struct MonoSpinner: View {
     var size: CGFloat = 16
     var label: String = "Loading"
 
-    @Environment(\.mono) private var mono
+    @Environment(\.book) private var book
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var spinning = false
 
     var body: some View {
         Circle()
             .trim(from: 0, to: 0.25)
-            .stroke(mono.ink, style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+            .stroke(book.ink, style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
             .frame(width: size, height: size)
             .rotationEffect(.degrees(spinning ? 360 : 0))
             .background(
-                Circle().strokeBorder(mono.rule, lineWidth: 1).frame(width: size, height: size)
+                Circle().strokeBorder(book.rule, lineWidth: 1).frame(width: size, height: size)
             )
             .onAppear {
                 guard !reduceMotion else { return }
@@ -57,11 +57,11 @@ struct MonoSkeleton: View {
     var width: CGFloat?
     var height: CGFloat = 14
 
-    @Environment(\.mono) private var mono
+    @Environment(\.book) private var book
 
     var body: some View {
-        RoundedRectangle(cornerRadius: MonoRadius.mark)
-            .fill(mono.recessed)
+        RoundedRectangle(cornerRadius: Radius.mark)
+            .fill(book.recessed)
             .frame(width: width, height: height)
             .accessibilityHidden(true)
     }
@@ -77,11 +77,11 @@ struct MonoSkeletonRows: View {
     private static let widths: [CGFloat] = [180, 132, 208, 156]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MonoSpace.xl) {
+        VStack(alignment: .leading, spacing: Space.xl) {
             ForEach(0..<rows, id: \.self) { i in
-                HStack(spacing: MonoSpace.lg) {
+                HStack(spacing: Space.lg) {
                     MonoSkeleton(width: 21, height: 21)
-                    VStack(alignment: .leading, spacing: MonoSpace.sm) {
+                    VStack(alignment: .leading, spacing: Space.sm) {
                         MonoSkeleton(width: Self.widths[i % Self.widths.count], height: 13)
                         MonoSkeleton(width: 96, height: 10)
                     }
@@ -107,16 +107,16 @@ struct MonoLoadState<Content: View, Empty: View>: View {
     @ViewBuilder let content: () -> Content
     @ViewBuilder let empty: () -> Empty
 
-    @Environment(\.mono) private var mono
+    @Environment(\.book) private var book
 
     var body: some View {
         if isLoading {
             MonoSkeletonRows()
         } else if let error {
-            VStack(alignment: .leading, spacing: MonoSpace.md) {
+            VStack(alignment: .leading, spacing: Space.md) {
                 Text(error)
-                    .font(MonoType.body(13))
-                    .foregroundStyle(mono.inkDim)
+                    .font(BookType.body(13))
+                    .foregroundStyle(book.inkDim)
                 if let retry {
                     Button("Try again") { retry() }
                         .buttonStyle(PillButtonStyle(filled: false))

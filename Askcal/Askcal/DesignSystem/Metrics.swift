@@ -1,8 +1,8 @@
 //
-//  MonoMetrics.swift
+//  Metrics.swift
 //  Askcal
 //
-//  Geometry tokens. MonoTheme covers colour and MonoType covers type; nothing
+//  Geometry tokens. Paper covers colour and BookType covers type; nothing
 //  covered spacing, so the app had accumulated 15 distinct `spacing:` values,
 //  7 corner radii and 5 line widths — and the 22pt page gutter was written out
 //  by hand in eleven files, which meant changing the gutter required finding
@@ -14,7 +14,7 @@
 
 import CoreGraphics
 
-enum MonoSpace {
+enum Space {
     /// Hairline gaps — between a glyph and its label.
     static let hair: CGFloat = 2
     static let xs: CGFloat = 4
@@ -23,8 +23,13 @@ enum MonoSpace {
     static let lg: CGFloat = 12
     static let xl: CGFloat = 16
 
-    /// The page gutter. Every screen's horizontal inset, one number.
+    /// The page gutter: where the text block starts, measured from the paper's
+    /// edge. Sits clear of the margin rule rather than on top of it.
     static let gutter: CGFloat = 22
+
+    /// Distance from the paper's leading edge to the margin rule. Entries begin
+    /// after it; only checkboxes and priority marks live to its left.
+    static let margin: CGFloat = 44
 
     /// Vertical rhythm between major sections.
     static let section: CGFloat = 34
@@ -34,7 +39,7 @@ enum MonoSpace {
     static let fabClearance: CGFloat = 100
 }
 
-enum MonoRadius {
+enum Radius {
     /// Checkboxes and other small marks.
     static let mark: CGFloat = 4
     /// Timeline blocks, inputs, wells.
@@ -45,8 +50,8 @@ enum MonoRadius {
     static let pill: CGFloat = 100
 }
 
-enum MonoStroke {
-    /// Hairlines: dividers, card borders.
+enum Stroke {
+    /// The ruled lines, dividers, card borders.
     static let hair: CGFloat = 1
     /// Emphasis borders — the focused card.
     static let strong: CGFloat = 1.5

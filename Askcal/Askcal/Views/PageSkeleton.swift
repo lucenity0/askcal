@@ -9,7 +9,7 @@
 import SwiftUI
 
 struct PageSkeleton: View {
-    @Environment(\.mono) private var mono
+    @Environment(\.book) private var book
     @State private var dim = false
 
     var body: some View {
@@ -22,7 +22,7 @@ struct PageSkeleton: View {
             ForEach(0..<4, id: \.self) { _ in
                 HStack(spacing: 12) {
                     RoundedRectangle(cornerRadius: 4)
-                        .fill(mono.surface)
+                        .fill(book.surface)
                         .frame(width: 21, height: 21)
                     block(width: nil, height: 34)
                 }
@@ -41,7 +41,7 @@ struct PageSkeleton: View {
 
     private func block(width: CGFloat?, height: CGFloat) -> some View {
         RoundedRectangle(cornerRadius: 8)
-            .fill(mono.surface)
+            .fill(book.surface)
             .frame(maxWidth: width ?? .infinity)
             .frame(height: height)
     }

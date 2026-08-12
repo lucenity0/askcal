@@ -19,7 +19,7 @@ import SwiftUI
 
 struct DayView: View {
     @Environment(AskcalStore.self) private var store
-    @Environment(\.mono) private var mono
+    @Environment(\.book) private var book
 
     @Binding var showComposer: Bool
     /// Set to edit an existing entry. Distinct from `showComposer`, which opens
@@ -42,7 +42,7 @@ struct DayView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: MonoSpace.section) {
+            VStack(alignment: .leading, spacing: Space.section) {
                 header
 
                 if !store.isLive {
@@ -72,11 +72,11 @@ struct DayView: View {
                 tracksRow
                 closeRow
             }
-            .padding(.horizontal, MonoSpace.gutter)
-            .padding(.top, MonoSpace.md)
-            .padding(.bottom, MonoSpace.fabClearance)
+            .padding(.horizontal, Space.gutter)
+            .padding(.top, Space.md)
+            .padding(.bottom, Space.fabClearance)
         }
-        .background(mono.paper)
+        .background(book.paper)
         .refreshable { await store.syncInbox() }
     }
 
@@ -84,30 +84,30 @@ struct DayView: View {
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: MonoSpace.hair) {
+            VStack(alignment: .leading, spacing: Space.hair) {
                 Text(dateKicker)
-                    .font(MonoType.kicker())
-                    .foregroundStyle(mono.inkSub)
+                    .font(BookType.kicker())
+                    .foregroundStyle(book.inkSub)
                 Text(dateTitle)
-                    .font(MonoType.title(34))
-                    .foregroundStyle(mono.ink)
+                    .font(BookType.display(34))
+                    .foregroundStyle(book.ink)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
             Spacer()
-            HStack(spacing: MonoSpace.lg) {
+            HStack(spacing: Space.lg) {
                 NavigationLink { CalendarView() } label: {
                     Image(systemName: "calendar")
-                        .font(MonoType.icon(17))
-                        .foregroundStyle(mono.ink)
+                        .font(BookType.icon(17))
+                        .foregroundStyle(book.ink)
                         .frame(width: 44, height: 44, alignment: .trailing)
                 }
                 .accessibilityLabel("Calendar")
 
                 NavigationLink { MoreView() } label: {
                     Image(systemName: "ellipsis")
-                        .font(MonoType.icon(17))
-                        .foregroundStyle(mono.ink)
+                        .font(BookType.icon(17))
+                        .foregroundStyle(book.ink)
                         .frame(width: 44, height: 44, alignment: .trailing)
                 }
                 .accessibilityLabel("Settings")
@@ -121,34 +121,34 @@ struct DayView: View {
     /// and nothing else works — no ranking, no auto-tasking — so this is the
     /// only honest thing to put at the top of the screen.
     private var connectCard: some View {
-        VStack(alignment: .leading, spacing: MonoSpace.md) {
+        VStack(alignment: .leading, spacing: Space.md) {
             Text("not connected")
-                .font(MonoType.kicker(11))
-                .foregroundStyle(mono.inkSub)
+                .font(BookType.kicker(11))
+                .foregroundStyle(book.inkSub)
             Text("tasks live on this device only. connect gmail and askcal starts ranking what actually matters.")
-                .font(MonoType.body(13))
-                .foregroundStyle(mono.inkDim)
+                .font(BookType.body(13))
+                .foregroundStyle(book.inkDim)
                 .fixedSize(horizontal: false, vertical: true)
             Button("Connect Gmail") { onConnect() }
                 .buttonStyle(PillButtonStyle(filled: true))
         }
-        .padding(MonoSpace.xl)
+        .padding(Space.xl)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: MonoRadius.card)
-                .fill(mono.card)
+            RoundedRectangle(cornerRadius: Radius.card)
+                .fill(book.card)
                 .overlay(
-                    RoundedRectangle(cornerRadius: MonoRadius.card)
-                        .strokeBorder(mono.rule, lineWidth: MonoStroke.hair)
+                    RoundedRectangle(cornerRadius: Radius.card)
+                        .strokeBorder(book.rule, lineWidth: Stroke.hair)
                 )
         )
     }
 
     private func errorNote(_ message: String) -> some View {
-        VStack(alignment: .leading, spacing: MonoSpace.sm) {
+        VStack(alignment: .leading, spacing: Space.sm) {
             Text(message)
-                .font(MonoType.body(12))
-                .foregroundStyle(mono.inkDim)
+                .font(BookType.body(12))
+                .foregroundStyle(book.inkDim)
             Button("Try again") {
                 Task { await store.refreshAll() }
             }
@@ -160,32 +160,32 @@ struct DayView: View {
     /// to retry — the change has already been rolled back, and the only useful
     /// thing is to say what went wrong and get out of the way.
     private func actionNote(_ message: String) -> some View {
-        HStack(alignment: .top, spacing: MonoSpace.lg) {
+        HStack(alignment: .top, spacing: Space.lg) {
             Text(message)
-                .font(MonoType.body(12))
-                .foregroundStyle(mono.inkDim)
+                .font(BookType.body(12))
+                .foregroundStyle(book.inkDim)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             Button {
                 withAnimation(.easeOut(duration: 0.2)) { store.dismissActionError() }
             } label: {
                 Image(systemName: "xmark")
-                    .font(MonoType.icon(11))
-                    .foregroundStyle(mono.inkSub)
+                    .font(BookType.icon(11))
+                    .foregroundStyle(book.inkSub)
                     .frame(width: 30, height: 30)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Dismiss")
         }
-        .padding(.horizontal, MonoSpace.xl)
-        .padding(.vertical, MonoSpace.lg)
+        .padding(.horizontal, Space.xl)
+        .padding(.vertical, Space.lg)
         .background(
-            RoundedRectangle(cornerRadius: MonoRadius.block)
-                .fill(mono.recessed)
+            RoundedRectangle(cornerRadius: Radius.block)
+                .fill(book.recessed)
                 .overlay(
-                    RoundedRectangle(cornerRadius: MonoRadius.block)
-                        .strokeBorder(mono.rule, lineWidth: MonoStroke.hair)
+                    RoundedRectangle(cornerRadius: Radius.block)
+                        .strokeBorder(book.rule, lineWidth: Stroke.hair)
                 )
         )
         .accessibilityElement(children: .combine)
@@ -196,29 +196,29 @@ struct DayView: View {
     @ViewBuilder
     private var nowSection: some View {
         if let focus = store.focus {
-            VStack(alignment: .leading, spacing: MonoSpace.md) {
+            VStack(alignment: .leading, spacing: Space.md) {
                 SectionLabel(focus.kicker)
                 Button {
                     editingTask = focus.task
                 } label: {
-                    VStack(alignment: .leading, spacing: MonoSpace.sm) {
+                    VStack(alignment: .leading, spacing: Space.sm) {
                         Text(focus.task.title)
-                            .font(MonoType.item(17))
-                            .foregroundStyle(mono.ink)
+                            .font(BookType.entry(17))
+                            .foregroundStyle(book.ink)
                             .multilineTextAlignment(.leading)
                             .fixedSize(horizontal: false, vertical: true)
-                        HStack(spacing: MonoSpace.sm) {
+                        HStack(spacing: Space.sm) {
                             PriorityDot(band: focus.task.priority)
                             Text(metaLine(for: focus.task))
-                                .font(MonoType.meta())
-                                .foregroundStyle(mono.inkSub)
+                                .font(BookType.meta())
+                                .foregroundStyle(book.inkSub)
                         }
                     }
-                    .padding(MonoSpace.xl)
+                    .padding(Space.xl)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(
-                        RoundedRectangle(cornerRadius: MonoRadius.card)
-                            .strokeBorder(mono.ink, lineWidth: MonoStroke.strong)
+                        RoundedRectangle(cornerRadius: Radius.card)
+                            .strokeBorder(book.ink, lineWidth: Stroke.strong)
                     )
                 }
                 .buttonStyle(.plain)
@@ -226,13 +226,13 @@ struct DayView: View {
                 .accessibilityHint("Opens this task for editing")
             }
         } else if store.openTasks.isEmpty {
-            VStack(alignment: .leading, spacing: MonoSpace.md) {
+            VStack(alignment: .leading, spacing: Space.md) {
                 SectionLabel("now")
                 Text(store.isLive
                      ? "nothing on. rare — enjoy it."
                      : "nothing here yet. the + adds your first.")
-                    .font(MonoType.body(13))
-                    .foregroundStyle(mono.inkSub)
+                    .font(BookType.body(13))
+                    .foregroundStyle(book.inkSub)
             }
         }
     }
@@ -298,13 +298,13 @@ struct DayView: View {
             .map { (part: $0.part, tasks: $0.tasks.filter { $0.id != focusId }) }
             .filter { !$0.tasks.isEmpty }
         if !groups.isEmpty {
-            VStack(alignment: .leading, spacing: MonoSpace.lg) {
+            VStack(alignment: .leading, spacing: Space.lg) {
                 SectionLabel("schedule")
                 ForEach(groups, id: \.part) { group in
-                    VStack(alignment: .leading, spacing: MonoSpace.md) {
+                    VStack(alignment: .leading, spacing: Space.md) {
                         Text(group.part.rawValue.lowercased())
-                            .font(MonoType.meta(10))
-                            .foregroundStyle(mono.inkSub)
+                            .font(BookType.meta(10))
+                            .foregroundStyle(book.inkSub)
                         ForEach(group.tasks) { task in
                             TaskRow(task: task) { store.toggleDone(task) }
                                 .contentShape(Rectangle())
@@ -340,15 +340,15 @@ struct DayView: View {
 /// A small caps label that opens a section.
 struct SectionLabel: View {
     let text: String
-    @Environment(\.mono) private var mono
+    @Environment(\.book) private var book
 
     init(_ text: String) { self.text = text }
 
     var body: some View {
         Text(text.uppercased())
-            .font(MonoType.meta(10))
+            .font(BookType.meta(10))
             .tracking(1.2)
-            .foregroundStyle(mono.inkSub)
+            .foregroundStyle(book.inkSub)
     }
 }
 
@@ -357,24 +357,24 @@ struct SectionLabel: View {
 struct SummaryRow: View {
     let title: String
     let value: String
-    @Environment(\.mono) private var mono
+    @Environment(\.book) private var book
 
     var body: some View {
         HStack {
             Text(title)
-                .font(MonoType.item())
-                .foregroundStyle(mono.ink)
+                .font(BookType.entry())
+                .foregroundStyle(book.ink)
             Spacer()
             Text(value)
-                .font(MonoType.meta())
-                .foregroundStyle(mono.inkSub)
+                .font(BookType.meta())
+                .foregroundStyle(book.inkSub)
             Image(systemName: "chevron.right")
-                .font(MonoType.icon(11))
-                .foregroundStyle(mono.inkSub)
+                .font(BookType.icon(11))
+                .foregroundStyle(book.inkSub)
         }
-        .padding(.vertical, MonoSpace.lg)
+        .padding(.vertical, Space.lg)
         .overlay(alignment: .top) {
-            Rectangle().fill(mono.rule).frame(height: MonoStroke.hair)
+            Rectangle().fill(book.rule).frame(height: Stroke.hair)
         }
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
@@ -386,31 +386,31 @@ struct SummaryRow: View {
 struct TaskRow: View {
     let task: AskcalTask
     let toggle: () -> Void
-    @Environment(\.mono) private var mono
+    @Environment(\.book) private var book
 
     var body: some View {
-        HStack(alignment: .top, spacing: MonoSpace.lg) {
+        HStack(alignment: .top, spacing: Space.lg) {
             SquareCheckbox(checked: task.status == .done, action: toggle)
             .accessibilityLabel(task.title)
             .accessibilityValue(task.status == .done ? "Done" : "Not done")
             .accessibilityAddTraits(.isButton)
 
-            VStack(alignment: .leading, spacing: MonoSpace.hair) {
+            VStack(alignment: .leading, spacing: Space.hair) {
                 Text(task.title)
-                    .font(MonoType.item(14))
-                    .foregroundStyle(task.status == .done ? mono.inkSub : mono.ink)
-                    .strikethrough(task.status == .done, color: mono.inkSub)
+                    .font(BookType.entry(14))
+                    .foregroundStyle(task.status == .done ? book.inkSub : book.ink)
+                    .strikethrough(task.status == .done, color: book.inkSub)
                     .fixedSize(horizontal: false, vertical: true)
                 if let label = task.deadlineLabel, !label.isEmpty {
                     Text(label)
-                        .font(MonoType.meta(10))
-                        .foregroundStyle(mono.inkSub)
+                        .font(BookType.meta(10))
+                        .foregroundStyle(book.inkSub)
                 }
             }
             Spacer(minLength: 0)
             PriorityDot(band: task.priority)
-                .padding(.top, MonoSpace.xs)
+                .padding(.top, Space.xs)
         }
-        .padding(.vertical, MonoSpace.md)
+        .padding(.vertical, Space.md)
     }
 }

@@ -9,7 +9,7 @@ import SwiftUI
 
 struct RoutineView: View {
     @Environment(AskcalStore.self) private var store
-    @Environment(\.mono) private var mono
+    @Environment(\.book) private var book
     @Binding var isAdding: Bool
     @State private var newTitle = ""
     @FocusState private var addFocused: Bool
@@ -22,8 +22,8 @@ struct RoutineView: View {
         PageScaffold {
             PageHeader(kicker: "Every day", title: "Routine", icon: "repeat") {
                 Text("\(doneCount)/\(store.routines.count)")
-                    .font(MonoType.meta(13))
-                    .foregroundStyle(mono.textSecondary)
+                    .font(BookType.meta(13))
+                    .foregroundStyle(book.textSecondary)
             }
             SectionUnderline()
         } content: {
@@ -37,14 +37,14 @@ struct RoutineView: View {
                                 }
                             }
                             Text(routine.title)
-                                .font(MonoType.item())
-                                .foregroundStyle(mono.textPrimary)
+                                .font(BookType.entry())
+                                .foregroundStyle(book.textPrimary)
                                 .strikethrough(store.routinesDone.contains(routine.id),
-                                               color: mono.textSecondary)
+                                               color: book.textSecondary)
                             Spacer()
                             Text(routine.cadence)
-                                .font(MonoType.meta(10))
-                                .foregroundStyle(mono.textSecondary)
+                                .font(BookType.meta(10))
+                                .foregroundStyle(book.textSecondary)
                         }
                         .padding(.vertical, 6)
                         .contentShape(Rectangle())
@@ -57,17 +57,17 @@ struct RoutineView: View {
                                 Label("Delete routine", systemImage: "trash")
                             }
                         }
-                        Divider().overlay(mono.border)
+                        Divider().overlay(book.border)
                     }
 
                     if isAdding {
                         HStack(spacing: 12) {
                             RoundedRectangle(cornerRadius: 4)
-                                .strokeBorder(mono.border, lineWidth: 1.5)
+                                .strokeBorder(book.border, lineWidth: 1.5)
                                 .frame(width: 21, height: 21)
                             TextField("new routine", text: $newTitle)
-                                .font(MonoType.item())
-                                .foregroundStyle(mono.textPrimary)
+                                .font(BookType.entry())
+                                .foregroundStyle(book.textPrimary)
                                 .focused($addFocused)
                                 .onSubmit {
                                     store.addRoutine(title: newTitle)
@@ -90,8 +90,8 @@ struct RoutineView: View {
 
                 if store.routines.isEmpty && !isAdding {
                     Text("no routines yet. the + is right there.")
-                        .font(MonoType.body())
-                        .foregroundStyle(mono.textSecondary)
+                        .font(BookType.body())
+                        .foregroundStyle(book.textSecondary)
                         .padding(.vertical, 24)
                 }
         }

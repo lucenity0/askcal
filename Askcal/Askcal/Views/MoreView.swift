@@ -17,7 +17,7 @@ struct MoreView: View {
     }
 
     @Environment(AskcalStore.self) private var store
-    @Environment(\.mono) private var mono
+    @Environment(\.book) private var book
     @Environment(\.webAuthenticationSession) private var webAuth
     @AppStorage("themeMode") private var themeRaw = ThemeMode.storageDefault
     @AppStorage("userName") private var userName = ""
@@ -38,13 +38,13 @@ struct MoreView: View {
             SectionUnderline()
         } content: {
                 accountSection
-                Divider().overlay(mono.border)
+                Divider().overlay(book.border)
 
                 // Theme switch
                 HStack {
                     Text("Theme")
-                        .font(MonoType.item())
-                        .foregroundStyle(mono.textPrimary)
+                        .font(BookType.entry())
+                        .foregroundStyle(book.textPrimary)
                     Spacer()
                     HStack(spacing: 0) {
                         ForEach(ThemeMode.allCases, id: \.rawValue) { mode in
@@ -54,25 +54,25 @@ struct MoreView: View {
                                 }
                             } label: {
                                 Text(mode.label)
-                                    .font(MonoType.meta(11))
-                                    .foregroundStyle(themeRaw == mode.rawValue ? mono.fillText : mono.textSecondary)
+                                    .font(BookType.meta(11))
+                                    .foregroundStyle(themeRaw == mode.rawValue ? book.fillText : book.textSecondary)
                                     .padding(.horizontal, 14)
                                     .padding(.vertical, 7)
                                     .background(
-                                        Capsule().fill(themeRaw == mode.rawValue ? mono.fill : .clear)
+                                        Capsule().fill(themeRaw == mode.rawValue ? book.fill : .clear)
                                     )
                             }
                             .buttonStyle(.plain)
                         }
                     }
                     .padding(2)
-                    .background(Capsule().strokeBorder(mono.border, lineWidth: 1))
+                    .background(Capsule().strokeBorder(book.border, lineWidth: 1))
                 }
-                Divider().overlay(mono.border)
+                Divider().overlay(book.border)
 
                 // Name — used by the greeting
                 nameSection
-                Divider().overlay(mono.border)
+                Divider().overlay(book.border)
 
                 // Nudges
                 toggleRow("Morning digest", subtitle: "08:30 — your day is ready", isOn: $morningDigest)
@@ -82,14 +82,14 @@ struct MoreView: View {
                 settingRow("Version", value: Self.appVersion)
 
                 if !store.isLive {
-                    Divider().overlay(mono.border)
+                    Divider().overlay(book.border)
                     localDataSection
                 }
         }
         .onAppear { if nameDraft.isEmpty { nameDraft = userName } }
         .sheet(isPresented: $showDeleteConfirm) {
             DeleteLocalDataSheet { store.deleteLocalData(); nameDraft = userName }
-                .environment(\.mono, mono)
+                .environment(\.book, book)
         }
     }
 
@@ -98,24 +98,24 @@ struct MoreView: View {
     private var nameSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Your name")
-                .font(MonoType.item())
-                .foregroundStyle(mono.textPrimary)
+                .font(BookType.entry())
+                .foregroundStyle(book.textPrimary)
             HStack(spacing: 10) {
                 TextField("what should mornings call you?", text: $nameDraft)
-                    .font(MonoType.body(14))
-                    .foregroundStyle(mono.textPrimary)
+                    .font(BookType.body(14))
+                    .foregroundStyle(book.textPrimary)
                     .onChange(of: nameDraft) { nameStatus = .idle }
                     .padding(12)
                     .background(
                         RoundedRectangle(cornerRadius: 10)
-                            .fill(mono.surface)
-                            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(mono.border, lineWidth: 1))
+                            .fill(book.surface)
+                            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(book.border, lineWidth: 1))
                     )
                 Button {
                     saveName()
                 } label: {
                     if savingName {
-                        ProgressView().tint(mono.fillText).frame(width: 44)
+                        ProgressView().tint(book.fillText).frame(width: 44)
                     } else {
                         Text("Save")
                     }
@@ -127,10 +127,10 @@ struct MoreView: View {
             switch nameStatus {
             case .success:
                 Text("saved — mornings will call you \(userName.lowercased()).")
-                    .font(MonoType.meta(10)).foregroundStyle(mono.textSecondary)
+                    .font(BookType.meta(10)).foregroundStyle(book.textSecondary)
             case .failure:
                 Text("couldn't save — check your connection and try again.")
-                    .font(MonoType.meta(10)).foregroundStyle(mono.textSecondary)
+                    .font(BookType.meta(10)).foregroundStyle(book.textSecondary)
             case .idle:
                 EmptyView()
             }
@@ -161,11 +161,11 @@ struct MoreView: View {
     private var localDataSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Local data")
-                .font(MonoType.item())
-                .foregroundStyle(mono.textPrimary)
+                .font(BookType.entry())
+                .foregroundStyle(book.textPrimary)
             Text("you're not signed in — tasks and routines live only on this device.")
-                .font(MonoType.meta(10))
-                .foregroundStyle(mono.textSecondary)
+                .font(BookType.meta(10))
+                .foregroundStyle(book.textSecondary)
             Button("Delete local data") { showDeleteConfirm = true }
                 .buttonStyle(PillButtonStyle(filled: false))
         }
@@ -179,12 +179,12 @@ struct MoreView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Google account")
-                        .font(MonoType.item())
-                        .foregroundStyle(mono.textPrimary)
+                        .font(BookType.entry())
+                        .foregroundStyle(book.textPrimary)
                     Text(store.isLive ? (store.accountEmail ?? "connected")
                                       : "demo data — connect to go live")
-                        .font(MonoType.meta(10))
-                        .foregroundStyle(mono.textSecondary)
+                        .font(BookType.meta(10))
+                        .foregroundStyle(book.textSecondary)
                 }
                 Spacer()
                 if store.isLive {
@@ -197,8 +197,8 @@ struct MoreView: View {
             }
             if let error = connectError ?? store.syncError {
                 Text(error)
-                    .font(MonoType.meta(10))
-                    .foregroundStyle(mono.textSecondary)
+                    .font(BookType.meta(10))
+                    .foregroundStyle(book.textSecondary)
             }
             if store.isLive {
                 Button("Sync inbox now") {
@@ -238,11 +238,11 @@ struct MoreView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(label)
-                        .font(MonoType.item())
-                        .foregroundStyle(mono.textPrimary)
+                        .font(BookType.entry())
+                        .foregroundStyle(book.textPrimary)
                     Text(subtitle)
-                        .font(MonoType.meta(10))
-                        .foregroundStyle(mono.textSecondary)
+                        .font(BookType.meta(10))
+                        .foregroundStyle(book.textSecondary)
                 }
                 Spacer()
                 Toggle("", isOn: isOn)
@@ -252,7 +252,7 @@ struct MoreView: View {
                         Task { await NotificationManager.refreshSchedules(dayClosed: store.dayClosed) }
                     }
             }
-            Divider().overlay(mono.border)
+            Divider().overlay(book.border)
         }
     }
 
@@ -260,14 +260,14 @@ struct MoreView: View {
         VStack(spacing: 12) {
             HStack {
                 Text(label)
-                    .font(MonoType.item())
-                    .foregroundStyle(mono.textPrimary)
+                    .font(BookType.entry())
+                    .foregroundStyle(book.textPrimary)
                 Spacer()
                 Text(value)
-                    .font(MonoType.meta())
-                    .foregroundStyle(mono.textSecondary)
+                    .font(BookType.meta())
+                    .foregroundStyle(book.textSecondary)
             }
-            Divider().overlay(mono.border)
+            Divider().overlay(book.border)
         }
     }
 }
@@ -276,7 +276,7 @@ struct MoreView: View {
 
 private struct DeleteLocalDataSheet: View {
     let onConfirm: () -> Void
-    @Environment(\.mono) private var mono
+    @Environment(\.book) private var book
     @Environment(\.dismiss) private var dismiss
     @State private var typed = ""
 
@@ -287,21 +287,21 @@ private struct DeleteLocalDataSheet: View {
             PageHeader(kicker: "Irreversible", title: "Delete local data", titleSize: 24)
 
             Text("This wipes every task, routine and check-off stored on this device. It can't be undone. Type DELETE to confirm.")
-                .font(MonoType.body(14))
-                .foregroundStyle(mono.textSecondary)
+                .font(BookType.body(14))
+                .foregroundStyle(book.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             TextField("DELETE", text: $typed)
-                .font(MonoType.item())
-                .foregroundStyle(mono.textPrimary)
+                .font(BookType.entry())
+                .foregroundStyle(book.textPrimary)
                 .textInputAutocapitalization(.characters)
                 .autocorrectionDisabled()
                 .padding(14)
                 .background(
                     RoundedRectangle(cornerRadius: 10)
-                        .fill(mono.surface)
+                        .fill(book.surface)
                         .overlay(RoundedRectangle(cornerRadius: 10)
-                            .strokeBorder(armed ? mono.fill : mono.border, lineWidth: 1))
+                            .strokeBorder(armed ? book.fill : book.border, lineWidth: 1))
                 )
 
             Button("Delete everything") {
@@ -320,6 +320,6 @@ private struct DeleteLocalDataSheet: View {
         .padding(22)
         .presentationDetents([.height(340)])
         .presentationDragIndicator(.visible)
-        .presentationBackground(mono.bg)
+        .presentationBackground(book.bg)
     }
 }

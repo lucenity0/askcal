@@ -11,7 +11,7 @@ import SwiftUI
 
 struct TaskComposerSheet: View {
     @Environment(AskcalStore.self) private var store
-    @Environment(\.mono) private var mono
+    @Environment(\.book) private var book
     @Environment(\.dismiss) private var dismiss
 
     /// When set, the sheet edits this task's schedule instead of creating one.
@@ -39,21 +39,21 @@ struct TaskComposerSheet: View {
 
                 if isEditing {
                     Text(title)
-                        .font(MonoType.item())
-                        .foregroundStyle(mono.textPrimary)
+                        .font(BookType.entry())
+                        .foregroundStyle(book.textPrimary)
                         .lineLimit(2)
                 } else {
                     TextField("what needs doing?", text: $title)
-                        .font(MonoType.item())
-                        .foregroundStyle(mono.textPrimary)
+                        .font(BookType.entry())
+                        .foregroundStyle(book.textPrimary)
                         .focused($focused)
                         .submitLabel(.done)
                         .padding(14)
                         .background(
                             RoundedRectangle(cornerRadius: 10)
-                                .fill(mono.surface)
+                                .fill(book.surface)
                                 .overlay(RoundedRectangle(cornerRadius: 10)
-                                    .strokeBorder(mono.border, lineWidth: 1))
+                                    .strokeBorder(book.border, lineWidth: 1))
                         )
                     trackPicker
                 }
@@ -62,14 +62,14 @@ struct TaskComposerSheet: View {
                     DatePicker("", selection: $scheduledAt,
                                displayedComponents: [.date, .hourAndMinute])
                         .labelsHidden()
-                        .tint(mono.fill)
+                        .tint(book.fill)
                 }
 
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
                         Text("Deadline")
-                            .font(MonoType.meta(10))
-                            .foregroundStyle(mono.textSecondary)
+                            .font(BookType.meta(10))
+                            .foregroundStyle(book.textSecondary)
                         Spacer()
                         Toggle("", isOn: $hasDeadline.animation(.easeOut(duration: 0.2)))
                             .labelsHidden()
@@ -79,7 +79,7 @@ struct TaskComposerSheet: View {
                         DatePicker("", selection: $dueAt,
                                    displayedComponents: [.date, .hourAndMinute])
                             .labelsHidden()
-                            .tint(mono.fill)
+                            .tint(book.fill)
                     }
                 }
 
@@ -99,7 +99,7 @@ struct TaskComposerSheet: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
-        .presentationBackground(mono.bg)
+        .presentationBackground(book.bg)
         .onAppear(perform: setup)
         .confirmationDialog(
             "Delete this task?",
@@ -119,21 +119,21 @@ struct TaskComposerSheet: View {
     private var trackPicker: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Track")
-                .font(MonoType.meta(10))
-                .foregroundStyle(mono.textSecondary)
+                .font(BookType.meta(10))
+                .foregroundStyle(book.textSecondary)
             // wraps to two rows on narrow widths / large type
             FlowRow(spacing: 8) {
                 ForEach(TrackKey.allCases) { key in
                     Button { track = key } label: {
                         Text(key.title)
-                            .font(MonoType.meta(11))
+                            .font(BookType.meta(11))
                             .lineLimit(1)
-                            .foregroundStyle(track == key ? mono.fillText : mono.textSecondary)
+                            .foregroundStyle(track == key ? book.fillText : book.textSecondary)
                             .padding(.horizontal, 13)
                             .padding(.vertical, 8)
-                            .background(Capsule().fill(track == key ? mono.fill : .clear))
+                            .background(Capsule().fill(track == key ? book.fill : .clear))
                             .overlay(Capsule().strokeBorder(
-                                track == key ? .clear : mono.border, lineWidth: 1))
+                                track == key ? .clear : book.border, lineWidth: 1))
                     }
                     .buttonStyle(.plain)
                 }
@@ -146,8 +146,8 @@ struct TaskComposerSheet: View {
     ) -> some View {
         HStack {
             Text(label)
-                .font(MonoType.meta(10))
-                .foregroundStyle(mono.textSecondary)
+                .font(BookType.meta(10))
+                .foregroundStyle(book.textSecondary)
             Spacer()
             content()
         }

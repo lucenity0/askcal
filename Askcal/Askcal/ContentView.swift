@@ -28,7 +28,7 @@ struct ContentView: View {
     @State private var didLaunch = false
 
     private var mode: ThemeMode { ThemeMode.stored(themeRaw) }
-    private var mono: MonoPalette { .palette(for: mode) }
+    private var book: PaperPalette { .palette(for: mode) }
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -40,10 +40,10 @@ struct ContentView: View {
                 )
                 .toolbar(.hidden, for: .navigationBar)
             }
-            .tint(mono.ink)
+            .tint(book.ink)
 
             FAB { showComposer = true }
-                .padding(.trailing, MonoSpace.gutter)
+                .padding(.trailing, Space.gutter)
                 .padding(.bottom, 28)
                 .ignoresSafeArea(.keyboard)   // FAB never rides the keyboard up
 
@@ -59,13 +59,13 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showComposer) {
             TaskComposerSheet()
-                .environment(\.mono, mono)
+                .environment(\.book, book)
         }
         .sheet(item: $editingTask) { task in
             TaskComposerSheet(editing: task)
-                .environment(\.mono, mono)
+                .environment(\.book, book)
         }
-        .environment(\.mono, mono)
+        .environment(\.book, book)
         .preferredColorScheme(mode.polarity)
         .animation(.easeInOut(duration: 0.25), value: themeRaw)
         .task {

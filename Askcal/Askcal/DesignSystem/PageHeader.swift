@@ -16,7 +16,7 @@ struct PageHeader<Trailing: View>: View {
     var titleSize: CGFloat = 34
     @ViewBuilder var trailing: () -> Trailing
 
-    @Environment(\.mono) private var mono
+    @Environment(\.book) private var book
 
     init(
         kicker: String,
@@ -35,19 +35,19 @@ struct PageHeader<Trailing: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(kicker)
-                .font(MonoType.kicker())
-                .foregroundStyle(mono.textSecondary)
+                .font(BookType.kicker())
+                .foregroundStyle(book.textSecondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
             HStack(alignment: .center, spacing: 10) {
                 if let icon {
                     Image(systemName: icon)
                         .font(.system(size: titleSize * 0.55))
-                        .foregroundStyle(mono.textPrimary)
+                        .foregroundStyle(book.textPrimary)
                 }
                 Text(title)
-                    .font(MonoType.title(titleSize))
-                    .foregroundStyle(mono.textPrimary)
+                    .font(BookType.display(titleSize))
+                    .foregroundStyle(book.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.55)  // shrink to fit, never clip or wrap
                 Spacer(minLength: 0)
