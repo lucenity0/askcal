@@ -33,41 +33,44 @@ struct FocusCard: View {
     }
 
     private var card: some View {
-        VStack(alignment: .leading, spacing: Space.lg) {
-            // "56 min left" used to sit opposite the kicker. It was measuring
-            // the planned slot, and a task with no estimate gets a one-hour
-            // slot by default — so it counted down an hour nobody chose, next
-            // to a real deadline saying something else entirely. Two clocks
-            // disagreeing is worse than one clock.
-            Rubric(focus.kicker)
+        // The sprite sits beside the whole card, not beside the title.
+        //
+        // "56 min left" used to hold the top-right corner — it measured the
+        // planned slot, and a task with no estimate gets a one-hour slot by
+        // default, so it counted down an hour nobody chose next to a real
+        // deadline saying something else. Removing it left the corner empty
+        // with the sprite stranded below, so the writing is one column now and
+        // the companion is centred against all of it.
+        HStack(alignment: .center, spacing: Space.lg) {
+            VStack(alignment: .leading, spacing: Space.sm) {
+                Rubric(focus.kicker)
 
-            HStack(alignment: .center, spacing: Space.lg) {
-                VStack(alignment: .leading, spacing: Space.sm) {
-                    Text(focus.task.title)
-                        .font(BookType.entry(20))
-                        .foregroundStyle(book.ink)
-                        .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
+                Text(focus.task.title)
+                    .font(BookType.entry(20))
+                    .foregroundStyle(book.ink)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                    if let progress = liveProgress {
-                        ProgressBar(value: progress)
-                    }
-
-                    Text(metaLine)
-                        .font(BookType.meta(11))
-                        .foregroundStyle(book.inkSub)
+                if let progress = liveProgress {
+                    ProgressBar(value: progress)
+                        .padding(.top, Space.xs)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-                .onTapGesture(perform: open)
 
-                // No check here. Completing is what the timeline row below is
-                // for, and a card whose job is "what now" should not be
-                // offering to make itself disappear. The space goes to the
-                // companion instead, which is the only thing in the app that
-                // moves when nothing is happening.
-                PixelSprite(motif: companion, size: 56)
+                Text(metaLine)
+                    .font(BookType.meta(11))
+                    .foregroundStyle(book.inkSub)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .onTapGesture(perform: open)
+
+            // No check here. Completing is what the timeline row below is
+            // for, and a card whose job is "what now" should not be
+            // offering to make itself disappear. The space goes to the
+            // companion instead, which is the only thing in the app that
+            // moves when nothing is happening.
+            PixelSprite(motif: companion, size: 56)
         }
         .padding(Space.xl)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -92,13 +95,41 @@ struct FocusCard: View {
         return now.timeIntervalSince(start) / end.timeIntervalSince(start)
     }
 
-    /// Track and start time. Not the deadline — the kicker above already says
-    /// it, in the same words, and printing "due in 19 min" twice in one card
-    /// makes a reader look for the difference between them.
+    /// Track, start time, and when the deadline actually falls.
+    ///
+    /// The kicker counts down — "due in 19 min" — which tells you the pressure
+    /// but not the appointment. Printing that same countdown here twice made a
+    /// reader hunt for a difference between two identical strings; printing the
+    /// date and time instead answers the question the countdown raises.
     private var metaLine: String {
         var parts: [String] = focus.task.track.isEmpty ? [] : [store.trackLabel(focus.task.track)]
         if let slot = focus.slot { parts.append(slot.time) }
+        if let stamp = deadlineStamp { parts.append(stamp) }
         return parts.joined(separator: " · ")
+    }
+
+    /// When it is due, written the shortest way that is still unambiguous:
+    /// a time for today, a weekday for this week, a date beyond that. Uses the
+    /// device's own clock format, so 23:59 reads as 11:59 PM where that is what
+    /// people write.
+    private var deadlineStamp: String? {
+        guard let due = focus.task.dueAt else { return nil }
+        let cal = Calendar.current
+        let time = due.formatted(date: .omitted, time: .shortened)
+
+        if cal.isDateInToday(due) { return "due \(time)" }
+        if cal.isDateInTomorrow(due) { return "due tomorrow, \(time)" }
+        if cal.isDateInYesterday(due) { return "was due yesterday, \(time)" }
+
+        let days = cal.dateComponents(
+            [.day], from: cal.startOfDay(for: .now), to: cal.startOfDay(for: due)
+        ).day ?? 0
+        if (1..<7).contains(days) {
+            return "due \(due.formatted(.dateTime.weekday(.abbreviated))), \(time)"
+        }
+        // Anything further out, and anything already past, gets a real date —
+        // "Mon" is no use when the Monday in question has gone.
+        return "due \(due.formatted(.dateTime.day().month(.abbreviated))), \(time)"
     }
 }
 
