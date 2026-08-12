@@ -56,7 +56,9 @@ def morning_digest(
         "planned_minutes": planned_minutes,
         "needs_reply": replies,
         "mail_with_deadlines": deadlines,
-        "lines": _morning_lines(due_today, carried, replies, planned_minutes),
+        "lines": _morning_lines(
+            due_today, open_tasks, carried, replies, deadlines, planned_minutes
+        ),
     }
 
 
@@ -72,15 +74,29 @@ def _morning_headline(due_today: list[Task], open_tasks: list[Task], first) -> s
 
 
 def _morning_lines(
-    due_today: list[Task], carried: list[Task], replies: int, planned: int
+    due_today: list[Task],
+    open_tasks: list[Task],
+    carried: list[Task],
+    replies: int,
+    mail_deadlines: int,
+    planned: int,
 ) -> list[str]:
-    lines: list[str] = []
-    for task in due_today[:3]:
-        lines.append(task.title)
+    """Names first, counts after.
+
+    Anything due today leads. Failing that the day's actual work is still worth
+    naming — "2 things on" with no titles tells you a number and nothing you can
+    act on, which is the same mistake the headline avoids.
+    """
+    lines: list[str] = [t.title for t in (due_today or open_tasks)[:3]]
+
     if carried:
         lines.append(f"{_plural(len(carried), 'thing')} moved from yesterday")
     if replies:
         lines.append(f"{_plural(replies, 'mail')} waiting on a reply")
+    if mail_deadlines:
+        # Was counted and then dropped on the floor, which made the single most
+        # consequential number in the digest invisible.
+        lines.append(f"{_plural(mail_deadlines, 'mail')} with a date on it")
     if planned:
         hours, minutes = divmod(planned, 60)
         span = f"{hours}h {minutes}m" if hours else f"{minutes}m"
@@ -108,7 +124,11 @@ def evening_digest(tasks: list[Task], now: dt.datetime, streak: int = 0) -> dict
         "carried": len(carried),
         "still_open": len(still_open),
         "streak": streak,
-        "lines": [t.title for t in done[:3]],
+        # What was finished, or — when nothing was — what is still sitting
+        # there. Closing the day means deciding about those, so naming them is
+        # the useful thing; a bare "2 things still open" is not something you
+        # can act on from a notification.
+        "lines": [t.title for t in (done or still_open)[:3]],
     }
 
 

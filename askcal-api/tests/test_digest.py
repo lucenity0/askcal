@@ -82,6 +82,22 @@ def test_mail_waiting_on_a_reply_is_surfaced():
     assert any("waiting on a reply" in line for line in d["lines"])
 
 
+def test_the_days_work_is_named_even_when_nothing_is_due():
+    """"2 things on" is a number. The titles are what you can act on."""
+    d = morning_digest([task("read chapter 4"), task("email supervisor")], [], [], NOW)
+    assert "read chapter 4" in d["lines"]
+    assert "email supervisor" in d["lines"]
+
+
+def test_mail_carrying_a_deadline_is_surfaced():
+    """This was counted and then dropped, which hid the most consequential
+    number in the whole digest."""
+    emails = [mail(deadline_utc="2026-08-20T09:00:00Z") for _ in range(9)]
+    d = morning_digest([task()], emails, [], NOW)
+    assert d["mail_with_deadlines"] == 9
+    assert any("9 mails with a date on it" in line for line in d["lines"])
+
+
 def test_planned_time_reads_as_hours_and_minutes():
     d = morning_digest([task()], [], [slot(duration=90)], NOW)
     assert any("1h 30m planned" in line for line in d["lines"])
@@ -113,6 +129,15 @@ def test_a_mixed_day_reports_both_sides():
     assert d["done"] == 1
     assert d["still_open"] == 2
     assert "1 thing done" in d["headline"]
+
+
+def test_an_unfinished_day_names_what_is_left_to_decide_about():
+    """Closing the day means deciding about those, so they have to be nameable
+    from the notification."""
+    tasks = [task("submit form"), task("call bank")]
+    d = evening_digest(tasks, NOW, streak=0)
+    assert "submit form" in d["lines"]
+    assert "call bank" in d["lines"]
 
 
 def test_an_empty_day_does_not_pretend_something_happened():
