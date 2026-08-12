@@ -69,10 +69,10 @@ struct GreetingView: View {
                 VStack(spacing: Space.md) {
                     Text(dateKicker)
                         .font(BookType.kicker(12))
-                        .foregroundStyle(book.textSecondary)
+                        .foregroundStyle(book.inkSub)
                     Text(greeting)
                         .font(BookType.display(30))
-                        .foregroundStyle(book.textPrimary)
+                        .foregroundStyle(book.ink)
                 }
                 .opacity(showText ? 1 : 0)
                 .offset(y: showText ? 0 : 10)

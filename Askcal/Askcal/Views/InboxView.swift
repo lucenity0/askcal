@@ -5,6 +5,11 @@
 //  Regret-ranked triage. Swipe right = becomes a task, swipe left = tomorrow.
 //  Urgency is a dot: solid high, hollow medium, none low.
 //
+//  Rows are ruled like everything else, and the swipe actions come from a
+//  `List` — the one place in the app that still needs one, because
+//  `.swipeActions` exists nowhere else. The list is made transparent so the
+//  paper underneath shows through it.
+//
 
 import SwiftUI
 
@@ -13,51 +18,55 @@ struct InboxView: View {
     @Environment(\.book) private var book
 
     var body: some View {
-        PageScaffold(scrollable: false) {
-            PageHeader(kicker: "Needs you", title: "Inbox", icon: "tray") {
+        NotebookPage(scrollable: false) {
+            PageTitle(kicker: "Needs you", title: "Inbox") {
                 Text("\(store.inboxEmails.count)")
                     .font(BookType.meta(13))
-                    .foregroundStyle(book.textSecondary)
+                    .foregroundStyle(book.inkSub)
             }
-            SectionUnderline()
-        } content: {
+
             if store.inboxEmails.isEmpty {
-                Spacer()
-                Text("inbox quiet. enjoy it.")
-                    .font(BookType.body(14))
-                    .foregroundStyle(book.textSecondary)
-                    .frame(maxWidth: .infinity)
-                Spacer()
-            } else {
-                List {
-                    ForEach(store.inboxEmails) { email in
-                        EmailRow(email: email)
-                            .listRowBackground(Color.clear)
-                            .listRowSeparatorTint(book.border)
-                            .listRowInsets(EdgeInsets(top: 10, leading: 22, bottom: 10, trailing: 22))
-                            .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                                Button {
-                                    withAnimation { store.handleEmail(email) }
-                                } label: {
-                                    Label("to today", systemImage: "checkmark")
-                                }
-                                .tint(book.swipeConfirm)
-                            }
-                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                Button {
-                                    withAnimation { store.snoozeEmail(email) }
-                                } label: {
-                                    Label("tomorrow", systemImage: "arrow.uturn.right")
-                                }
-                                .tint(book.swipeSnooze)
-                            }
-                    }
+                VStack(alignment: .leading, spacing: Space.lg) {
+                    Text("inbox quiet. enjoy it.")
+                        .font(BookType.body(15))
+                        .foregroundStyle(book.inkSub)
+                    RuledFiller()
                 }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
-                .refreshable { await store.syncInbox() }
+            } else {
+                list
             }
         }
+    }
+
+    private var list: some View {
+        List {
+            ForEach(store.inboxEmails) { email in
+                EmailRow(email: email)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparatorTint(book.rule)
+                    .listRowInsets(EdgeInsets(top: Space.lg, leading: 0,
+                                              bottom: Space.lg, trailing: 0))
+                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                        Button {
+                            withAnimation { store.handleEmail(email) }
+                        } label: {
+                            Label("to today", systemImage: "checkmark")
+                        }
+                        .tint(book.swipeConfirm)
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button {
+                            withAnimation { store.snoozeEmail(email) }
+                        } label: {
+                            Label("tomorrow", systemImage: "arrow.uturn.right")
+                        }
+                        .tint(book.swipeSnooze)
+                    }
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .refreshable { await store.syncInbox() }
     }
 }
 
@@ -66,32 +75,30 @@ private struct EmailRow: View {
     @Environment(\.book) private var book
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(alignment: .top, spacing: Space.lg) {
+            VStack(alignment: .leading, spacing: Space.xs) {
                 Text(email.subject ?? "(no subject)")
-                    .font(BookType.entry())
-                    .foregroundStyle(book.textPrimary)
+                    .font(BookType.entry(16))
+                    .foregroundStyle(book.ink)
                     .lineLimit(2)
                 if let snippet = email.snippet {
                     Text(snippet)
-                        .font(BookType.body())
-                        .foregroundStyle(book.textSecondary)
+                        .font(BookType.body(13))
+                        .foregroundStyle(book.inkSub)
                         .lineLimit(2)
                 }
-                HStack(spacing: 8) {
-                    if let sender = email.sender {
-                        Text(sender)
-                    }
-                    if let mins = email.estimatedMinutes {
-                        Text("~\(mins)m")
-                    }
+                HStack(spacing: Space.md) {
+                    if let sender = email.sender { Text(sender) }
+                    if let mins = email.estimatedMinutes { Text("~\(mins)m") }
                 }
                 .font(BookType.meta(10))
-                .foregroundStyle(book.textSecondary.opacity(0.8))
+                .foregroundStyle(book.inkSub)
             }
-            Spacer()
+            Spacer(minLength: Space.md)
             PriorityDot(band: email.priority)
-                .padding(.top, 6)
+                .padding(.top, Space.sm)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("Swipe right to make a task, left to snooze until tomorrow")
     }
 }

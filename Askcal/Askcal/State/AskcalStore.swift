@@ -51,8 +51,6 @@ final class AskcalStore {
     /// here if the server refuses it.
     var actionError: String?
 
-    /// Idle companion for the Up Next card — one pick per app open.
-    let companion: CompanionMotif = CompanionMotif.allCases.randomElement() ?? .cat
 
     init(
         tasks: [AskcalTask] = [],
@@ -341,6 +339,49 @@ final class AskcalStore {
     /// dropped wholesale rather than guessing which days it touched.
     private func invalidateDayCache() {
         dayCache.removeAll()
+    }
+
+    /// Which days in a range have work on them, and which have calendar events.
+    ///
+    /// The month grid used to gate its dots on `today &&`, so no day but today
+    /// could ever show one — the grid looked identical in an empty month and a
+    /// full one. Keyed by `dayString` so the caller can look a cell up directly.
+    struct DayMarks: Equatable {
+        var hasTasks = false
+        var hasEvents = false
+    }
+
+    func marks(from start: Date, to end: Date) async -> [String: DayMarks] {
+        guard isLive else { return localMarks(from: start, to: end) }
+
+        async let tasksReq = APIClient.shared.tasks(from: start, to: end)
+        async let eventsReq = APIClient.shared.calendarEvents(
+            start: Self.dayString(start), end: Self.dayString(end)
+        )
+        let rangeTasks = (try? await tasksReq) ?? []
+        let rangeEvents = (try? await eventsReq) ?? []
+
+        var marks: [String: DayMarks] = [:]
+        for task in rangeTasks {
+            guard let day = task.scheduledFor else { continue }
+            marks[Self.dayString(day), default: DayMarks()].hasTasks = true
+        }
+        for event in rangeEvents {
+            guard let day = event.start else { continue }
+            marks[Self.dayString(day), default: DayMarks()].hasEvents = true
+        }
+        return marks
+    }
+
+    /// Signed out there is no calendar and no server, but the locally-stored
+    /// tasks still deserve their dots.
+    private func localMarks(from start: Date, to end: Date) -> [String: DayMarks] {
+        var marks: [String: DayMarks] = [:]
+        for task in tasks {
+            guard let day = task.scheduledFor, day >= start, day <= end else { continue }
+            marks[Self.dayString(day), default: DayMarks()].hasTasks = true
+        }
+        return marks
     }
 
     /// Tasks + external events for a specific day — powers the calendar's

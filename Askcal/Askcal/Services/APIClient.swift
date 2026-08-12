@@ -276,6 +276,15 @@ final class APIClient {
         return try await send("PATCH", "/api/tasks/\(id.uuidString.lowercased())", body: body)
     }
 
+    /// Every task in an inclusive date range — one request for a whole month,
+    /// so the month grid can mark the days that have something on them.
+    func tasks(from start: Date, to end: Date) async throws -> [AskcalTask] {
+        (try await send("GET", "/api/tasks", query: [
+            .init(name: "start", value: Self.dayOnly.string(from: start)),
+            .init(name: "end", value: Self.dayOnly.string(from: end)),
+        ]) as TasksOut).tasks
+    }
+
     func tasks(on date: Date) async throws -> [AskcalTask] {
         (try await send("GET", "/api/tasks",
                         query: [.init(name: "on", value: Self.dayOnly.string(from: date))]) as TasksOut).tasks

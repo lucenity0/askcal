@@ -218,7 +218,7 @@ struct DayPage: View {
             // The empty copy is good and it is true only once the fetch is
             // done. Rendering it mid-flight told the user their day was clear
             // before we had looked.
-            MonoSkeletonRows(rows: 4)
+            SkeletonRows(rows: 4)
         } else if entries.isEmpty {
             VStack(alignment: .leading, spacing: Space.lg) {
                 Text(emptyLine)
@@ -333,7 +333,12 @@ struct SummaryRow: View {
         .padding(.vertical, Space.lg)
         .contentShape(Rectangle())
         .ruled()
-        .accessibilityElement(children: .combine)
+        // `.combine` glued the title and its count into one label — "Tracks 0
+        // open" — so the row could not be identified by what it is. Title and
+        // count are a label and a value, which is also how VoiceOver wants them.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(value)
         .accessibilityHint("Opens \(title)")
     }
 }

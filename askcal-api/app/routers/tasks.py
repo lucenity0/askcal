@@ -46,13 +46,22 @@ def due_by_today(today):
 
 @router.get("/tasks", response_model=TasksResponse)
 async def list_tasks(
-    user: CurrentUser, db: DbSession, on: dt.date | None = None
+    user: CurrentUser,
+    db: DbSession,
+    on: dt.date | None = None,
+    start: dt.date | None = None,
+    end: dt.date | None = None,
 ) -> TasksResponse:
     """Non-done tasks for today or earlier, highest consequence first.
 
     `on=YYYY-MM-DD` overrides that to return every task (any status) scheduled
     for exactly that day — powering the calendar's per-date view and the
     Today date-scrubber.
+
+    `start`/`end` return every task in an inclusive date range. The month grid
+    needs to know which days have anything on them, and asking day by day meant
+    31 round trips to draw one screen — which is why it never asked at all and
+    drew its dots for today only.
     """
     stmt = (
         select(Task)
@@ -62,6 +71,8 @@ async def list_tasks(
     )
     if on is not None:
         stmt = stmt.where(Task.scheduled_for == on)
+    elif start is not None and end is not None:
+        stmt = stmt.where(Task.scheduled_for >= start, Task.scheduled_for <= end)
     else:
         stmt = stmt.where(
             Task.status != TaskStatus.done, due_by_today(user_today(user.timezone))

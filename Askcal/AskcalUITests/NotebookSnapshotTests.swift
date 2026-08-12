@@ -95,6 +95,28 @@ final class NotebookSnapshotTests: XCTestCase {
         snapshot(app, "14-entry-added")
     }
 
+    /// Tracks was the worst of the two-design-systems problem: six full page
+    /// headers, each with its own serif title and underline stub, stacked
+    /// inside a page that already had one.
+    func testTracksIsOnTheSamePaper() throws {
+        let app = launch(theme: "day")
+        let tracks = app.buttons["Tracks"].firstMatch
+        XCTAssertTrue(tracks.waitForExistence(timeout: 10), "Tracks row not found")
+        tracks.tap()
+        Thread.sleep(forTimeInterval: 1.5)
+        snapshot(app, "15-tracks")
+    }
+
+    /// The month grid, whose dots used to draw for today and no other day.
+    func testCalendarMonthGrid() throws {
+        let app = launch(theme: "day")
+        app.buttons["Calendar"].firstMatch.tap()
+        Thread.sleep(forTimeInterval: 1.5)
+        app.buttons["Month"].firstMatch.tap()
+        Thread.sleep(forTimeInterval: 1.5)
+        snapshot(app, "16-calendar-month")
+    }
+
     /// The page turn, and the destination rows below the writing.
     func testTurningToTomorrow() throws {
         let app = launch(theme: "day")

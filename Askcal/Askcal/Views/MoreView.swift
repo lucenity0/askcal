@@ -33,18 +33,16 @@ struct MoreView: View {
     private enum SaveStatus { case idle, success, failure }
 
     var body: some View {
-        PageScaffold {
-            PageHeader(kicker: "Settings", title: "More")
-            SectionUnderline()
-        } content: {
+        NotebookPage {
+            PageTitle(kicker: "Settings", title: "More")
                 accountSection
-                Divider().overlay(book.border)
+                PageRule()
 
                 // Theme switch
                 HStack {
                     Text("Theme")
                         .font(BookType.entry())
-                        .foregroundStyle(book.textPrimary)
+                        .foregroundStyle(book.ink)
                     Spacer()
                     HStack(spacing: 0) {
                         ForEach(ThemeMode.allCases, id: \.rawValue) { mode in
@@ -55,7 +53,7 @@ struct MoreView: View {
                             } label: {
                                 Text(mode.label)
                                     .font(BookType.meta(11))
-                                    .foregroundStyle(themeRaw == mode.rawValue ? book.fillText : book.textSecondary)
+                                    .foregroundStyle(themeRaw == mode.rawValue ? book.fillText : book.inkSub)
                                     .padding(.horizontal, 14)
                                     .padding(.vertical, 7)
                                     .background(
@@ -66,13 +64,13 @@ struct MoreView: View {
                         }
                     }
                     .padding(2)
-                    .background(Capsule().strokeBorder(book.border, lineWidth: 1))
+                    .background(Capsule().strokeBorder(book.rule, lineWidth: 1))
                 }
-                Divider().overlay(book.border)
+                PageRule()
 
                 // Name — used by the greeting
                 nameSection
-                Divider().overlay(book.border)
+                PageRule()
 
                 // Nudges
                 toggleRow("Morning digest", subtitle: "08:30 — your day is ready", isOn: $morningDigest)
@@ -82,7 +80,7 @@ struct MoreView: View {
                 settingRow("Version", value: Self.appVersion)
 
                 if !store.isLive {
-                    Divider().overlay(book.border)
+                    PageRule()
                     localDataSection
                 }
         }
@@ -99,17 +97,17 @@ struct MoreView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Your name")
                 .font(BookType.entry())
-                .foregroundStyle(book.textPrimary)
+                .foregroundStyle(book.ink)
             HStack(spacing: 10) {
                 TextField("what should mornings call you?", text: $nameDraft)
                     .font(BookType.body(14))
-                    .foregroundStyle(book.textPrimary)
+                    .foregroundStyle(book.ink)
                     .onChange(of: nameDraft) { nameStatus = .idle }
                     .padding(12)
                     .background(
                         RoundedRectangle(cornerRadius: 10)
-                            .fill(book.surface)
-                            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(book.border, lineWidth: 1))
+                            .fill(book.card)
+                            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(book.rule, lineWidth: 1))
                     )
                 Button {
                     saveName()
@@ -127,10 +125,10 @@ struct MoreView: View {
             switch nameStatus {
             case .success:
                 Text("saved — mornings will call you \(userName.lowercased()).")
-                    .font(BookType.meta(10)).foregroundStyle(book.textSecondary)
+                    .font(BookType.meta(10)).foregroundStyle(book.inkSub)
             case .failure:
                 Text("couldn't save — check your connection and try again.")
-                    .font(BookType.meta(10)).foregroundStyle(book.textSecondary)
+                    .font(BookType.meta(10)).foregroundStyle(book.inkSub)
             case .idle:
                 EmptyView()
             }
@@ -162,10 +160,10 @@ struct MoreView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Local data")
                 .font(BookType.entry())
-                .foregroundStyle(book.textPrimary)
+                .foregroundStyle(book.ink)
             Text("you're not signed in — tasks and routines live only on this device.")
                 .font(BookType.meta(10))
-                .foregroundStyle(book.textSecondary)
+                .foregroundStyle(book.inkSub)
             Button("Delete local data") { showDeleteConfirm = true }
                 .buttonStyle(PillButtonStyle(filled: false))
         }
@@ -180,11 +178,11 @@ struct MoreView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Google account")
                         .font(BookType.entry())
-                        .foregroundStyle(book.textPrimary)
+                        .foregroundStyle(book.ink)
                     Text(store.isLive ? (store.accountEmail ?? "connected")
                                       : "demo data — connect to go live")
                         .font(BookType.meta(10))
-                        .foregroundStyle(book.textSecondary)
+                        .foregroundStyle(book.inkSub)
                 }
                 Spacer()
                 if store.isLive {
@@ -198,7 +196,7 @@ struct MoreView: View {
             if let error = connectError ?? store.syncError {
                 Text(error)
                     .font(BookType.meta(10))
-                    .foregroundStyle(book.textSecondary)
+                    .foregroundStyle(book.inkSub)
             }
             if store.isLive {
                 Button("Sync inbox now") {
@@ -239,20 +237,20 @@ struct MoreView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(label)
                         .font(BookType.entry())
-                        .foregroundStyle(book.textPrimary)
+                        .foregroundStyle(book.ink)
                     Text(subtitle)
                         .font(BookType.meta(10))
-                        .foregroundStyle(book.textSecondary)
+                        .foregroundStyle(book.inkSub)
                 }
                 Spacer()
                 Toggle("", isOn: isOn)
                     .labelsHidden()
-                    .toggleStyle(MonoToggleStyle())
+                    .toggleStyle(PaperToggleStyle())
                     .onChange(of: isOn.wrappedValue) {
                         Task { await NotificationManager.refreshSchedules(dayClosed: store.dayClosed) }
                     }
             }
-            Divider().overlay(book.border)
+            PageRule()
         }
     }
 
@@ -261,13 +259,13 @@ struct MoreView: View {
             HStack {
                 Text(label)
                     .font(BookType.entry())
-                    .foregroundStyle(book.textPrimary)
+                    .foregroundStyle(book.ink)
                 Spacer()
                 Text(value)
                     .font(BookType.meta())
-                    .foregroundStyle(book.textSecondary)
+                    .foregroundStyle(book.inkSub)
             }
-            Divider().overlay(book.border)
+            PageRule()
         }
     }
 }
@@ -284,24 +282,24 @@ private struct DeleteLocalDataSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            PageHeader(kicker: "Irreversible", title: "Delete local data", titleSize: 24)
+            PageTitle(kicker: "Irreversible", title: "Delete local data", size: 24)
 
             Text("This wipes every task, routine and check-off stored on this device. It can't be undone. Type DELETE to confirm.")
                 .font(BookType.body(14))
-                .foregroundStyle(book.textSecondary)
+                .foregroundStyle(book.inkSub)
                 .fixedSize(horizontal: false, vertical: true)
 
             TextField("DELETE", text: $typed)
                 .font(BookType.entry())
-                .foregroundStyle(book.textPrimary)
+                .foregroundStyle(book.ink)
                 .textInputAutocapitalization(.characters)
                 .autocorrectionDisabled()
                 .padding(14)
                 .background(
                     RoundedRectangle(cornerRadius: 10)
-                        .fill(book.surface)
+                        .fill(book.card)
                         .overlay(RoundedRectangle(cornerRadius: 10)
-                            .strokeBorder(armed ? book.fill : book.border, lineWidth: 1))
+                            .strokeBorder(armed ? book.fill : book.rule, lineWidth: 1))
                 )
 
             Button("Delete everything") {
@@ -320,6 +318,6 @@ private struct DeleteLocalDataSheet: View {
         .padding(22)
         .presentationDetents([.height(340)])
         .presentationDragIndicator(.visible)
-        .presentationBackground(book.bg)
+        .presentationBackground(book.paper)
     }
 }

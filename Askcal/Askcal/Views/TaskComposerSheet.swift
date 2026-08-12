@@ -31,29 +31,29 @@ struct TaskComposerSheet: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                PageHeader(
+                PageTitle(
                     kicker: isEditing ? "Reschedule" : "Quick add",
                     title: isEditing ? "Edit task" : "New task",
-                    titleSize: 26
+                    size: 26
                 )
 
                 if isEditing {
                     Text(title)
                         .font(BookType.entry())
-                        .foregroundStyle(book.textPrimary)
+                        .foregroundStyle(book.ink)
                         .lineLimit(2)
                 } else {
                     TextField("what needs doing?", text: $title)
                         .font(BookType.entry())
-                        .foregroundStyle(book.textPrimary)
+                        .foregroundStyle(book.ink)
                         .focused($focused)
                         .submitLabel(.done)
                         .padding(14)
                         .background(
                             RoundedRectangle(cornerRadius: 10)
-                                .fill(book.surface)
+                                .fill(book.card)
                                 .overlay(RoundedRectangle(cornerRadius: 10)
-                                    .strokeBorder(book.border, lineWidth: 1))
+                                    .strokeBorder(book.rule, lineWidth: 1))
                         )
                     trackPicker
                 }
@@ -69,11 +69,11 @@ struct TaskComposerSheet: View {
                     HStack {
                         Text("Deadline")
                             .font(BookType.meta(10))
-                            .foregroundStyle(book.textSecondary)
+                            .foregroundStyle(book.inkSub)
                         Spacer()
                         Toggle("", isOn: $hasDeadline.animation(.easeOut(duration: 0.2)))
                             .labelsHidden()
-                            .toggleStyle(MonoToggleStyle())
+                            .toggleStyle(PaperToggleStyle())
                     }
                     if hasDeadline {
                         DatePicker("", selection: $dueAt,
@@ -99,7 +99,7 @@ struct TaskComposerSheet: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
-        .presentationBackground(book.bg)
+        .presentationBackground(book.paper)
         .onAppear(perform: setup)
         .confirmationDialog(
             "Delete this task?",
@@ -120,7 +120,7 @@ struct TaskComposerSheet: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Track")
                 .font(BookType.meta(10))
-                .foregroundStyle(book.textSecondary)
+                .foregroundStyle(book.inkSub)
             // wraps to two rows on narrow widths / large type
             FlowRow(spacing: 8) {
                 ForEach(TrackKey.allCases) { key in
@@ -128,12 +128,12 @@ struct TaskComposerSheet: View {
                         Text(key.title)
                             .font(BookType.meta(11))
                             .lineLimit(1)
-                            .foregroundStyle(track == key ? book.fillText : book.textSecondary)
+                            .foregroundStyle(track == key ? book.fillText : book.inkSub)
                             .padding(.horizontal, 13)
                             .padding(.vertical, 8)
                             .background(Capsule().fill(track == key ? book.fill : .clear))
                             .overlay(Capsule().strokeBorder(
-                                track == key ? .clear : book.border, lineWidth: 1))
+                                track == key ? .clear : book.rule, lineWidth: 1))
                     }
                     .buttonStyle(.plain)
                 }
@@ -147,7 +147,7 @@ struct TaskComposerSheet: View {
         HStack {
             Text(label)
                 .font(BookType.meta(10))
-                .foregroundStyle(book.textSecondary)
+                .foregroundStyle(book.inkSub)
             Spacer()
             content()
         }

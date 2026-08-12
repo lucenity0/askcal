@@ -3,7 +3,7 @@
 //  Askcal
 //
 //  The evening ritual, 30 seconds max: done, or moved to tomorrow.
-//  Tomorrow's "Uncompleted tasks" card is born here.
+//  Tomorrow's carried-forward work is born here.
 //
 
 import SwiftUI
@@ -13,56 +13,69 @@ struct ReviewView: View {
     @Environment(\.book) private var book
 
     var body: some View {
-        PageScaffold {
-            PageHeader(kicker: "End of day", title: "Review") {
+        NotebookPage {
+            PageTitle(kicker: "End of day", title: "Review") {
                 StreakDots(count: store.streak)
             }
-            SectionUnderline()
-        } content: {
-                if store.dayClosed {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("day closed. see you tomorrow.")
-                            .font(BookType.entry())
-                            .foregroundStyle(book.textPrimary)
-                        Text(store.reviewSummary)
-                            .font(BookType.meta())
-                            .foregroundStyle(book.textSecondary)
-                        if store.streak > 1 {
-                            Text("\(store.streak) days in a row.")
-                                .font(BookType.meta())
-                                .foregroundStyle(book.textSecondary)
-                        }
-                    }
-                    .padding(16)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14)
-                            .fill(book.surface)
-                            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(book.border, lineWidth: 1))
-                    )
-                } else if store.openTasks.isEmpty {
+
+            if store.dayClosed {
+                closedNote
+            } else if store.openTasks.isEmpty {
+                VStack(alignment: .leading, spacing: Space.lg) {
                     Text("clean slate. nothing to review.")
-                        .font(BookType.body(14))
-                        .foregroundStyle(book.textSecondary)
-                        .padding(.vertical, 24)
-                } else {
-                    VStack(spacing: 0) {
-                        ForEach(store.openTasks) { task in
-                            ReviewRow(task: task)
-                            Divider().overlay(book.border)
-                        }
-                    }
-
-                    Text(store.reviewSummary)
-                        .font(BookType.meta())
-                        .foregroundStyle(book.textSecondary)
-                        .padding(.top, 4)
-
-                    Button("Close the day") {
-                        withAnimation(.easeOut(duration: 0.3)) { store.closeDay() }
-                    }
-                    .buttonStyle(PillButtonStyle(filled: true, fullWidth: true))
+                        .font(BookType.body(15))
+                        .foregroundStyle(book.inkSub)
+                    RuledFiller()
                 }
+            } else {
+                rollCall
+            }
+        }
+    }
+
+    private var closedNote: some View {
+        VStack(alignment: .leading, spacing: Space.md) {
+            Text("day closed. see you tomorrow.")
+                .font(BookType.entry())
+                .foregroundStyle(book.ink)
+            Text(store.reviewSummary)
+                .font(BookType.meta())
+                .foregroundStyle(book.inkSub)
+            if store.streak > 1 {
+                Text("\(store.streak) days in a row.")
+                    .font(BookType.meta())
+                    .foregroundStyle(book.inkSub)
+            }
+        }
+        .padding(Space.xl)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: Radius.card)
+                .fill(book.card)
+                .overlay(
+                    RoundedRectangle(cornerRadius: Radius.card)
+                        .strokeBorder(book.rule, lineWidth: Stroke.hair)
+                )
+        )
+        .accessibilityElement(children: .combine)
+    }
+
+    private var rollCall: some View {
+        VStack(alignment: .leading, spacing: Space.xl) {
+            VStack(spacing: 0) {
+                ForEach(store.openTasks) { task in
+                    ReviewRow(task: task)
+                }
+            }
+
+            Text(store.reviewSummary)
+                .font(BookType.meta())
+                .foregroundStyle(book.inkSub)
+
+            Button("Close the day") {
+                withAnimation(.easeOut(duration: 0.3)) { store.closeDay() }
+            }
+            .buttonStyle(PillButtonStyle(filled: true, fullWidth: true))
         }
     }
 }
@@ -73,36 +86,47 @@ private struct ReviewRow: View {
     @Environment(\.book) private var book
 
     private var isCarried: Bool { task.status == .carried }
+    private var isDone: Bool { task.status == .done }
 
     var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(spacing: Space.lg) {
+            VStack(alignment: .leading, spacing: Space.hair) {
                 Text(task.title)
-                    .font(BookType.entry())
-                    .foregroundStyle(book.textPrimary)
+                    .font(BookType.entry(16))
+                    .foregroundStyle(book.ink)
+                    .fixedSize(horizontal: false, vertical: true)
                 Text(task.track.title.lowercased())
                     .font(BookType.meta(10))
-                    .foregroundStyle(book.textSecondary)
+                    .foregroundStyle(book.inkSub)
             }
-            Spacer()
-            // done — circle; tomorrow — outlined chip
-            StatusCircle(done: task.status == .done) {
+            Spacer(minLength: Space.md)
+
+            // Done is the same square used everywhere else — the round
+            // StatusCircle that used to live here was a second check-off shape
+            // for the same idea on a different screen.
+            EntryMark(checked: isDone) {
                 withAnimation(.easeOut(duration: 0.2)) { store.review(task, done: true) }
             }
+            .frame(width: Space.markColumn)
+            .accessibilityLabel("\(task.title), done")
+
             Button {
                 withAnimation(.easeOut(duration: 0.2)) { store.review(task, done: false) }
             } label: {
                 Text("→ tmrw")
                     .font(BookType.meta(11))
-                    .foregroundStyle(isCarried ? book.fillText : book.textSecondary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
+                    .foregroundStyle(isCarried ? book.fillText : book.inkSub)
+                    .padding(.horizontal, Space.lg)
+                    .padding(.vertical, Space.sm)
                     .background(Capsule().fill(isCarried ? book.fill : .clear))
-                    .overlay(Capsule().strokeBorder(isCarried ? .clear : book.border, lineWidth: 1))
+                    .overlay(Capsule().strokeBorder(
+                        isCarried ? .clear : book.rule, lineWidth: Stroke.hair))
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("\(task.title), move to tomorrow")
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, Space.lg)
+        .ruled()
     }
 }
 
@@ -113,14 +137,16 @@ struct StreakDots: View {
 
     var body: some View {
         if count > 0 {
-            HStack(spacing: 4) {
+            HStack(spacing: Space.xs) {
                 ForEach(0..<min(count, 7), id: \.self) { _ in
                     Circle().fill(book.fill).frame(width: 5, height: 5)
                 }
                 Text("×\(count)")
                     .font(BookType.meta(10))
-                    .foregroundStyle(book.textSecondary)
+                    .foregroundStyle(book.inkSub)
             }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(count) day streak")
         }
     }
 }

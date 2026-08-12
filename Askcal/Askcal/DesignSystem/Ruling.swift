@@ -34,11 +34,17 @@ private struct Ruled: ViewModifier {
     @Environment(\.book) private var book
 
     func body(content: Content) -> some View {
-        content.overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(book.rule)
-                .frame(height: Stroke.hair)
-        }
+        content
+            // A rule on a page runs the width of the page. Without this the
+            // overlay takes the row's intrinsic width, so a short line of text
+            // got a short rule and the ruling came out ragged wherever the
+            // content didn't happen to fill the measure.
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(book.rule)
+                    .frame(height: Stroke.hair)
+            }
     }
 }
 
@@ -69,6 +75,19 @@ struct RuledFiller: View {
             .allowsHitTesting(false)
             .accessibilityHidden(true)
         }
+    }
+}
+
+/// A standalone rule between blocks that aren't rows — the divisions on a
+/// settings page, say, where there is no entry to hang a line off.
+struct PageRule: View {
+    @Environment(\.book) private var book
+
+    var body: some View {
+        Rectangle()
+            .fill(book.rule)
+            .frame(height: Stroke.hair)
+            .accessibilityHidden(true)
     }
 }
 

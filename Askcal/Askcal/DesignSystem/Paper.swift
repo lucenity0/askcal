@@ -151,15 +151,6 @@ struct PaperPalette: Equatable {
         mode == .day ? .dayTheme : .nightTheme
     }
 
-    // ── Compatibility aliases ────────────────────────────────────────────
-    // The pre-notebook vocabulary, kept so every screen picks up the new
-    // palette immediately and the rewrite can happen screen by screen instead
-    // of in one unreviewable diff. Deleted as each view migrates.
-    var bg: Color { paper }
-    var surface: Color { card }
-    var border: Color { rule }
-    var textPrimary: Color { ink }
-    var textSecondary: Color { inkDim }
 }
 
 private struct PaperPaletteKey: EnvironmentKey {
