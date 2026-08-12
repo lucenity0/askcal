@@ -33,6 +33,14 @@ final class AskcalStore {
     var calendarEvents: [CalendarEvent]
     var dayClosed = false
 
+    /// The account's tracks, as the user has them.
+    ///
+    /// Held here rather than fetched per screen because three surfaces need
+    /// them — the composer's picker, the Tracks page, and anywhere a task's
+    /// track is named — and a track renamed on one of them must not still read
+    /// by its old name on the other two.
+    var tracks: [Track] = []
+
     /// True once a Askcal account is connected — data comes from askcal-api.
     var isLive = false
     /// True while the cold-launch fetch is in flight.
@@ -142,8 +150,98 @@ final class AskcalStore {
         return "\(count) thing\(count == 1 ? "" : "s"). \(time) planned."
     }
 
-    func tasks(in track: TrackKey) -> [AskcalTask] {
-        openTasks.filter { $0.track == track }
+    func tasks(in track: Track) -> [AskcalTask] {
+        openTasks.filter { $0.track == track.id }
+    }
+
+    /// The track a task is filed under, or nil when it names one this account
+    /// no longer has — a track since deleted, or mail classified before the
+    /// list arrived.
+    func track(_ slug: String) -> Track? {
+        tracks.first { $0.id == slug }
+    }
+
+    /// What to call a track by slug, whether or not we still have it.
+    func trackLabel(_ slug: String) -> String {
+        track(slug)?.label ?? Track.title(for: slug)
+    }
+
+    /// Where a new task goes when the user has not said. The first track that
+    /// is on — never a hardcoded one, since the account may not have it.
+    var defaultTrack: Track? {
+        tracks.first { $0.active } ?? tracks.first
+    }
+
+    func refreshTracks() async {
+        guard isLive else { return }
+        guard let fetched = try? await APIClient.shared.tracks() else { return }
+        tracks = fetched
+    }
+
+    /// Add a track, then pull the list back so counts and slug come from the
+    /// server rather than a guess made here.
+    func addTrack(label: String, detail: String?) async {
+        guard isLive else { return }
+        do {
+            _ = try await APIClient.shared.createTrack(label: label, detail: detail)
+            await refreshTracks()
+            // A new track re-runs the auto-task gates server-side over mail
+            // already classified, so the day can have changed too.
+            await refreshAll()
+        } catch {
+            report(error)
+        }
+    }
+
+    /// Change a track. Applied locally first so the switch moves under the
+    /// finger, and rolled back if the server disagrees.
+    func updateTrack(
+        _ track: Track, label: String? = nil, detail: String? = nil,
+        active: Bool? = nil, autoTasks: Bool? = nil
+    ) {
+        guard let index = tracks.firstIndex(where: { $0.id == track.id }) else { return }
+        let previous = tracks[index]
+        if let label { tracks[index].label = label }
+        if let detail { tracks[index].detail = detail }
+        if let active { tracks[index].active = active }
+        if let autoTasks { tracks[index].autoTasks = autoTasks }
+
+        guard isLive else { return }
+        let updated = tracks[index]
+        Task {
+            do {
+                _ = try await APIClient.shared.updateTrack(
+                    track.id, label: label, detail: detail,
+                    active: active, autoTasks: autoTasks
+                )
+                // Turning one on is retroactive: mail already in the inbox is
+                // reconsidered, so tasks can appear without anything else
+                // having happened.
+                if updated.active && updated.autoTasks { await refreshAll() }
+            } catch {
+                if let i = tracks.firstIndex(where: { $0.id == previous.id }) {
+                    tracks[i] = previous
+                }
+                report(error)
+            }
+        }
+    }
+
+    func deleteTrack(_ track: Track) {
+        guard let index = tracks.firstIndex(where: { $0.id == track.id }) else { return }
+        let removed = tracks.remove(at: index)
+        guard isLive else { return }
+        Task {
+            do {
+                try await APIClient.shared.deleteTrack(removed.id)
+                // Its tasks are left untracked server-side rather than moved,
+                // so the day list has changed shape.
+                await refreshAll()
+            } catch {
+                tracks.insert(removed, at: min(index, tracks.count))
+                report(error)
+            }
+        }
     }
 
     func task(id: UUID) -> AskcalTask? {
@@ -340,9 +438,13 @@ final class AskcalStore {
             async let tasksReq = APIClient.shared.tasks()
             async let todayReq = APIClient.shared.today()
             async let inboxReq = APIClient.shared.inbox()
+            async let tracksReq = APIClient.shared.tracks()
             tasks = try await tasksReq
             dayPlan = try await todayReq.dayPlan
             emails = try await inboxReq
+            // Tolerated separately: tracks are for naming and picking, so
+            // losing them should not turn a successful refresh into an error.
+            tracks = (try? await tracksReq) ?? tracks
             await refreshCalendar()
             syncError = nil
         } catch {
@@ -580,15 +682,19 @@ final class AskcalStore {
     /// server's copy when it lands — a create that only shows after a round trip
     /// reads as a failure on a slow connection, which is how this looked.
     func quickAdd(
-        title: String, track: TrackKey = .uni,
+        title: String, track: String? = nil,
         scheduledAt: Date? = nil, dueAt: Date? = nil, scheduledFor: Date? = nil
     ) {
         let trimmed = title.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
         Haptics.tick()
 
+        // No default track can be named here: the account's tracks are whatever
+        // the user made them. Falls back to the first one that is on.
+        let slug = track ?? defaultTrack?.id ?? ""
+
         let optimistic = AskcalTask(
-            id: UUID(), track: track, title: trimmed, meta: nil,
+            id: UUID(), track: slug, title: trimmed, meta: nil,
             regretScore: QuickAdd.regretScore, estimatedHours: nil,
             scheduledFor: scheduledFor ?? scheduledAt,
             scheduledAt: scheduledAt, dueAt: dueAt
@@ -600,7 +706,7 @@ final class AskcalStore {
         Task {
             do {
                 let saved = try await APIClient.shared.createTask(
-                    title: trimmed, track: track,
+                    title: trimmed, track: slug,
                     scheduledAt: scheduledAt, dueAt: dueAt, scheduledFor: scheduledFor
                 )
                 // swap the placeholder for the server's row: real id, real score

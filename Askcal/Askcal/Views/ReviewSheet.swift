@@ -91,7 +91,7 @@ private struct ReviewRow: View {
                     .font(BookType.entry(16))
                     .foregroundStyle(book.ink)
                     .fixedSize(horizontal: false, vertical: true)
-                Text(task.track.title.lowercased())
+                Text(store.trackLabel(task.track).lowercased())
                     .font(BookType.meta(10))
                     .foregroundStyle(book.inkSub)
             }

@@ -93,13 +93,20 @@ this is tractable.
 
 ## Order
 
-1. Migration with both columns present, backfilled, old ones still readable.
-2. Backend reads the new columns, still writing both.
-3. Client moves to the new shape.
-4. A later migration drops `emails.track` and the enum type.
+1. ~~Migration with both columns present, backfilled, old ones still readable.~~
+   Done — `0008_user_defined_tracks`.
+2. ~~Backend reads the new columns, still writing both.~~ Done.
+3. ~~Client moves to the new shape.~~ Done — `TrackKey` is gone; `Track` is a
+   struct decoded from the API, and the Tracks page adds, renames and deletes.
+4. **Still to do:** a later migration drops `emails.track`, `tracks.key` and the
+   `track_key` enum type — only once nothing deployed reads them.
 
-Steps 1–2 are deployable on their own and change nothing the user sees, which
-is what makes this safe to do in pieces.
+Steps 1–3 changed nothing the user sees except the Tracks page, which is what
+made this safe to do in pieces.
+
+Before step 4, check: `emails.track` is still written on every classify (NULL
+for a track the user invented), `tracks.key` still seeds the built-ins, and
+`signals_track_key` still exists for them. All three are the rollback path.
 
 ## Watch for
 

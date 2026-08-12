@@ -21,6 +21,7 @@ struct FocusCard: View {
     var open: () -> Void
 
     @Environment(\.book) private var book
+    @Environment(AskcalStore.self) private var store
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -103,7 +104,7 @@ struct FocusCard: View {
     }
 
     private var metaLine: String {
-        var parts: [String] = [focus.task.track.title]
+        var parts: [String] = focus.task.track.isEmpty ? [] : [store.trackLabel(focus.task.track)]
         if let slot = focus.slot { parts.append(slot.time) }
         if let deadline = focus.task.deadlineLabel, !deadline.isEmpty {
             parts.append(deadline)

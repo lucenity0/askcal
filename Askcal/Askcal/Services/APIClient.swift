@@ -243,10 +243,10 @@ final class APIClient {
     }
 
     func createTask(
-        title: String, track: TrackKey,
+        title: String, track: String,
         scheduledAt: Date? = nil, dueAt: Date? = nil, scheduledFor: Date? = nil
     ) async throws -> AskcalTask {
-        var body: [String: Any?] = ["title": title, "track": track.rawValue]
+        var body: [String: Any?] = ["title": title, "track": track]
         if let scheduledAt { body["scheduledAt"] = Self.isoOut.string(from: scheduledAt) }
         if let dueAt { body["dueAt"] = Self.isoOut.string(from: dueAt) }
         if let scheduledFor { body["scheduledFor"] = Self.dayOnly.string(from: scheduledFor) }
@@ -311,23 +311,52 @@ final class APIClient {
 
     struct TrackSetting: Decodable { let id: String; let active: Bool }
 
-    private struct TracksOut: Decodable {
-        struct Item: Decodable { let id: String }
-        let tracks: [Item]
+    private struct TracksOut: Decodable { let tracks: [Track] }
+
+    /// Every track on the account, inactive ones included.
+    ///
+    /// This used to return only the active ones, which meant a track that was
+    /// off was simply absent — indistinguishable from one that did not exist,
+    /// and impossible to show a switch for in its real state.
+    func tracks() async throws -> [Track] {
+        let out: TracksOut = try await send("GET", "/api/tracks")
+        return out.tracks
     }
 
-    /// Which tracks are on. `/api/tracks` returns only the active ones, so
-    /// anything absent from this is off.
-    func activeTracks() async throws -> Set<TrackKey> {
-        let out: TracksOut = try await send("GET", "/api/tracks")
-        return Set(out.tracks.compactMap { TrackKey(rawValue: $0.id) })
+    /// Rename a track, rewrite what belongs in it, or turn it on and off.
+    ///
+    /// The description is the part that matters most: it goes into the
+    /// classifier prompt verbatim, so it is the only thing that can move mail
+    /// out of a track it never belonged in. Only what is passed is changed.
+    @discardableResult
+    func updateTrack(
+        _ slug: String,
+        label: String? = nil,
+        detail: String? = nil,
+        active: Bool? = nil,
+        autoTasks: Bool? = nil
+    ) async throws -> TrackSetting {
+        var body: [String: Any?] = [:]
+        if let label { body["label"] = label }
+        if let detail { body["description"] = detail }
+        if let active { body["active"] = active }
+        if let autoTasks { body["autoTasks"] = autoTasks }
+        return try await send("PATCH", "/api/tracks/\(slug)", body: body)
     }
 
     /// Turn a track on or off. An inactive track blocks auto-tasking for every
     /// mail filed under it, which is invisible until you know to look.
     @discardableResult
-    func setTrack(_ key: TrackKey, active: Bool) async throws -> TrackSetting {
-        try await send("PATCH", "/api/tracks/\(key.rawValue)", body: ["active": active])
+    func setTrack(_ slug: String, active: Bool) async throws -> TrackSetting {
+        try await updateTrack(slug, active: active)
+    }
+
+    func createTrack(label: String, detail: String?) async throws -> Track {
+        try await send("POST", "/api/tracks", body: ["label": label, "description": detail])
+    }
+
+    func deleteTrack(_ slug: String) async throws {
+        let _: EmptyResponse = try await send("DELETE", "/api/tracks/\(slug)")
     }
 
     // MARK: - Settings and digests

@@ -133,6 +133,7 @@ struct EmailDetail: View {
     var snooze: () -> Void
     var onClose: () -> Void
 
+    @Environment(AskcalStore.self) private var store
     @Environment(\.book) private var book
 
     var body: some View {
@@ -183,7 +184,7 @@ struct EmailDetail: View {
             ("from", email.sender ?? "unknown"),
             ("arrived", email.receivedAt.formatted(date: .abbreviated, time: .shortened)),
         ]
-        if let track = email.track { out.append(("track", track.title)) }
+        if let track = email.track { out.append(("track", store.trackLabel(track))) }
         out.append(("ranked", email.regretScore.map { "\($0) / 100" } ?? "not yet"))
         if let minutes = email.estimatedMinutes { out.append(("takes", "about \(minutes) min")) }
         return out

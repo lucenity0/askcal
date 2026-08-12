@@ -9,38 +9,85 @@
 
 import Foundation
 
-enum TrackKey: String, Codable, CaseIterable, Identifiable {
-    case career, design, uni, feed, finance
-    var id: String { rawValue }
+/// A track, as the account has it.
+///
+/// This used to be a five-case enum. It described a guess at someone's life
+/// rather than anyone's actual life — a PR review is work, but it was filed
+/// as `design`, because those were the only categories on offer. A track is a
+/// row the user names now, so nothing here can be a compile-time set.
+///
+/// `id` is the slug: stable across renames, and what every task and mail is
+/// filed under. `label` is what the user typed and can change at any time.
+struct Track: Identifiable, Codable, Equatable, Hashable {
+    let id: String
+    var label: String
+    var detail: String?      // their words for what belongs here; steers the classifier
+    var active: Bool
+    var autoTasks: Bool
+    var isBuiltin: Bool
+    var weight: Double
+    var taskCount: Int
+    var urgentCount: Int
 
-    var title: String {
-        switch self {
-        case .career: return "Career"
-        case .design: return "Design"
-        case .uni: return "Uni"
-        case .feed: return "Feed"
-        case .finance: return "Finance"
-        }
+    init(
+        id: String, label: String, detail: String? = nil,
+        active: Bool = true, autoTasks: Bool = true, isBuiltin: Bool = false,
+        weight: Double = 1.0, taskCount: Int = 0, urgentCount: Int = 0
+    ) {
+        self.id = id
+        self.label = label
+        self.detail = detail
+        self.active = active
+        self.autoTasks = autoTasks
+        self.isBuiltin = isBuiltin
+        self.weight = weight
+        self.taskCount = taskCount
+        self.urgentCount = urgentCount
     }
 
-    var icon: String {
-        switch self {
-        case .career: return "briefcase"
-        case .design: return "paintbrush.pointed"
-        case .uni: return "graduationcap"
-        case .feed: return "newspaper"
-        case .finance: return "creditcard"
-        }
+    enum CodingKeys: String, CodingKey {
+        case id, label, active, autoTasks, isBuiltin, weight, taskCount, urgentCount
+        case detail = "description"
     }
 
-    /// Kicker for the track's section header on the Tracks page
-    var sectionKicker: String {
-        switch self {
-        case .career: return "Pipeline"
-        case .design: return "Briefs"
-        case .uni: return "Deadlines"
-        case .feed: return "Reading"
-        case .finance: return "Money"
+    /// Every field but the slug tolerates absence. A track the server describes
+    /// slightly differently than we expect must not take the whole list down
+    /// with it — that is how a screen ends up empty for no visible reason.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        label = try c.decodeIfPresent(String.self, forKey: .label) ?? Track.title(for: id)
+        detail = try c.decodeIfPresent(String.self, forKey: .detail)
+        active = try c.decodeIfPresent(Bool.self, forKey: .active) ?? true
+        autoTasks = try c.decodeIfPresent(Bool.self, forKey: .autoTasks) ?? true
+        isBuiltin = try c.decodeIfPresent(Bool.self, forKey: .isBuiltin) ?? false
+        weight = try c.decodeIfPresent(Double.self, forKey: .weight) ?? 1.0
+        taskCount = try c.decodeIfPresent(Int.self, forKey: .taskCount) ?? 0
+        urgentCount = try c.decodeIfPresent(Int.self, forKey: .urgentCount) ?? 0
+    }
+
+    var icon: String { Track.icon(for: id) }
+
+    /// A readable name for a slug we have no track for — mail classified under
+    /// a track that has since been deleted, or a response that arrived before
+    /// the track list did.
+    static func title(for slug: String) -> String {
+        slug.split(separator: "-")
+            .map { $0.prefix(1).uppercased() + $0.dropFirst() }
+            .joined(separator: " ")
+    }
+
+    /// The five that ship with an account keep their symbols. Anything the user
+    /// makes gets a neutral one — guessing a symbol from a name they chose is a
+    /// worse failure than not trying.
+    static func icon(for slug: String) -> String {
+        switch slug {
+        case "career": return "briefcase"
+        case "design": return "paintbrush.pointed"
+        case "uni": return "graduationcap"
+        case "feed": return "newspaper"
+        case "finance": return "creditcard"
+        default: return "bookmark"
         }
     }
 }
@@ -64,7 +111,7 @@ enum PriorityBand {
 
 struct AskcalTask: Identifiable, Codable, Equatable {
     let id: UUID
-    var track: TrackKey
+    var track: String
     var title: String
     var meta: String?          // server-humanized deadline; client recomputes live
     var regretScore: Int
@@ -98,7 +145,7 @@ struct AskcalTask: Identifiable, Codable, Equatable {
     }
 
     init(
-        id: UUID, track: TrackKey, title: String, meta: String? = nil,
+        id: UUID, track: String, title: String, meta: String? = nil,
         regretScore: Int, estimatedHours: Double? = nil,
         status: TaskStatus = .pending, pipeline: String? = nil,
         scheduledFor: Date? = nil, scheduledAt: Date? = nil, dueAt: Date? = nil
@@ -125,7 +172,7 @@ struct AskcalTask: Identifiable, Codable, Equatable {
         // `track` is nullable in the API contract (TaskOut.track: str | None),
         // so a hard decode here would throw on a legitimate response and take
         // the whole task with it.
-        track = try c.decodeIfPresent(TrackKey.self, forKey: .track) ?? .uni
+        track = try c.decodeIfPresent(String.self, forKey: .track) ?? ""
         title = try c.decode(String.self, forKey: .title)
         meta = try c.decodeIfPresent(String.self, forKey: .meta)
         regretScore = try c.decodeIfPresent(Int.self, forKey: .regretScore) ?? 0
@@ -140,7 +187,7 @@ struct AskcalTask: Identifiable, Codable, Equatable {
 
 struct EmailItem: Identifiable, Codable, Equatable {
     let id: String             // Gmail message id
-    var track: TrackKey?
+    var track: String?
     var subject: String?
     var sender: String?
     var receivedAt: Date

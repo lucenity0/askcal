@@ -27,6 +27,7 @@ struct TimelineRow: View {
     var delete: () -> Void
 
     @Environment(\.book) private var book
+    @Environment(AskcalStore.self) private var store
 
     private var done: Bool { task.status == .done }
 
@@ -72,7 +73,9 @@ struct TimelineRow: View {
 
     /// Track, deadline and estimate — the measured facts, so mono.
     private var metaLine: String {
-        var parts: [String] = [task.track.title]
+        // Looked up rather than derived, so a renamed track reads by its new
+        // name here without every task having to be refetched.
+        var parts: [String] = task.track.isEmpty ? [] : [store.trackLabel(task.track)]
         if let deadline = task.deadlineLabel, !deadline.isEmpty { parts.append(deadline) }
         if let hours = task.estimatedHours { parts.append("\(hours.formatted())h") }
         return parts.joined(separator: " · ")

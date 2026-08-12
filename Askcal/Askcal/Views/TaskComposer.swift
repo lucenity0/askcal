@@ -38,7 +38,8 @@ struct TaskComposer: View {
     @Environment(\.book) private var book
 
     @State private var title = ""
-    @State private var track: TrackKey = .uni
+    /// The slug, not a case: which tracks exist is the account's business now.
+    @State private var track: String = ""
     @State private var scheduledAt = Date.now
     @State private var hasDeadline = false
     @State private var dueAt = Date.now.addingTimeInterval(3600)
@@ -79,8 +80,8 @@ struct TaskComposer: View {
 
             VStack(alignment: .leading, spacing: Space.md) {
                 Rubric("track")
-                ChipPicker(options: TrackKey.allCases,
-                           title: \.title,
+                ChipPicker(options: store.tracks.filter(\.active).map(\.id),
+                           title: { store.trackLabel($0) },
                            selection: $track,
                            wraps: true,
                            bordered: false)
@@ -145,6 +146,7 @@ struct TaskComposer: View {
             scheduledAt = Calendar.current.isDateInToday(day) ? .now : day
             dueAt = scheduledAt.addingTimeInterval(3600)
             focused = typed.isEmpty
+            track = store.defaultTrack?.id ?? ""
         case .edit(let task):
             title = task.title
             track = task.track
