@@ -217,44 +217,30 @@ struct SettingsPage: View {
         }
     }
 
+    /// A reminder: what it is, when it fires, and whether it does.
+    ///
+    /// The hour used to be nineteen chips wrapped over three rows, per reminder,
+    /// so two notifications took most of the screen to say "8am" and "9pm". It
+    /// is one tappable value on the same line now. A menu also scales past the
+    /// hour — if these ever take minutes, nothing about this row has to change.
     private func reminderRow(
         _ title: String, _ note: String,
         isOn: Binding<Bool>, hour: Binding<Int>, onKey: String, hourKey: String
     ) -> some View {
-        VStack(alignment: .leading, spacing: Space.md) {
-            HStack {
-                VStack(alignment: .leading, spacing: Space.hair) {
-                    Text(title)
-                        .font(BookType.entry(16))
-                        .foregroundStyle(book.ink)
-                    Text(note)
-                        .font(BookType.meta(10))
-                        .foregroundStyle(book.inkSub)
-                }
-                Spacer()
-                Toggle("", isOn: Binding(
-                    get: { isOn.wrappedValue },
-                    set: { new in
-                        // Applies immediately; the server is told afterwards
-                        // and its failure does not undo the switch.
-                        isOn.wrappedValue = new
-                        Task {
-                            await NotificationManager.refreshSchedules(
-                                dayClosed: store.dayClosed
-                            )
-                            if store.isLive { await patch([onKey: new]) }
-                        }
-                    }
-                ))
-                .labelsHidden()
-                .toggleStyle(PaperToggleStyle())
-                .accessibilityLabel(title)
+        HStack(spacing: Space.md) {
+            VStack(alignment: .leading, spacing: Space.hair) {
+                Text(title)
+                    .font(BookType.entry(16))
+                    .foregroundStyle(book.ink)
+                Text(note)
+                    .font(BookType.meta(10))
+                    .foregroundStyle(book.inkSub)
             }
+            Spacer(minLength: Space.md)
+
             if isOn.wrappedValue {
-                ChipPicker(
-                    options: Array(stride(from: 5, through: 23, by: 1)),
-                    title: { (h: Int) in String(format: "%02d:00", h) },
-                    selection: Binding(
+                Menu {
+                    Picker(title, selection: Binding(
                         get: { hour.wrappedValue },
                         set: { new in
                             hour.wrappedValue = new
@@ -265,12 +251,55 @@ struct SettingsPage: View {
                                 if store.isLive { await patch([hourKey: new]) }
                             }
                         }
-                    ),
-                    wraps: true,
-                    bordered: false
-                )
+                    )) {
+                        ForEach(5...23, id: \.self) { h in
+                            Text(Self.hourLabel(h)).tag(h)
+                        }
+                    }
+                } label: {
+                    Text(Self.hourLabel(hour.wrappedValue))
+                        .font(BookType.meta(12))
+                        .foregroundStyle(book.ink)
+                        .padding(.horizontal, Space.lg)
+                        .padding(.vertical, Space.sm)
+                        .background(
+                            Capsule().strokeBorder(book.rule, lineWidth: Stroke.hair)
+                        )
+                }
+                .accessibilityLabel("\(title) time")
+                .accessibilityValue(Self.hourLabel(hour.wrappedValue))
             }
+
+            Toggle("", isOn: Binding(
+                get: { isOn.wrappedValue },
+                set: { new in
+                    // Applies immediately; the server is told afterwards
+                    // and its failure does not undo the switch.
+                    withAnimation(.easeOut(duration: 0.2)) { isOn.wrappedValue = new }
+                    Task {
+                        await NotificationManager.refreshSchedules(
+                            dayClosed: store.dayClosed
+                        )
+                        if store.isLive { await patch([onKey: new]) }
+                    }
+                }
+            ))
+            .labelsHidden()
+            .toggleStyle(PaperToggleStyle())
+            .accessibilityLabel(title)
         }
+    }
+
+    /// Written the way the user's phone writes times, so 21:00 reads as 9 PM on
+    /// a 12-hour device instead of as something they have to convert.
+    private static func hourLabel(_ hour: Int) -> String {
+        var components = DateComponents()
+        components.hour = hour
+        components.minute = 0
+        guard let date = Calendar.current.date(from: components) else {
+            return String(format: "%02d:00", hour)
+        }
+        return date.formatted(date: .omitted, time: .shortened)
     }
 
     // MARK: - Account, appearance, reference
