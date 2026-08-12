@@ -22,6 +22,10 @@ struct DayView: View {
     @Environment(\.mono) private var mono
 
     @Binding var showComposer: Bool
+    /// Set to edit an existing entry. Distinct from `showComposer`, which opens
+    /// a blank one — tapping a task used to raise the blank sheet, offering to
+    /// create an unrelated task instead of editing the one you touched.
+    @Binding var editingTask: AskcalTask?
     var onConnect: () -> Void
 
     @State private var isAddingRoutine = false
@@ -45,22 +49,28 @@ struct DayView: View {
                     connectCard
                 }
 
+                if let error = store.actionError {
+                    actionNote(error)
+                }
+
                 if store.isBootstrapping {
-                    // The empty states are good copy and they are true only
-                    // once the fetch is done. Rendering them mid-flight told
-                    // the user their inbox was quiet before we had looked.
+                    // Only the entries wait on the fetch. Gating the whole
+                    // surface meant a slow cold start (20s timeout) showed
+                    // nothing but grey bars — and a task added in that window
+                    // was invisible even when it had saved.
                     MonoSkeletonRows(rows: 4)
                 } else {
                     if let error = store.syncError {
                         errorNote(error)
                     }
                     nowSection
-                    inboxRow
                     scheduleSection
-                    routineRow
-                    tracksRow
-                    closeRow
                 }
+
+                inboxRow
+                routineRow
+                tracksRow
+                closeRow
             }
             .padding(.horizontal, MonoSpace.gutter)
             .padding(.top, MonoSpace.md)
@@ -146,6 +156,41 @@ struct DayView: View {
         }
     }
 
+    /// A write that failed. Separate from `errorNote` because there is nothing
+    /// to retry — the change has already been rolled back, and the only useful
+    /// thing is to say what went wrong and get out of the way.
+    private func actionNote(_ message: String) -> some View {
+        HStack(alignment: .top, spacing: MonoSpace.lg) {
+            Text(message)
+                .font(MonoType.body(12))
+                .foregroundStyle(mono.inkDim)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            Button {
+                withAnimation(.easeOut(duration: 0.2)) { store.dismissActionError() }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(MonoType.icon(11))
+                    .foregroundStyle(mono.inkSub)
+                    .frame(width: 30, height: 30)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Dismiss")
+        }
+        .padding(.horizontal, MonoSpace.xl)
+        .padding(.vertical, MonoSpace.lg)
+        .background(
+            RoundedRectangle(cornerRadius: MonoRadius.block)
+                .fill(mono.recessed)
+                .overlay(
+                    RoundedRectangle(cornerRadius: MonoRadius.block)
+                        .strokeBorder(mono.rule, lineWidth: MonoStroke.hair)
+                )
+        )
+        .accessibilityElement(children: .combine)
+    }
+
     // MARK: - Now
 
     @ViewBuilder
@@ -154,7 +199,7 @@ struct DayView: View {
             VStack(alignment: .leading, spacing: MonoSpace.md) {
                 SectionLabel(focus.kicker)
                 Button {
-                    showComposer = true
+                    editingTask = focus.task
                 } label: {
                     VStack(alignment: .leading, spacing: MonoSpace.sm) {
                         Text(focus.task.title)
@@ -177,6 +222,8 @@ struct DayView: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .contextMenu { entryActions(for: focus.task) }
+                .accessibilityHint("Opens this task for editing")
             }
         } else if store.openTasks.isEmpty {
             VStack(alignment: .leading, spacing: MonoSpace.md) {
@@ -244,7 +291,12 @@ struct DayView: View {
 
     @ViewBuilder
     private var scheduleSection: some View {
-        let groups = store.groupedSchedule.filter { !$0.tasks.isEmpty }
+        // The focus task already has the card above; listing it again here made
+        // the same item appear twice on one screen.
+        let focusId = store.focus?.task.id
+        let groups = store.groupedSchedule
+            .map { (part: $0.part, tasks: $0.tasks.filter { $0.id != focusId }) }
+            .filter { !$0.tasks.isEmpty }
         if !groups.isEmpty {
             VStack(alignment: .leading, spacing: MonoSpace.lg) {
                 SectionLabel("schedule")
@@ -255,10 +307,30 @@ struct DayView: View {
                             .foregroundStyle(mono.inkSub)
                         ForEach(group.tasks) { task in
                             TaskRow(task: task) { store.toggleDone(task) }
+                                .contentShape(Rectangle())
+                                .onTapGesture { editingTask = task }
+                                .contextMenu { entryActions(for: task) }
                         }
                     }
                 }
             }
+        }
+    }
+
+    /// Edit and delete, on long-press. These rows aren't in a `List`, so
+    /// `.swipeActions` isn't available — a context menu is the affordance that
+    /// works in a plain stack.
+    @ViewBuilder
+    private func entryActions(for task: AskcalTask) -> some View {
+        Button {
+            editingTask = task
+        } label: {
+            Label("Edit", systemImage: "pencil")
+        }
+        Button(role: .destructive) {
+            withAnimation(.easeOut(duration: 0.2)) { store.deleteTask(task) }
+        } label: {
+            Label("Delete", systemImage: "trash")
         }
     }
 }

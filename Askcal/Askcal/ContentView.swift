@@ -23,6 +23,7 @@ struct ContentView: View {
     @AppStorage("hasLaunchedBefore") private var hasLaunchedBefore = false
 
     @State private var showComposer = false
+    @State private var editingTask: AskcalTask?
     @State private var showGreeting = false
     @State private var didLaunch = false
 
@@ -32,8 +33,12 @@ struct ContentView: View {
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             NavigationStack {
-                DayView(showComposer: $showComposer, onConnect: connect)
-                    .toolbar(.hidden, for: .navigationBar)
+                DayView(
+                    showComposer: $showComposer,
+                    editingTask: $editingTask,
+                    onConnect: connect
+                )
+                .toolbar(.hidden, for: .navigationBar)
             }
             .tint(mono.ink)
 
@@ -56,6 +61,10 @@ struct ContentView: View {
             TaskComposerSheet()
                 .environment(\.mono, mono)
         }
+        .sheet(item: $editingTask) { task in
+            TaskComposerSheet(editing: task)
+                .environment(\.mono, mono)
+        }
         .environment(\.mono, mono)
         .preferredColorScheme(mode.polarity)
         .animation(.easeInOut(duration: 0.25), value: themeRaw)
@@ -70,6 +79,10 @@ struct ContentView: View {
                     hasLaunchedBefore = true
                 }
                 await store.bootstrap()
+                // Dropped in the one-day-surface restructure, so reminders
+                // stopped being rescheduled on launch and only refreshed when
+                // the day was closed or Settings was opened.
+                await NotificationManager.refreshSchedules(dayClosed: store.dayClosed)
             }
         }
     }

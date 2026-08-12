@@ -122,7 +122,10 @@ struct AskcalTask: Identifiable, Codable, Equatable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
-        track = try c.decode(TrackKey.self, forKey: .track)
+        // `track` is nullable in the API contract (TaskOut.track: str | None),
+        // so a hard decode here would throw on a legitimate response and take
+        // the whole task with it.
+        track = try c.decodeIfPresent(TrackKey.self, forKey: .track) ?? .uni
         title = try c.decode(String.self, forKey: .title)
         meta = try c.decodeIfPresent(String.self, forKey: .meta)
         regretScore = try c.decodeIfPresent(Int.self, forKey: .regretScore) ?? 0

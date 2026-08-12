@@ -22,6 +22,7 @@ struct TaskComposerSheet: View {
     @State private var scheduledAt = Date.now
     @State private var hasDeadline = false
     @State private var dueAt = Date.now.addingTimeInterval(3600)
+    @State private var confirmDelete = false
     @FocusState private var focused: Bool
 
     private var isEditing: Bool { editing != nil }
@@ -87,6 +88,11 @@ struct TaskComposerSheet: View {
                     .disabled(!canSave)
                     .opacity(canSave ? 1 : 0.4)
 
+                if isEditing {
+                    Button("Delete task", role: .destructive) { confirmDelete = true }
+                        .buttonStyle(PillButtonStyle(filled: false, fullWidth: true))
+                }
+
                 Spacer(minLength: 0)
             }
             .padding(22)
@@ -95,6 +101,19 @@ struct TaskComposerSheet: View {
         .presentationDragIndicator(.visible)
         .presentationBackground(mono.bg)
         .onAppear(perform: setup)
+        .confirmationDialog(
+            "Delete this task?",
+            isPresented: $confirmDelete,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                if let editing { store.deleteTask(editing) }
+                dismiss()
+            }
+            Button("Keep it", role: .cancel) {}
+        } message: {
+            Text("This can't be undone.")
+        }
     }
 
     private var trackPicker: some View {

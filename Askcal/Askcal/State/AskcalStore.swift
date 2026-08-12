@@ -10,6 +10,13 @@
 import Foundation
 import Observation
 
+/// Mirrors `QUICK_ADD_REGRET` in askcal-api's tasks router: a manual add starts
+/// low, because the classifier only scores email-born work. Kept in step so an
+/// optimistic row doesn't visibly re-rank the instant the server replies.
+enum QuickAdd {
+    static let regretScore = 20
+}
+
 enum DayPart: String, CaseIterable {
     case morning = "Morning"
     case afternoon = "Afternoon"
@@ -33,7 +40,16 @@ final class AskcalStore {
     /// True while the cold-launch fetch is in flight.
     var isBootstrapping = false
     var accountEmail: String?
+    /// A *read* that failed — the last refresh couldn't complete.
     var syncError: String?
+    /// A *write* that failed, in the user's words.
+    ///
+    /// Every mutating call used to be wrapped in `try?`, so a create that hit a
+    /// network error, an expired token or a decode mismatch all did the same
+    /// thing: nothing, silently. The task never appeared and the app never said
+    /// why. Writes are optimistic now — the row shows immediately and rolls back
+    /// here if the server refuses it.
+    var actionError: String?
 
     /// Idle companion for the Up Next card — one pick per app open.
     let companion: CompanionMotif = CompanionMotif.allCases.randomElement() ?? .cat
@@ -266,6 +282,7 @@ final class AskcalStore {
         isLive = false
         accountEmail = nil
         syncError = nil
+        actionError = nil
         tasks = []
         emails = []
         dayPlan = []
@@ -351,53 +368,118 @@ final class AskcalStore {
     /// and the day plan refresh along with the inbox.
     func syncInbox() async {
         guard isLive else { return }
-        try? await APIClient.shared.triggerSync()
+        do {
+            try await APIClient.shared.triggerSync()
+        } catch {
+            // a pull-to-refresh that quietly does nothing is worse than one
+            // that says the sync didn't start
+            report(error)
+            return
+        }
         try? await Task.sleep(for: .seconds(6))
         await fetchAll()
     }
 
     // MARK: - Actions
 
+    /// Put a failed write into words the user can act on. `APIError` already
+    /// carries a decent message for every case — it was simply never read.
+    private func report(_ error: Error) {
+        actionError = (error as? LocalizedError)?.errorDescription
+            ?? "that didn't save. try again?"
+    }
+
+    func dismissActionError() { actionError = nil }
+
     func toggleDone(_ task: AskcalTask) {
         guard let idx = tasks.firstIndex(where: { $0.id == task.id }) else { return }
-        tasks[idx].status = tasks[idx].status == .done ? .pending : .done
+        let previous = tasks[idx].status
+        tasks[idx].status = previous == .done ? .pending : .done
         if tasks[idx].status == .done { Haptics.tick() }
-        pushStatus(task.id, tasks[idx].status)
+        pushStatus(task.id, tasks[idx].status, revertingTo: previous)
         saveLocal()
     }
 
     func rescheduleAllToToday() {
         for idx in tasks.indices where tasks[idx].status == .carried {
             tasks[idx].status = .pending
-            pushStatus(tasks[idx].id, .pending)
+            pushStatus(tasks[idx].id, .pending, revertingTo: .carried)
         }
         Haptics.medium()
     }
 
-    private func pushStatus(_ id: UUID, _ status: TaskStatus) {
+    private func pushStatus(_ id: UUID, _ status: TaskStatus, revertingTo previous: TaskStatus) {
         guard isLive else { return }
-        Task { _ = try? await APIClient.shared.setTaskStatus(id, status) }
+        Task {
+            do {
+                _ = try await APIClient.shared.setTaskStatus(id, status)
+                actionError = nil
+            } catch {
+                // put the tick back — a checkbox that stays checked after the
+                // server refused it is a lie the next refresh silently undoes
+                if let idx = tasks.firstIndex(where: { $0.id == id }) {
+                    tasks[idx].status = previous
+                }
+                report(error)
+            }
+        }
+    }
+
+    /// Remove a task outright — the undo for a wrong auto-tasked item or a
+    /// mistyped quick-add. Without it the only way to clear one was to mark it
+    /// done, so every mistake accumulated permanently.
+    func deleteTask(_ task: AskcalTask) {
+        guard let idx = tasks.firstIndex(where: { $0.id == task.id }) else { return }
+        let removed = tasks.remove(at: idx)
+        Haptics.medium()
+        guard isLive else { saveLocal(); return }
+        Task {
+            do {
+                try await APIClient.shared.deleteTask(removed.id)
+                actionError = nil
+            } catch {
+                tasks.insert(removed, at: min(idx, tasks.count))
+                report(error)
+            }
+        }
     }
 
     func handleEmail(_ email: EmailItem) {
-        emails.removeAll { $0.id == email.id }
+        guard let idx = emails.firstIndex(where: { $0.id == email.id }) else { return }
+        let removed = emails.remove(at: idx)
         Haptics.tick()
         guard isLive else { return }
         Task {
-            if let task = try? await APIClient.shared.handleEmail(email.id) {
-                tasks.append(task)
+            do {
+                let task = try await APIClient.shared.handleEmail(removed.id)
+                if isToday(task.scheduledFor) { tasks.append(task) }
+                actionError = nil
+            } catch {
+                emails.insert(removed, at: min(idx, emails.count))
+                report(error)
             }
         }
     }
 
     func snoozeEmail(_ email: EmailItem) {
-        emails.removeAll { $0.id == email.id }
+        guard let idx = emails.firstIndex(where: { $0.id == email.id }) else { return }
+        let removed = emails.remove(at: idx)
         Haptics.tick()
-        if isLive {
-            Task { try? await APIClient.shared.snoozeEmail(email.id) }
+        guard isLive else { return }
+        Task {
+            do {
+                try await APIClient.shared.snoozeEmail(removed.id)
+                actionError = nil
+            } catch {
+                emails.insert(removed, at: min(idx, emails.count))
+                report(error)
+            }
         }
     }
 
+    /// Create a task. The row appears immediately and is reconciled with the
+    /// server's copy when it lands — a create that only shows after a round trip
+    /// reads as a failure on a slow connection, which is how this looked.
     func quickAdd(
         title: String, track: TrackKey = .uni,
         scheduledAt: Date? = nil, dueAt: Date? = nil, scheduledFor: Date? = nil
@@ -405,29 +487,45 @@ final class AskcalStore {
         let trimmed = title.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
         Haptics.tick()
-        if isLive {
-            Task {
-                if let task = try? await APIClient.shared.createTask(
+
+        let optimistic = AskcalTask(
+            id: UUID(), track: track, title: trimmed, meta: nil,
+            regretScore: QuickAdd.regretScore, estimatedHours: nil,
+            scheduledFor: scheduledFor ?? scheduledAt,
+            scheduledAt: scheduledAt, dueAt: dueAt
+        )
+        if isToday(optimistic.scheduledFor) { tasks.append(optimistic) }
+
+        guard isLive else { saveLocal(); return }
+
+        Task {
+            do {
+                let saved = try await APIClient.shared.createTask(
                     title: trimmed, track: track,
                     scheduledAt: scheduledAt, dueAt: dueAt, scheduledFor: scheduledFor
-                ) {
-                    // only surface it in Today if it belongs to today; either
-                    // way refresh the plan so a pinned time lands on the timeline
-                    if isToday(task.scheduledFor) { tasks.append(task) }
-                    if let today = try? await APIClient.shared.today() {
-                        dayPlan = today.dayPlan
-                    }
+                )
+                // swap the placeholder for the server's row: real id, real score
+                replace(placeholder: optimistic.id, with: saved)
+                actionError = nil
+                // refresh the plan so a pinned time lands on the timeline
+                if let today = try? await APIClient.shared.today() {
+                    dayPlan = today.dayPlan
                 }
+            } catch {
+                tasks.removeAll { $0.id == optimistic.id }
+                report(error)
             }
-        } else {
-            let day = scheduledFor ?? scheduledAt
-            let task = AskcalTask(
-                id: UUID(), track: track, title: trimmed, meta: nil,
-                regretScore: 20, estimatedHours: nil,
-                scheduledFor: day, scheduledAt: scheduledAt, dueAt: dueAt
-            )
-            if isToday(task.scheduledFor) { tasks.append(task) }
-            saveLocal()
+        }
+    }
+
+    /// Reconcile an optimistic row with the server's version of it, honouring
+    /// the day the server actually filed it under.
+    private func replace(placeholder id: UUID, with saved: AskcalTask) {
+        let belongsHere = isToday(saved.scheduledFor)
+        if let idx = tasks.firstIndex(where: { $0.id == id }) {
+            if belongsHere { tasks[idx] = saved } else { tasks.remove(at: idx) }
+        } else if belongsHere {
+            tasks.append(saved)
         }
     }
 
@@ -435,25 +533,36 @@ final class AskcalStore {
     func updateTaskSchedule(
         _ task: AskcalTask, scheduledAt: Date?, dueAt: Date?, scheduledFor: Date?
     ) {
+        guard let idx = tasks.firstIndex(where: { $0.id == task.id }) else { return }
+        let previous = tasks[idx]
         Haptics.tick()
-        if isLive {
-            Task {
-                guard let updated = try? await APIClient.shared.updateTaskSchedule(
-                    task.id, scheduledAt: scheduledAt, dueAt: dueAt, scheduledFor: scheduledFor
-                ) else { return }
-                if let idx = tasks.firstIndex(where: { $0.id == updated.id }) {
-                    if isToday(updated.scheduledFor) { tasks[idx] = updated }
-                    else { tasks.remove(at: idx) }  // moved off today → leaves the list
-                }
+
+        var moved = previous
+        moved.scheduledAt = scheduledAt
+        moved.dueAt = dueAt
+        moved.scheduledFor = scheduledFor ?? scheduledAt
+        // moved off today → leaves the list
+        if isToday(moved.scheduledFor) { tasks[idx] = moved } else { tasks.remove(at: idx) }
+
+        guard isLive else { saveLocal(); return }
+
+        Task {
+            do {
+                let updated = try await APIClient.shared.updateTaskSchedule(
+                    previous.id, scheduledAt: scheduledAt,
+                    dueAt: dueAt, scheduledFor: scheduledFor
+                )
+                replace(placeholder: previous.id, with: updated)
+                actionError = nil
                 if let today = try? await APIClient.shared.today() { dayPlan = today.dayPlan }
+            } catch {
+                if let i = tasks.firstIndex(where: { $0.id == previous.id }) {
+                    tasks[i] = previous
+                } else {
+                    tasks.insert(previous, at: min(idx, tasks.count))
+                }
+                report(error)
             }
-        } else if let idx = tasks.firstIndex(where: { $0.id == task.id }) {
-            var t = task
-            t.scheduledAt = scheduledAt
-            t.dueAt = dueAt
-            t.scheduledFor = scheduledFor ?? scheduledAt
-            if isToday(t.scheduledFor) { tasks[idx] = t } else { tasks.remove(at: idx) }
-            saveLocal()
         }
     }
 
@@ -473,27 +582,47 @@ final class AskcalStore {
         let trimmed = title.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
         Haptics.tick()
-        if isLive {
-            Task {
-                if let routine = try? await APIClient.shared.createRoutine(title: trimmed) {
-                    routines.append(routine)
+
+        let optimistic = Routine(id: UUID(), title: trimmed, cadence: "daily")
+        routines.append(optimistic)
+
+        guard isLive else { saveLocal(); return }
+
+        Task {
+            do {
+                let saved = try await APIClient.shared.createRoutine(title: trimmed)
+                if let idx = routines.firstIndex(where: { $0.id == optimistic.id }) {
+                    routines[idx] = saved
                 }
+                actionError = nil
+            } catch {
+                routines.removeAll { $0.id == optimistic.id }
+                report(error)
             }
-        } else {
-            routines.append(Routine(id: UUID(), title: trimmed, cadence: "daily"))
-            saveLocal()
         }
     }
 
     func deleteRoutine(_ routine: Routine) {
-        routines.removeAll { $0.id == routine.id }
-        routinesDone.remove(routine.id)
+        guard let idx = routines.firstIndex(where: { $0.id == routine.id }) else { return }
+        let removed = routines.remove(at: idx)
+        let wasDone = routinesDone.remove(removed.id) != nil
         saveRoutinesDone()
         Haptics.tick()
-        if isLive {
-            Task { try? await APIClient.shared.deleteRoutine(routine.id) }
-        } else {
-            saveLocal()
+
+        guard isLive else { saveLocal(); return }
+
+        Task {
+            do {
+                try await APIClient.shared.deleteRoutine(removed.id)
+                actionError = nil
+            } catch {
+                routines.insert(removed, at: min(idx, routines.count))
+                if wasDone {
+                    routinesDone.insert(removed.id)
+                    saveRoutinesDone()
+                }
+                report(error)
+            }
         }
     }
 
@@ -501,11 +630,12 @@ final class AskcalStore {
 
     func review(_ task: AskcalTask, done: Bool) {
         guard let idx = tasks.firstIndex(where: { $0.id == task.id }) else { return }
+        let previous = tasks[idx].status
         tasks[idx].status = done ? .done : .carried
         Haptics.tick()
         // review marks must survive a relaunch even if the day is never
         // formally closed — push each one, don't wait for closing time
-        pushStatus(task.id, tasks[idx].status)
+        pushStatus(task.id, tasks[idx].status, revertingTo: previous)
         saveLocal()
     }
 
@@ -529,9 +659,17 @@ final class AskcalStore {
             let pulled = tasks.filter { $0.status == .done }.map(\.id)
             let remaining = tasks.filter { $0.status == .carried }.map(\.id)
             Task {
-                _ = try? await APIClient.shared.closingTime(
-                    date: today, pulled: pulled, remaining: remaining
-                )
+                do {
+                    _ = try await APIClient.shared.closingTime(
+                        date: today, pulled: pulled, remaining: remaining
+                    )
+                    actionError = nil
+                } catch {
+                    // the local close still stands; the carry-forward just
+                    // hasn't reached the server, and saying so beats a day that
+                    // silently reopens tomorrow
+                    report(error)
+                }
                 await refreshAll()
             }
         }

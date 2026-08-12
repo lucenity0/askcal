@@ -23,6 +23,60 @@ enum APIError: LocalizedError {
     }
 }
 
+/// Date formatting for the wire, deliberately outside `APIClient`.
+///
+/// `JSONDecoder`'s custom strategy runs wherever decoding happens, not on the
+/// main actor, so main-actor-isolated formatters can't be reached from it —
+/// and a `DateFormatter` shared across threads is a genuine data race, not just
+/// a compiler complaint. These are configured once here and only ever read
+/// from, which is safe; `nonisolated(unsafe)` states that promise explicitly
+/// rather than leaving the decode path warning-shaped.
+enum APIDates {
+    /// Date-only ("2026-07-08"), interpreted at local midnight — used for
+    /// `scheduledFor`, which the API sends without a time component.
+    nonisolated(unsafe) static let dayOnly: DateFormatter = {
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .iso8601)
+        // en_US_POSIX or the format string is at the mercy of the device's
+        // regional calendar: under a Buddhist or Japanese locale "yyyy" is an
+        // era year, so this both parses and emits the wrong date entirely.
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        f.timeZone = .current
+        return f
+    }()
+
+    /// ISO-8601 for datetimes we send back (pinned time, deadline).
+    nonisolated(unsafe) static let isoOut: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+
+    nonisolated(unsafe) private static let isoFractional: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+
+    nonisolated(unsafe) private static let iso = ISO8601DateFormatter()
+
+    static let decoder: JSONDecoder = {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { d in
+            let raw = try d.singleValueContainer().decode(String.self)
+            if let date = isoFractional.date(from: raw) ?? iso.date(from: raw)
+                ?? dayOnly.date(from: raw) {
+                return date
+            }
+            throw DecodingError.dataCorrupted(.init(
+                codingPath: d.codingPath, debugDescription: "bad date: \(raw)"
+            ))
+        }
+        return decoder
+    }()
+}
+
 @MainActor
 final class APIClient {
     static let shared = APIClient()
@@ -81,40 +135,11 @@ final class APIClient {
 
     // MARK: - Core request
 
-    /// Date-only ("2026-07-08"), interpreted at local midnight — used for
-    /// `scheduledFor`, which the API sends without a time component.
-    private static let dayOnly: DateFormatter = {
-        let f = DateFormatter()
-        f.calendar = Calendar(identifier: .iso8601)
-        f.dateFormat = "yyyy-MM-dd"
-        f.timeZone = .current
-        return f
-    }()
-
-    private static let decoder: JSONDecoder = {
-        let decoder = JSONDecoder()
-        let isoFractional = ISO8601DateFormatter()
-        isoFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let iso = ISO8601DateFormatter()
-        decoder.dateDecodingStrategy = .custom { d in
-            let raw = try d.singleValueContainer().decode(String.self)
-            if let date = isoFractional.date(from: raw) ?? iso.date(from: raw)
-                ?? dayOnly.date(from: raw) {
-                return date
-            }
-            throw DecodingError.dataCorrupted(.init(
-                codingPath: d.codingPath, debugDescription: "bad date: \(raw)"
-            ))
-        }
-        return decoder
-    }()
+    private static let decoder = APIDates.decoder
+    private static var dayOnly: DateFormatter { APIDates.dayOnly }
 
     /// ISO-8601 for datetimes we send back (pinned time, deadline).
-    static let isoOut: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime]
-        return f
-    }()
+    static var isoOut: ISO8601DateFormatter { APIDates.isoOut }
 
     private func send<T: Decodable>(
         _ method: String,
@@ -221,6 +246,15 @@ final class APIClient {
         if let dueAt { body["dueAt"] = Self.isoOut.string(from: dueAt) }
         if let scheduledFor { body["scheduledFor"] = Self.dayOnly.string(from: scheduledFor) }
         return try await send("POST", "/api/tasks", body: body)
+    }
+
+    /// Remove a task outright. The undo for a wrong auto-tasked item or a
+    /// mistyped quick-add — without it the only way to clear one was to mark it
+    /// done, so every mistake accumulated permanently.
+    func deleteTask(_ id: UUID) async throws {
+        let _: EmptyResponse = try await send(
+            "DELETE", "/api/tasks/\(id.uuidString.lowercased())"
+        )
     }
 
     func setTaskStatus(_ id: UUID, _ status: TaskStatus) async throws -> AskcalTask {
