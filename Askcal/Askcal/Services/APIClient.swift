@@ -359,6 +359,47 @@ final class APIClient {
         let _: EmptyResponse = try await send("DELETE", "/api/tracks/\(slug)")
     }
 
+    // MARK: - Connected mailboxes
+
+    private struct AccountsOut: Decodable { let accounts: [MailAccount] }
+    private struct LinkOut: Decodable { let url: String }
+
+    func accounts() async throws -> [MailAccount] {
+        let out: AccountsOut = try await send("GET", "/api/accounts")
+        return out.accounts
+    }
+
+    /// Where to send the user to connect another mailbox.
+    ///
+    /// Authenticated, and returns a URL rather than redirecting, so this
+    /// client's access token never travels in a browser redirect — who the new
+    /// mailbox attaches to rides in state the server signed and can verify.
+    func accountLinkURL(scheme: String = "askcal") async throws -> URL {
+        let out: LinkOut = try await send(
+            "POST", "/api/accounts/link",
+            query: [.init(name: "scheme", value: scheme)]
+        )
+        guard let url = URL(string: out.url) else { throw APIError.badURL }
+        return url
+    }
+
+    @discardableResult
+    func updateAccount(
+        _ id: UUID, active: Bool? = nil, defaultTrack: String?? = nil
+    ) async throws -> MailAccount {
+        var body: [String: Any?] = [:]
+        if let active { body["active"] = active }
+        // Double optional on purpose: `.some(nil)` clears the leaning, `nil`
+        // leaves it alone. Collapsing them would make "no usual track" and
+        // "don't touch it" the same request.
+        if let defaultTrack { body["defaultTrack"] = defaultTrack }
+        return try await send("PATCH", "/api/accounts/\(id.uuidString)", body: body)
+    }
+
+    func unlinkAccount(_ id: UUID) async throws {
+        let _: EmptyResponse = try await send("DELETE", "/api/accounts/\(id.uuidString)")
+    }
+
     // MARK: - Settings and digests
 
     func settings() async throws -> AppSettings {

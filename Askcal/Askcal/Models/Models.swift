@@ -268,6 +268,25 @@ func minutesSinceMidnight(_ hhmm: String) -> Int? {
 // MARK: - Settings
 
 /// What the settings screen reads. Split the way the backend splits it: the
+/// One connected mailbox.
+///
+/// There used to be exactly one, held on the user, so college mail and personal
+/// mail could not both reach Askcal. `defaultTrack` is what mail here usually
+/// is — a leaning handed to the classifier, never a rule, since a bill arriving
+/// at a college address is still about money.
+struct MailAccount: Identifiable, Codable, Equatable {
+    let id: UUID
+    var email: String
+    var isPrimary: Bool
+    var active: Bool
+    /// Whether there is still a usable token. An account outlives its access
+    /// when Google revokes it, and saying so is the only way that stops looking
+    /// like an inbox that simply never delivers.
+    var connected: Bool
+    var defaultTrack: String?
+    var lastSyncedAt: Date?
+}
+
 /// classifier half is reported and cannot be set from here, because the
 /// credential behind it lives in the environment on the server and a settings
 /// screen able to write it would mean a subscription token travelling from a

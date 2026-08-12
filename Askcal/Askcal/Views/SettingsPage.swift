@@ -38,6 +38,8 @@ struct SettingsPage: View {
     @AppStorage("eveningHour") private var eveningHour = 21
 
     @State private var settings: AppSettings?
+    @State private var accounts: [MailAccount] = []
+    @State private var linking = false
     @State private var loadError: String?
     @State private var nameDraft = ""
     @State private var savingName = false
@@ -59,6 +61,7 @@ struct SettingsPage: View {
 
                 if store.isLive { classifierBlock }
                 accountBlock
+                mailboxBlock
                 appearanceBlock
                 if store.isLive {
                     syncBlock
@@ -289,6 +292,97 @@ struct SettingsPage: View {
         }
     }
 
+    /// Every mailbox Askcal reads, and what each one usually carries.
+    ///
+    /// There used to be one, and it was the account you signed in with, so a
+    /// college address and a personal one could not both be here. The track
+    /// picker is the useful part: it tells the classifier what mail at that
+    /// address normally is, which is most of what makes a second inbox worth
+    /// connecting at all.
+    @ViewBuilder
+    private var mailboxBlock: some View {
+        if store.isLive {
+            VStack(alignment: .leading, spacing: Space.lg) {
+                Rubric("mailboxes")
+
+                ForEach(accounts) { account in
+                    mailboxRow(account)
+                }
+
+                Button(linking ? "opening…" : "Connect another mailbox") { linkAnother() }
+                    .buttonStyle(PillButtonStyle(filled: false))
+                    .disabled(linking)
+
+                PageRule()
+            }
+            .task { await loadAccounts() }
+        }
+    }
+
+    @ViewBuilder
+    private func mailboxRow(_ account: MailAccount) -> some View {
+        VStack(alignment: .leading, spacing: Space.md) {
+            HStack(spacing: Space.md) {
+                VStack(alignment: .leading, spacing: Space.hair) {
+                    Text(account.email)
+                        .font(BookType.body(15))
+                        .foregroundStyle(book.ink)
+                    Text(mailboxStatus(account))
+                        .font(BookType.meta(10))
+                        .foregroundStyle(book.inkSub)
+                }
+                Spacer()
+                Toggle("", isOn: Binding(
+                    get: { account.active },
+                    set: { on in setAccount(account, active: on) }
+                ))
+                .labelsHidden()
+                .toggleStyle(PaperToggleStyle())
+                .accessibilityLabel("Read \(account.email)")
+            }
+
+            if !store.tracks.isEmpty {
+                VStack(alignment: .leading, spacing: Space.sm) {
+                    Text("mail here is usually")
+                        .font(BookType.meta(10))
+                        .foregroundStyle(book.inkSub)
+                    // "anything" included deliberately: an inbox with no usual
+                    // track is an ordinary answer, and leaving it out would
+                    // force a leaning onto every account whether or not one is
+                    // true.
+                    ChipPicker(
+                        options: [""] + store.tracks.map(\.id),
+                        title: { $0.isEmpty ? "anything" : store.trackLabel($0) },
+                        selection: Binding(
+                            get: { account.defaultTrack ?? "" },
+                            set: { slug in
+                                setAccount(account, defaultTrack: slug.isEmpty ? nil : slug)
+                            }
+                        ),
+                        wraps: true,
+                        bordered: false
+                    )
+                }
+            }
+
+            // The sign-in account cannot be unlinked — it owns the calendar and
+            // the session. Pausing it is the way to stop it being read.
+            if !account.isPrimary {
+                Button("Unlink") { unlink(account) }
+                    .font(BookType.meta(11))
+                    .foregroundStyle(book.inkSub)
+            }
+        }
+        .padding(.vertical, Space.md)
+        .ruled()
+    }
+
+    private func mailboxStatus(_ account: MailAccount) -> String {
+        if !account.connected { return "needs reconnecting" }
+        if account.isPrimary { return account.active ? "signed in" : "signed in · paused" }
+        return account.active ? "connected" : "paused"
+    }
+
     private var nameField: some View {
         VStack(alignment: .leading, spacing: Space.md) {
             Text("What mornings call you")
@@ -443,6 +537,85 @@ struct SettingsPage: View {
             }
             savingName = false
             Haptics.tick()
+        }
+    }
+
+    private func loadAccounts() async {
+        guard store.isLive else { return }
+        accounts = (try? await APIClient.shared.accounts()) ?? accounts
+    }
+
+    /// Connect another mailbox.
+    ///
+    /// The URL is asked for over the authenticated API rather than built here,
+    /// so this app's access token never travels in a browser redirect. The
+    /// callback carries no tokens at all — the session already exists, and
+    /// minting a second one for a mailbox link would be a way to turn a link
+    /// into a sign-in.
+    private func linkAnother() {
+        linking = true
+        Task {
+            defer { linking = false }
+            do {
+                let url = try await APIClient.shared.accountLinkURL()
+                _ = try await webAuth.authenticate(
+                    using: url, callbackURLScheme: "askcal",
+                    preferredBrowserSession: .shared
+                )
+                await loadAccounts()
+                // A new mailbox has mail in it already; pull before the user
+                // goes looking for it.
+                await store.refreshAll()
+            } catch {
+                // A cancelled consent screen throws too, and that is not a
+                // failure worth putting on screen.
+                if !(error is ASWebAuthenticationSessionError) {
+                    loadError = (error as? LocalizedError)?.errorDescription
+                        ?? "couldn't connect that mailbox."
+                }
+            }
+        }
+    }
+
+    private func setAccount(
+        _ account: MailAccount, active: Bool? = nil, defaultTrack: String?? = nil
+    ) {
+        guard let index = accounts.firstIndex(where: { $0.id == account.id }) else { return }
+        let previous = accounts[index]
+        if let active { accounts[index].active = active }
+        if let defaultTrack { accounts[index].defaultTrack = defaultTrack }
+
+        Task {
+            do {
+                let saved = try await APIClient.shared.updateAccount(
+                    account.id, active: active, defaultTrack: defaultTrack
+                )
+                if let i = accounts.firstIndex(where: { $0.id == saved.id }) {
+                    accounts[i] = saved
+                }
+            } catch {
+                if let i = accounts.firstIndex(where: { $0.id == previous.id }) {
+                    accounts[i] = previous
+                }
+                loadError = (error as? LocalizedError)?.errorDescription
+                    ?? "couldn't save that."
+            }
+        }
+    }
+
+    private func unlink(_ account: MailAccount) {
+        guard let index = accounts.firstIndex(where: { $0.id == account.id }) else { return }
+        let removed = accounts.remove(at: index)
+        Task {
+            do {
+                try await APIClient.shared.unlinkAccount(removed.id)
+                // Its mail is gone server-side; its tasks are not.
+                await store.refreshAll()
+            } catch {
+                accounts.insert(removed, at: min(index, accounts.count))
+                loadError = (error as? LocalizedError)?.errorDescription
+                    ?? "couldn't unlink that."
+            }
         }
     }
 
