@@ -117,27 +117,13 @@ struct TaskComposerSheet: View {
     }
 
     private var trackPicker: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Track")
-                .font(BookType.meta(10))
-                .foregroundStyle(book.inkSub)
-            // wraps to two rows on narrow widths / large type
-            FlowRow(spacing: 8) {
-                ForEach(TrackKey.allCases) { key in
-                    Button { track = key } label: {
-                        Text(key.title)
-                            .font(BookType.meta(11))
-                            .lineLimit(1)
-                            .foregroundStyle(track == key ? book.fillText : book.inkSub)
-                            .padding(.horizontal, 13)
-                            .padding(.vertical, 8)
-                            .background(Capsule().fill(track == key ? book.fill : .clear))
-                            .overlay(Capsule().strokeBorder(
-                                track == key ? .clear : book.rule, lineWidth: 1))
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
+        VStack(alignment: .leading, spacing: Space.md) {
+            Rubric("Track")
+            ChipPicker(options: TrackKey.allCases,
+                       title: \.title,
+                       selection: $track,
+                       wraps: true,       // five tracks don't fit one line
+                       bordered: false)
         }
     }
 
@@ -180,34 +166,3 @@ struct TaskComposerSheet: View {
     }
 }
 
-/// Minimal wrapping HStack so the 5 track chips never clip on small widths.
-struct FlowRow: Layout {
-    var spacing: CGFloat = 8
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let maxWidth = proposal.width ?? .infinity
-        var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0
-        for view in subviews {
-            let size = view.sizeThatFits(.unspecified)
-            if x + size.width > maxWidth, x > 0 {
-                x = 0; y += rowHeight + spacing; rowHeight = 0
-            }
-            x += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
-        }
-        return CGSize(width: maxWidth == .infinity ? x : maxWidth, height: y + rowHeight)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var x = bounds.minX, y = bounds.minY, rowHeight: CGFloat = 0
-        for view in subviews {
-            let size = view.sizeThatFits(.unspecified)
-            if x + size.width > bounds.maxX, x > bounds.minX {
-                x = bounds.minX; y += rowHeight + spacing; rowHeight = 0
-            }
-            view.place(at: CGPoint(x: x, y: y), proposal: .unspecified)
-            x += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
-        }
-    }
-}

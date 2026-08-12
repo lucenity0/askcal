@@ -117,25 +117,9 @@ struct CalendarView: View {
     // MARK: - Mode switcher
 
     private var modeSwitcher: some View {
-        HStack(spacing: 0) {
-            ForEach(CalViewMode.allCases, id: \.rawValue) { m in
-                Button {
-                    withAnimation(.easeOut(duration: 0.2)) { mode = m }
-                } label: {
-                    Text(m.rawValue)
-                        .font(BookType.meta(10))
-                        .lineLimit(1)
-                        .fixedSize() // "Month" must never wrap to "Mont/h"
-                        .foregroundStyle(mode == m ? book.fillText : book.inkSub)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Capsule().fill(mode == m ? book.fill : .clear))
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(2)
-        .background(Capsule().strokeBorder(book.rule, lineWidth: 1))
+        ChipPicker(options: CalViewMode.allCases,
+                   title: \.rawValue,
+                   selection: $mode)
     }
 
     private var legend: some View {

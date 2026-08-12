@@ -32,6 +32,18 @@ struct MoreView: View {
 
     private enum SaveStatus { case idle, success, failure }
 
+    /// The stored value is a raw string that may still be one of the older
+    /// names, so the picker works in `ThemeMode` and writes back the current
+    /// spelling rather than binding straight to `themeRaw`.
+    private var themeSelection: Binding<ThemeMode> {
+        Binding(
+            get: { ThemeMode.stored(themeRaw) },
+            set: { newValue in
+                withAnimation(.easeInOut(duration: 0.25)) { themeRaw = newValue.rawValue }
+            }
+        )
+    }
+
     var body: some View {
         NotebookPage {
             PageTitle(kicker: "Settings", title: "More")
@@ -44,27 +56,9 @@ struct MoreView: View {
                         .font(BookType.entry())
                         .foregroundStyle(book.ink)
                     Spacer()
-                    HStack(spacing: 0) {
-                        ForEach(ThemeMode.allCases, id: \.rawValue) { mode in
-                            Button {
-                                withAnimation(.easeInOut(duration: 0.25)) {
-                                    themeRaw = mode.rawValue
-                                }
-                            } label: {
-                                Text(mode.label)
-                                    .font(BookType.meta(11))
-                                    .foregroundStyle(themeRaw == mode.rawValue ? book.fillText : book.inkSub)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 7)
-                                    .background(
-                                        Capsule().fill(themeRaw == mode.rawValue ? book.fill : .clear)
-                                    )
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(2)
-                    .background(Capsule().strokeBorder(book.rule, lineWidth: 1))
+                    ChipPicker(options: ThemeMode.allCases,
+                               title: \.label,
+                               selection: themeSelection)
                 }
                 PageRule()
 
