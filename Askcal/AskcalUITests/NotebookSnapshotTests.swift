@@ -117,6 +117,26 @@ final class NotebookSnapshotTests: XCTestCase {
         snapshot(app, "16-calendar-month")
     }
 
+    /// The spread. Only meaningful on an iPad wide enough for two pages, so it
+    /// skips rather than fails elsewhere — a phone has nothing to say here.
+    func testTwoPageSpreadInLandscape() throws {
+        let app = launch(theme: "day")
+        XCUIDevice.shared.orientation = .landscapeLeft
+        Thread.sleep(forTimeInterval: 2)
+
+        guard app.windows.firstMatch.frame.width >= 880 else {
+            throw XCTSkip("not wide enough for a spread")
+        }
+
+        app.buttons["Tracks"].firstMatch.tap()
+        Thread.sleep(forTimeInterval: 1.5)
+        snapshot(app, "17-spread")
+
+        XCUIDevice.shared.orientation = .portrait
+        Thread.sleep(forTimeInterval: 2)
+        snapshot(app, "18-ipad-portrait")
+    }
+
     /// The page turn, and the destination rows below the writing.
     func testTurningToTomorrow() throws {
         let app = launch(theme: "day")

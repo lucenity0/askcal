@@ -26,6 +26,9 @@ struct DayPage: View {
     @Binding var editingTask: AskcalTask?
     var onConnect: () -> Void
     var onStep: (Int) -> Void
+    /// Where a summary row sends you. The page doesn't know whether that means
+    /// a push or the facing page of a spread, and doesn't need to.
+    var onOpen: (PageDestination) -> Void
     /// Whether this is the page on screen. Neighbouring pages are built ahead
     /// of being scrolled to, and without this every one of them puts its own
     /// chevrons and entries into the accessibility tree — VoiceOver reads three
@@ -91,21 +94,8 @@ struct DayPage: View {
         VStack(alignment: .leading, spacing: Space.md) {
             PageTitle(kicker: kicker, title: title) {
                 HStack(spacing: Space.md) {
-                    NavigationLink { CalendarView() } label: {
-                        Image(systemName: "calendar")
-                            .font(BookType.icon(17))
-                            .foregroundStyle(book.ink)
-                            .frame(width: 44, height: 44)
-                    }
-                    .accessibilityLabel("Calendar")
-
-                    NavigationLink { MoreView() } label: {
-                        Image(systemName: "ellipsis")
-                            .font(BookType.icon(17))
-                            .foregroundStyle(book.ink)
-                            .frame(width: 44, height: 44)
-                    }
-                    .accessibilityLabel("Settings")
+                    headerButton("calendar", destination: .calendar)
+                    headerButton("ellipsis", destination: .settings)
                 }
             }
 
@@ -124,6 +114,18 @@ struct DayPage: View {
                 Spacer()
             }
         }
+    }
+
+    private func headerButton(_ symbol: String, destination: PageDestination) -> some View {
+        Button { onOpen(destination) } label: {
+            Image(systemName: symbol)
+                .font(BookType.icon(17))
+                .foregroundStyle(book.ink)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(destination.title)
     }
 
     private func stepButton(_ symbol: String, label: String, step: Int) -> some View {
@@ -279,32 +281,30 @@ struct DayPage: View {
 
     private var destinations: some View {
         VStack(spacing: 0) {
-            NavigationLink { InboxView() } label: {
-                SummaryRow(title: "Inbox",
-                           value: store.inboxEmails.isEmpty
-                               ? "clear" : "\(store.inboxEmails.count) new")
-            }
-            .buttonStyle(.plain)
+            summaryRow(.inbox, title: "Inbox",
+                       value: store.inboxEmails.isEmpty
+                           ? "clear" : "\(store.inboxEmails.count) new")
 
-            NavigationLink { RoutineView(isAdding: $isAddingRoutine) } label: {
-                SummaryRow(title: "Routine",
-                           value: store.routines.isEmpty
-                               ? "none set"
-                               : "\(store.routinesDone.count) of \(store.routines.count)")
-            }
-            .buttonStyle(.plain)
+            summaryRow(.routine, title: "Routine",
+                       value: store.routines.isEmpty
+                           ? "none set"
+                           : "\(store.routinesDone.count) of \(store.routines.count)")
 
-            NavigationLink { TracksView() } label: {
-                SummaryRow(title: "Tracks", value: "\(store.openTasks.count) open")
-            }
-            .buttonStyle(.plain)
+            summaryRow(.tracks, title: "Tracks", value: "\(store.openTasks.count) open")
 
-            NavigationLink { ReviewView() } label: {
-                SummaryRow(title: store.dayClosed ? "Day closed" : "Close the day",
-                           value: store.dayClosed ? "done" : "")
-            }
-            .buttonStyle(.plain)
+            summaryRow(.review,
+                       title: store.dayClosed ? "Day closed" : "Close the day",
+                       value: store.dayClosed ? "done" : "")
         }
+    }
+
+    private func summaryRow(
+        _ destination: PageDestination, title: String, value: String
+    ) -> some View {
+        Button { onOpen(destination) } label: {
+            SummaryRow(title: title, value: value)
+        }
+        .buttonStyle(.plain)
     }
 }
 

@@ -49,6 +49,10 @@ enum Space {
         margin + lg - PaperTexture.bindingWidth - sm
     }
 
+    /// The widest a column of writing gets before it stops being comfortable
+    /// to read. Only bites on an iPad; a phone is narrower than this anyway.
+    static let measure: CGFloat = 620
+
     /// Vertical rhythm between major sections.
     static let section: CGFloat = 34
 

@@ -31,6 +31,12 @@ struct NotebookPage<Content: View>: View {
 
     @ViewBuilder var content: () -> Content
 
+    /// Set to false around the facing page of a spread. A screen builds its own
+    /// `NotebookPage` and has no idea whether it is standing alone or sharing a
+    /// binding, so the container that put it there says so through the
+    /// environment rather than every screen taking a parameter it can't answer.
+    @Environment(\.boundPage) private var boundPage
+
     var body: some View {
         ZStack(alignment: .topLeading) {
             PaperSurface()
@@ -52,7 +58,7 @@ struct NotebookPage<Content: View>: View {
                 }
             }
 
-            if bound {
+            if bound && boundPage {
                 BindingEdge(placement: placement)
                     .ignoresSafeArea(edges: .vertical)
             }
@@ -69,11 +75,29 @@ struct NotebookPage<Content: View>: View {
         VStack(alignment: .leading, spacing: Space.section) {
             content()
         }
+        // A line of text stops being readable somewhere around 70 characters,
+        // and an iPad page is far wider than that. The writing keeps its left
+        // edge on the margin and simply stops short of the outer edge — which
+        // is what you do on a wide page anyway.
+        .frame(maxWidth: Space.measure, alignment: .leading)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.leading, Space.textInset)
         .padding(.trailing, Space.gutter)
         .padding(.top, Space.md)
         .padding(.bottom, Space.fabClearance)
+    }
+}
+
+private struct BoundPageKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
+extension EnvironmentValues {
+    /// Whether a page draws its own binding. False for the facing page of a
+    /// spread, which shares the wire in the gutter.
+    var boundPage: Bool {
+        get { self[BoundPageKey.self] }
+        set { self[BoundPageKey.self] = newValue }
     }
 }
 

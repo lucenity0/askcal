@@ -30,6 +30,7 @@ struct DayPager: View {
     @Binding var showComposer: Bool
     @Binding var editingTask: AskcalTask?
     var onConnect: () -> Void
+    var onOpen: (PageDestination) -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -54,6 +55,7 @@ struct DayPager: View {
                         editingTask: $editingTask,
                         onConnect: onConnect,
                         onStep: step,
+                        onOpen: onOpen,
                         isCurrent: day == (offset ?? 0)
                     )
                     .containerRelativeFrame(.horizontal)
