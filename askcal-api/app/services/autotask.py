@@ -188,3 +188,63 @@ async def open_task_exists_for_thread(db: AsyncSession, email: Email) -> bool:
         .limit(1)
     )
     return found is not None
+
+
+async def reconsider_auto_tasks(db: AsyncSession, user) -> int:
+    """Re-run the auto-task gates over mail that was already classified.
+
+    The sync pass only ever looks at `classified_at IS NULL`, so every gate that
+    decides whether a mail becomes a task — which tracks are active, the
+    confidence floor, the consequence floor — applies once, at classification
+    time, and never again. Turning a track on afterwards did nothing at all for
+    mail already seen, with no indication why.
+
+    No model call: the signals are already stored on the row, so this is a pure
+    re-evaluation of a decision made with different settings.
+
+    Returns how many tasks were created.
+    """
+    from app.services.classifier import EmailSignals  # circular at module level
+
+    tracks = {
+        t.key: t
+        for t in (
+            await db.scalars(select(Track).where(Track.user_id == user.id))
+        ).all()
+    }
+    today = date.today()
+    created = 0
+
+    candidates = (
+        await db.scalars(
+            select(Email).where(
+                Email.user_id == user.id,
+                Email.handled.is_(False),
+                Email.classified_at.is_not(None),
+                Email.signals.is_not(None),
+            )
+        )
+    ).all()
+
+    for email in candidates:
+        try:
+            signals = EmailSignals(**email.signals)
+        except Exception:  # noqa: BLE001 — a stored shape we no longer parse
+            continue
+
+        track = None if signals.track == "none" else TrackKey(signals.track)
+        track_row = tracks.get(track) if track else None
+        if not should_auto_task(signals, track, track_row, email.regret_score, user):
+            continue
+        # Same dedup as the sync path: a mail already answered by a task must
+        # not produce a second one just because a setting moved.
+        if await open_task_exists_for_thread(db, email):
+            continue
+
+        db.add(build_task(email, signals.deadline_utc, track_row, today))
+        email.handled = True
+        created += 1
+
+    if created:
+        await db.commit()
+    return created

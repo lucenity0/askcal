@@ -14,6 +14,7 @@ from app.schemas.tracks import (
     TracksResponse,
     TrackSettingOut,
 )
+from app.services.autotask import reconsider_auto_tasks
 from app.services.brew_engine import SCORE_THRESHOLDS
 from app.services.profile import STUDENT_TYPES, WORK_TYPES, profile_track_settings
 
@@ -51,6 +52,14 @@ async def set_track_active(
 
     track.active = body.active
     await db.commit()
+
+    # Turning a track on is retroactive. Mail is only put through the auto-task
+    # gates once, when it is first classified, so without this a track switched
+    # on today would do nothing for everything already sitting in the inbox —
+    # which is exactly how it behaved and gave no sign of it.
+    if body.active:
+        await reconsider_auto_tasks(db, user)
+
     return TrackSettingOut(id=track.key.value, weight=track.weight, active=track.active)
 
 
