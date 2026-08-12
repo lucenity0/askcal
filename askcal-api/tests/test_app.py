@@ -137,3 +137,13 @@ def test_another_mailbox_can_be_connected():
     assert "post" in paths["/api/accounts/link"]
     assert "get" in paths["/api/accounts"]
     assert {"patch", "delete"} <= set(paths["/api/accounts/{account_id}"])
+
+
+def test_the_day_has_a_page_to_write_on():
+    """Askcal could only hold things with a shape — a task, a mail, a track —
+    so a thought about the day had nowhere to go."""
+    paths = client.get("/openapi.json").json()["paths"]
+    assert {"get", "put"} <= set(paths["/api/notes/{day}"])
+    # The week strip marks which days are written on; asking day by day would
+    # be seven requests to draw one row.
+    assert "get" in paths["/api/notes"]

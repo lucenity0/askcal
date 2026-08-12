@@ -17,6 +17,7 @@ from app.routers import (
     digest,
     inbox,
     me,
+    notes,
     routines,
     settings as settings_router,
     tasks,
@@ -76,6 +77,7 @@ app.include_router(routines.router)
 app.include_router(settings_router.router)
 app.include_router(me.router)
 app.include_router(accounts.router)
+app.include_router(notes.router)
 
 
 @app.get("/health", tags=["meta"])

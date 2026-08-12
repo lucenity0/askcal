@@ -109,7 +109,24 @@ extension View {
     ) -> some View {
         modifier(PopupModifier(item: item, popup: content))
     }
+
+    /// The same popup for something that is simply on or off.
+    func popup<PopupBody: View>(
+        isPresented: Binding<Bool>,
+        @ViewBuilder content: @escaping () -> PopupBody
+    ) -> some View {
+        popup(
+            item: Binding(
+                get: { isPresented.wrappedValue ? PopupFlag() : nil },
+                set: { isPresented.wrappedValue = $0 != nil }
+            )
+        ) { _ in content() }
+    }
 }
+
+/// Stands in for "shown", so the boolean form can reuse the item form rather
+/// than being a second copy of the presentation logic.
+private struct PopupFlag: Identifiable { let id = 0 }
 
 /// A popup's own heading: what it is, and the way out.
 struct PopupHeader: View {

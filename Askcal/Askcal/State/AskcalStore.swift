@@ -172,6 +172,74 @@ final class AskcalStore {
         tracks.first { $0.active } ?? tracks.first
     }
 
+    // MARK: - The day's page
+
+    /// Notes by day string. Held here rather than in the view so the phone's
+    /// collapsed row, the popup editor and the iPad's facing page are all
+    /// reading the same text — three copies of one note is how two of them end
+    /// up stale.
+    var notes: [String: DayNote] = [:]
+
+    private var noteSaves: [String: Task<Void, Never>] = [:]
+
+    /// How long to wait after the last keystroke before writing. Long enough
+    /// that a sentence is one request rather than forty, short enough that
+    /// closing the app straight after typing does not lose the line.
+    private static let noteSaveDelay: Duration = .milliseconds(700)
+
+    func note(for date: Date) -> DayNote {
+        notes[Self.dayString(date)] ?? DayNote(day: date, body: "", updatedAt: nil)
+    }
+
+    func hasNote(on date: Date) -> Bool {
+        !(notes[Self.dayString(date)]?.isEmpty ?? true)
+    }
+
+    func loadNote(for date: Date) async {
+        guard isLive else { return }
+        let key = Self.dayString(date)
+        // A save in flight for this day would be overwritten by whatever the
+        // server still has, putting the user's own words back a version.
+        guard noteSaves[key] == nil else { return }
+        guard let fetched = try? await APIClient.shared.note(on: date) else { return }
+        notes[key] = fetched
+    }
+
+    /// Which days in the visible week have been written on, for the strip.
+    func loadNoteMarks(from start: Date, to end: Date) async {
+        guard isLive else { return }
+        guard let fetched = try? await APIClient.shared.notes(from: start, to: end)
+        else { return }
+        for note in fetched where noteSaves[Self.dayString(note.day)] == nil {
+            notes[Self.dayString(note.day)] = note
+        }
+    }
+
+    /// Applies immediately and writes after a pause. The text on screen is the
+    /// truth while you are typing; the server catches up.
+    func writeNote(_ body: String, for date: Date) {
+        let key = Self.dayString(date)
+        notes[key] = DayNote(day: date, body: body, updatedAt: .now)
+        saveLocal()
+
+        noteSaves[key]?.cancel()
+        guard isLive else { return }
+        noteSaves[key] = Task {
+            try? await Task.sleep(for: Self.noteSaveDelay)
+            guard !Task.isCancelled else { return }
+            do {
+                _ = try await APIClient.shared.saveNote(on: date, body: body)
+                actionError = nil
+            } catch {
+                // Deliberately no rollback. Replacing what someone is currently
+                // writing with an older copy, because a request failed, loses
+                // the very thing they would have wanted kept.
+                report(error)
+            }
+            noteSaves[key] = nil
+        }
+    }
+
     func refreshTracks() async {
         guard isLive else { return }
         guard let fetched = try? await APIClient.shared.tracks() else { return }
@@ -346,6 +414,7 @@ final class AskcalStore {
     // MARK: - Offline local persistence (not-signed-in users)
 
     private static let localTasksKey = "localTasks"
+    private static let localNotesKey = "localNotes"
 
     /// UI tests share one simulator, and the signed-out store persists to
     /// UserDefaults — so without a way to ask for a clean slate each test
@@ -364,7 +433,7 @@ final class AskcalStore {
     /// it silently stops working.
     private func resetForTesting() {
         let ud = UserDefaults.standard
-        for key in [Self.localTasksKey, "localRoutines", "weekStripExpanded",
+        for key in [Self.localTasksKey, Self.localNotesKey, "localRoutines", "weekStripExpanded",
                     "userName", "streakCount", "lastClosedDate"] {
             ud.removeObject(forKey: key)
         }
@@ -383,6 +452,7 @@ final class AskcalStore {
         guard !isLive else { return }
         let ud = UserDefaults.standard
         ud.set(try? JSONEncoder().encode(tasks), forKey: Self.localTasksKey)
+        ud.set(try? JSONEncoder().encode(notes), forKey: Self.localNotesKey)
     }
 
     /// Full, irreversible wipe of the not-signed-in session's local data.
@@ -390,6 +460,7 @@ final class AskcalStore {
         tasks = []
         let ud = UserDefaults.standard
         ud.removeObject(forKey: Self.localTasksKey)
+        ud.removeObject(forKey: Self.localNotesKey)
         // Left over from the routine tracker, which no longer exists — cleared
         // so an old install stops carrying dead keys around forever.
         ud.removeObject(forKey: "localRoutines")

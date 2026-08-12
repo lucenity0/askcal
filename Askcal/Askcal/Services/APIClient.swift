@@ -359,6 +359,37 @@ final class APIClient {
         let _: EmptyResponse = try await send("DELETE", "/api/tracks/\(slug)")
     }
 
+    // MARK: - The day's page
+
+    private struct NotesOut: Decodable { let notes: [DayNote] }
+
+    /// A day with nothing written on it comes back as an empty note rather than
+    /// a 404, so callers never have to treat "never written" differently from
+    /// "written and cleared".
+    func note(on day: Date) async throws -> DayNote {
+        try await send("GET", "/api/notes/\(Self.dayOnly.string(from: day))")
+    }
+
+    @discardableResult
+    func saveNote(on day: Date, body: String) async throws -> DayNote {
+        try await send(
+            "PUT", "/api/notes/\(Self.dayOnly.string(from: day))", body: ["body": body]
+        )
+    }
+
+    /// Which days in a range have been written on — one request for the strip,
+    /// rather than one per day.
+    func notes(from start: Date, to end: Date) async throws -> [DayNote] {
+        let out: NotesOut = try await send(
+            "GET", "/api/notes",
+            query: [
+                .init(name: "start", value: Self.dayOnly.string(from: start)),
+                .init(name: "end", value: Self.dayOnly.string(from: end)),
+            ]
+        )
+        return out.notes
+    }
+
     // MARK: - Connected mailboxes
 
     private struct AccountsOut: Decodable { let accounts: [MailAccount] }

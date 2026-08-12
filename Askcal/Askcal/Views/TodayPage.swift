@@ -33,6 +33,12 @@ struct TodayPage: View {
     /// it can be left alone while the next day loads.
     @State private var displayed: [AskcalTask] = []
     @State private var marked: Set<String> = []
+    @State private var showingNote = false
+
+    /// The iPad shows the note as a facing page, so the phone's row is dropped
+    /// rather than duplicating it inches away.
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    private var showsFacingNote: Bool { sizeClass == .regular }
 
     private var isLoadingDay: Bool {
         !isToday && loadedDay != AskcalStore.dayString(selected)
@@ -88,13 +94,8 @@ struct TodayPage: View {
     }
 
     var body: some View {
-        NotebookPage(onRefresh: refreshAction) {
-            WeekStrip(selected: $selected, marked: marked)
-            header
-            todayOnlyTop
-            timeline
-            addRow
-            endOfDay
+        Group {
+            if showsFacingNote { spread } else { page }
         }
         // Deliberately no page-level animation on `isToday`. One was added here
         // to smooth the blink and could not have worked: the page was being
@@ -110,6 +111,57 @@ struct TodayPage: View {
         // which point isToday was already false and today's entries were gone.
         .onChange(of: store.dayEntries) { _, latest in
             if isToday { displayed = latest }
+        }
+        .popup(isPresented: $showingNote) {
+            PopupHeader(
+                kicker: selected.formatted(.dateTime.month(.abbreviated).day()),
+                title: "The day's page",
+                onClose: { showingNote = false }
+            )
+            DayNoteView(date: selected)
+        }
+    }
+
+    private var page: some View {
+        NotebookPage(onRefresh: refreshAction) {
+            WeekStrip(selected: $selected, marked: marked)
+            header
+            todayOnlyTop
+            timeline
+            addRow
+            noteRow
+            endOfDay
+        }
+    }
+
+    /// The iPad opens the notebook flat: the day on the left, the day's page on
+    /// the right.
+    ///
+    /// A facing page is the one thing a two-page spread is actually for. Filling
+    /// the extra width with a bigger version of the same list would just be a
+    /// phone screen that had been stretched, and a decorative panel would be the
+    /// "looks broken, feels fake" problem in a new costume — space doing nothing.
+    /// A page you write on earns the width by being a different thing.
+    private var spread: some View {
+        HStack(spacing: 0) {
+            page
+                .frame(maxWidth: .infinity)
+
+            // The gutter. Two sheets of paper meeting, not a sidebar divider —
+            // so it is a rule the width of a fold, not a chrome separator.
+            Rectangle()
+                .fill(book.rule)
+                .frame(width: Stroke.hair)
+                .ignoresSafeArea()
+
+            NotebookPage {
+                PageTitle(
+                    kicker: selected.formatted(.dateTime.weekday(.wide)),
+                    title: "Notes"
+                )
+                DayNoteView(date: selected, fillsHeight: true)
+            }
+            .frame(maxWidth: .infinity)
         }
     }
 
@@ -151,6 +203,37 @@ struct TodayPage: View {
                 composing = .new(title: typed, day: startOfSelected)
             }
         )
+    }
+
+    /// The day's page, as one line until it has something to say.
+    ///
+    /// On the phone this is a row; on iPad the same note is the facing page and
+    /// this disappears, because showing it in both places would be two windows
+    /// onto one piece of text sitting a few inches apart.
+    @ViewBuilder
+    private var noteRow: some View {
+        if !showsFacingNote {
+            let note = store.note(for: selected)
+            Button { showingNote = true } label: {
+                HStack(alignment: .firstTextBaseline, spacing: Space.md) {
+                    Image(systemName: note.isEmpty ? "square.and.pencil" : "text.alignleft")
+                        .font(BookType.icon(11))
+                        .foregroundStyle(book.inkSub)
+                    Text(note.isEmpty ? "write something about today" : note.summary)
+                        .font(note.isEmpty ? BookType.meta(12) : BookType.body(14))
+                        .foregroundStyle(note.isEmpty ? book.inkSub : book.ink)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Spacer(minLength: Space.md)
+                }
+                .padding(.vertical, Space.lg)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .ruled()
+            .accessibilityLabel("Notes for this day")
+            .accessibilityValue(note.isEmpty ? "empty" : note.summary)
+        }
     }
 
     @ViewBuilder

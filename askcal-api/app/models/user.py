@@ -10,6 +10,7 @@ from app.db import Base
 from app.models.base import TimestampMixin
 
 if TYPE_CHECKING:
+    from app.models.day_note import DayNote
     from app.models.email import Email
     from app.models.mail_account import MailAccount
     from app.models.refresh_token import RefreshToken
@@ -61,4 +62,7 @@ class User(TimestampMixin, Base):
     )
     mail_accounts: Mapped[list["MailAccount"]] = relationship(
         back_populates="user", cascade="all, delete-orphan", lazy="selectin"
+    )
+    day_notes: Mapped[list["DayNote"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
     )

@@ -275,6 +275,33 @@ func minutesSinceMidnight(_ hhmm: String) -> Int? {
 // MARK: - Settings
 
 /// What the settings screen reads. Split the way the backend splits it: the
+/// The day's page — whatever needed writing down that was not a task.
+///
+/// Keyed on the day, not on an id of its own, so writing on a day never needs
+/// the note to be created first.
+struct DayNote: Codable, Equatable, Identifiable {
+    var day: Date
+    var body: String
+    var updatedAt: Date?
+
+    var id: Date { day }
+    var isEmpty: Bool { body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    /// The first line worth showing, for the collapsed row on the phone.
+    /// Markdown heading marks are stripped — "# standup" reads as a title in
+    /// the editor and as a hash in a one-line preview.
+    var summary: String {
+        body
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .first { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+            .map { line in
+                line.trimmingCharacters(in: .whitespaces)
+                    .drop { $0 == "#" || $0 == "-" || $0 == "*" || $0 == ">" }
+                    .trimmingCharacters(in: .whitespaces)
+            } ?? ""
+    }
+}
+
 /// One connected mailbox.
 ///
 /// There used to be exactly one, held on the user, so college mail and personal
