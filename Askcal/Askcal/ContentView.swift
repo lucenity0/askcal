@@ -33,6 +33,8 @@ struct ContentView: View {
     @State private var digestKind: DigestKind?
     @State private var digest: Digest?
     @State private var digestError: String?
+    @State private var windowWidth: CGFloat = 0
+    private var isWide: Bool { windowWidth >= SpreadMetrics.threshold }
     @State private var showGreeting = false
     @State private var didLaunch = false
 
@@ -56,10 +58,27 @@ struct ContentView: View {
         // Popups live at the root so they cover the tab bar. Presented lower
         // down, the bar stays tappable underneath and you can end up on another
         // tab with a modal still open over it.
+        // Read without a GeometryReader in the layout path — one there would
+        // take all the height it was offered and hand none back.
+        .background(
+            GeometryReader { geo in
+                Color.clear.onChange(of: geo.size.width, initial: true) { _, w in
+                    windowWidth = w
+                }
+            }
+        )
         .popup(item: $composing) { intent in
             TaskComposer(intent: intent) { composing = nil }
         }
-        .popup(item: $openedEmail) { email in
+        // Suppressed once the inbox is a spread: the mail is already open on the
+        // facing page, and a popup would dim a list that had room to stay
+        // readable. Measured here rather than passed up, because this is the
+        // view that owns the popup and the width is the same one the spread
+        // inside the tab is looking at.
+        .popup(item: Binding(
+            get: { isWide ? nil : openedEmail },
+            set: { openedEmail = $0 }
+        )) { email in
             EmailDetail(
                 email: email,
                 makeTask: { store.handleEmail(email); openedEmail = nil },

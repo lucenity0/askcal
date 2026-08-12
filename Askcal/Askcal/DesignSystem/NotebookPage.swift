@@ -67,10 +67,11 @@ struct NotebookPage<Content: View>: View {
             content()
         }
         // A line of text stops being readable somewhere around 70 characters,
-        // and an iPad page is far wider than that. The writing keeps its left
-        // edge and simply stops short of the outer edge.
-        .frame(maxWidth: Space.measure, alignment: .leading)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        // and an iPad page is far wider than that. The block keeps its measure
+        // and sits in the middle of the paper — pinned to the left edge it read
+        // as a layout that had failed rather than as a margin, with a third of
+        // the sheet doing nothing.
+        .pageMeasure()
         .padding(.horizontal, Space.gutter)
         .padding(.top, Space.md)
         .padding(.bottom, Space.xl)

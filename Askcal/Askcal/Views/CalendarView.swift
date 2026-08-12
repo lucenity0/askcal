@@ -44,10 +44,29 @@ struct CalendarView: View {
     }
 
     var body: some View {
-        NotebookPage {
-            PageTitle(kicker: "The month", title: month.formatted(.dateTime.month(.wide).year()))
-            monthBlock
-            dayBlock
+        Spread { open in
+            NotebookPage {
+                PageTitle(
+                    kicker: "The month",
+                    title: month.formatted(.dateTime.month(.wide).year())
+                )
+                monthBlock
+                // Dropped when the day has the facing page. Below a grid that
+                // already fills the width, the same list twice is just scrolling
+                // past what you can already see.
+                if !open { dayBlock }
+            }
+        } right: {
+            // The grid says which days have something on them; this says what.
+            // Side by side they answer the question the dots raise, which is
+            // the whole reason to tap one.
+            NotebookPage {
+                PageTitle(
+                    kicker: isToday ? "Today" : selected.formatted(.dateTime.weekday(.wide)),
+                    title: selected.formatted(.dateTime.month(.wide).day())
+                )
+                dayBlock
+            }
         }
         .task(id: selected) { await loadDay() }
         .task(id: monthKey) { await loadMarks() }

@@ -24,6 +24,32 @@ struct InboxView: View {
     @Binding var opened: EmailItem?
 
     var body: some View {
+        Spread { _ in
+            list
+        } right: {
+            // Open mail becomes the facing page rather than a popup over the
+            // list. A popup on a wide screen dims most of a page that had room
+            // to keep showing — and triaging is a back-and-forth between the
+            // message and what else is waiting.
+            NotebookPage {
+                if let opened {
+                    EmailDetail(
+                        email: opened,
+                        makeTask: { store.handleEmail(opened); self.opened = nil },
+                        snooze: { store.snoozeEmail(opened); self.opened = nil },
+                        onClose: { self.opened = nil }
+                    )
+                } else {
+                    PageTitle(kicker: "Nothing open", title: "Pick one")
+                    Text("open a mail on the left and it reads here.")
+                        .font(BookType.body(14))
+                        .foregroundStyle(book.inkSub)
+                }
+            }
+        }
+    }
+
+    private var list: some View {
         NotebookPage(onRefresh: { await store.syncInbox() }) {
             PageTitle(kicker: "Needs you", title: "Inbox") {
                 Text("\(store.inboxEmails.count)")
