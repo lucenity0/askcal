@@ -37,14 +37,20 @@ struct PopupCard<Body: View>: View {
         .frame(maxWidth: 460)
         .frame(maxHeight: 620)
         .fixedSize(horizontal: false, vertical: true)
+        // The card has to hold its own edge. A hairline border and one soft
+        // shadow were enough against a fully blurred page; against a page you
+        // can still read, a pale card on pale paper simply dissolves into it.
+        // So: a proper border, a tight contact shadow that says the card is
+        // sitting on something, and a wide one for depth.
         .background(
             RoundedRectangle(cornerRadius: 28)
                 .fill(book.card)
                 .overlay(
                     RoundedRectangle(cornerRadius: 28)
-                        .strokeBorder(book.rule, lineWidth: Stroke.hair)
+                        .strokeBorder(book.ruleStrong, lineWidth: Stroke.strong)
                 )
-                .shadow(color: .black.opacity(0.18), radius: 30, y: 12)
+                .shadow(color: .black.opacity(0.10), radius: 3, y: 1)
+                .shadow(color: .black.opacity(0.26), radius: 36, y: 16)
         )
         .padding(Space.xl)
     }

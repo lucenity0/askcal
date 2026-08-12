@@ -83,6 +83,33 @@ def _pinned_start_minute(
     return int((local - day_anchor).total_seconds() / 60)
 
 
+def _due_minute(task: Task, day: dt.date, tz: dt.tzinfo) -> int | None:
+    """The task's deadline as minutes-since-midnight, if it falls on `day`.
+
+    A deadline on another day is not a constraint on this one — tomorrow's
+    9am submission should not compress today's afternoon.
+    """
+    if task.due_at is None:
+        return None
+    local = task.due_at.astimezone(tz)
+    if local.date() != day:
+        return None
+    return local.hour * 60 + local.minute
+
+
+def _placement_rank(task: Task, day: dt.date, tz: dt.tzinfo) -> tuple[int, int, int]:
+    """Order untimed tasks for placement.
+
+    Anything due today comes first, soonest deadline leading, because the
+    deadline is the part of the day that cannot move. Everything else follows
+    on consequence, highest first — which is the regret score's whole job.
+    """
+    due = _due_minute(task, day, tz)
+    if due is not None:
+        return (0, due, -task.regret_score)
+    return (1, 0, -task.regret_score)
+
+
 def _merge(intervals: list[tuple[int, int]]) -> list[tuple[int, int]]:
     merged: list[tuple[int, int]] = []
     for start, end in sorted(intervals):
@@ -170,12 +197,25 @@ def build_day_plan(
     if cursor < window_end:
         free.append((cursor, window_end))
 
-    # untimed tasks: first-fit, highest regret first
-    for task in sorted(unpinned, key=lambda t: t.regret_score, reverse=True):
+    # Untimed tasks, first-fit, in consequence order — but a deadline today is
+    # a constraint, not a preference. Ranking on regret alone put a 5pm
+    # submission after every higher-scoring task with no deadline at all, which
+    # is how the plan could hand you a day that misses the one thing on it that
+    # actually had a wall.
+    for task in sorted(unpinned, key=lambda t: _placement_rank(t, day, tz)):
         minutes = _task_minutes(task)
+        due = _due_minute(task, day, tz)
         placed = False
-        for i, (gap_start, gap_end) in enumerate(free):
-            if gap_end - gap_start >= minutes:
+
+        # Prefer a gap that finishes before the deadline. If nothing does, fall
+        # back to the earliest gap that fits: late is more use than absent, and
+        # dropping it would hide the very task that most needs looking at.
+        for wants_deadline in ([True, False] if due is not None else [False]):
+            for i, (gap_start, gap_end) in enumerate(free):
+                if gap_end - gap_start < minutes:
+                    continue
+                if wants_deadline and due is not None and gap_start + minutes > due:
+                    continue
                 slots.append(
                     {
                         "time": f"{gap_start // 60:02d}:{gap_start % 60:02d}",
@@ -186,6 +226,9 @@ def build_day_plan(
                 free[i] = (gap_start + minutes, gap_end)
                 placed = True
                 break
+            if placed:
+                break
+
         if not placed:
             unscheduled.append(task)
 

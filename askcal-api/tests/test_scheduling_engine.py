@@ -11,11 +11,16 @@ TZ = "UTC"
 DAY = dt.date(2026, 7, 8)
 
 
-def task(score: int, hours: float | None = 1.0, scheduled_at: dt.datetime | None = None):
+def task(score: int, hours: float | None = 1.0, scheduled_at: dt.datetime | None = None,
+         due_at: dt.datetime | None = None):
     return SimpleNamespace(
         id=uuid.uuid4(), regret_score=score, estimated_hours=hours,
-        scheduled_at=scheduled_at,
+        scheduled_at=scheduled_at, due_at=due_at,
     )
+
+
+def at(hour: int, minute: int = 0, day: dt.date = DAY) -> dt.datetime:
+    return dt.datetime.combine(day, dt.time(hour, minute), tzinfo=ZoneInfo(TZ))
 
 
 def busy(start_h: int, start_m: int, end_h: int, end_m: int):
@@ -172,3 +177,55 @@ def DAY_PLUS(days: int, hour: int, minute: int) -> dt.datetime:
     return dt.datetime.combine(
         DAY + dt.timedelta(days=days), dt.time(hour, minute), tzinfo=ZoneInfo(TZ)
     )
+
+
+# ── Deadlines are a constraint, not a preference ────────────────────────────
+
+
+def test_a_deadline_today_outranks_a_higher_score_without_one():
+    """Regret alone put the one thing with a wall after everything else."""
+    loose = task(90, 1.0)                      # scores higher
+    due_at_five = task(30, 1.0, due_at=at(17))  # but has to be done by 17:00
+    slots, unscheduled = build_day_plan([loose, due_at_five], [], DAY, TZ)
+
+    assert unscheduled == []
+    assert slots[0]["task_id"] == due_at_five.id
+
+
+def test_the_soonest_deadline_leads():
+    late = task(80, 1.0, due_at=at(16))
+    soon = task(20, 1.0, due_at=at(11))
+    slots, _ = build_day_plan([late, soon], [], DAY, TZ)
+
+    assert slots[0]["task_id"] == soon.id
+
+
+def test_a_task_is_placed_so_it_finishes_before_its_deadline():
+    # 09:00-11:00 is blocked, so first-fit would land this at 11:00 and
+    # finish at 13:00 — an hour after it was due.
+    due_at_noon = task(50, 2.0, due_at=at(12))
+    slots, unscheduled = build_day_plan([due_at_noon], [busy(9, 0, 10, 0)], DAY, TZ)
+
+    assert unscheduled == []
+    start, end = slot_range(slots[0])
+    assert end <= 12 * 60, "scheduled to finish after its own deadline"
+
+
+def test_an_impossible_deadline_is_still_scheduled_rather_than_dropped():
+    """Late is more use than absent — and hiding it hides the one task that
+    most needs looking at."""
+    impossible = task(70, 3.0, due_at=at(9, 30))
+    slots, unscheduled = build_day_plan([impossible], [], DAY, TZ)
+
+    assert unscheduled == []
+    assert len(slots) == 1
+
+
+def test_tomorrows_deadline_does_not_compress_today():
+    tomorrow = DAY + dt.timedelta(days=1)
+    later = task(20, 1.0, due_at=at(9, 0, tomorrow))
+    urgent_today = task(85, 1.0)
+    slots, _ = build_day_plan([later, urgent_today], [], DAY, TZ)
+
+    # No deadline lands on this day, so consequence decides as it always did.
+    assert slots[0]["task_id"] == urgent_today.id
