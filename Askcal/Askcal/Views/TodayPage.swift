@@ -16,10 +16,12 @@ import SwiftUI
 struct TodayPage: View {
     @Environment(AskcalStore.self) private var store
     @Environment(\.book) private var book
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @Binding var composing: ComposerIntent?
     var onConnect: () -> Void
     var onOpenReview: () -> Void
+    var onOpenDigest: (DigestKind) -> Void
 
     @State private var selected = Calendar.current.startOfDay(for: .now)
     @State private var loaded: AskcalStore.DayData?
@@ -76,6 +78,13 @@ struct TodayPage: View {
             addRow
             endOfDay
         }
+        // The blocks that only exist on today — the connect card, the
+        // now-working card, the end-of-day card — appear and disappear as
+        // `isToday` flips. Without this they pop in and out in a single frame
+        // and the whole page jumps under your thumb, which is the blink that
+        // survived two attempts at fixing the *list*: the list was never the
+        // part that was flashing.
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: isToday)
         .task(id: selected) { await load() }
         .task(id: weekKey) { await loadMarks() }
         // Today is live: a tick has to land immediately. This is also what
@@ -92,7 +101,11 @@ struct TodayPage: View {
             kicker: selected.formatted(.dateTime.weekday(.wide)),
             title: selected.formatted(.dateTime.month(.wide).day())
         ) {
-            ProgressRing(done: doneCount, total: entries.count)
+            Button { onOpenDigest(isToday ? .morning : .evening) } label: {
+                ProgressRing(done: doneCount, total: entries.count)
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Opens the day's summary")
         }
     }
 

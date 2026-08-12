@@ -186,7 +186,7 @@ async def _classify_pending(db: AsyncSession, user: User) -> tuple[int, int]:
             continue
 
         try:
-            signals_by_id = await classify_batch(chunk)
+            signals_by_id = await classify_batch(chunk, user.timezone)
         except LLMLimitError:
             # Out of allowance, not broken. Grinding the remaining chunks against
             # the wall just burns retries against a limit that only time fixes.

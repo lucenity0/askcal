@@ -64,6 +64,11 @@ final class AskcalStore {
         self.emails = emails
         self.dayPlan = dayPlan
         self.calendarEvents = calendarEvents
+        // Before any view renders. Doing this in bootstrap() raced @AppStorage:
+        // a view could read a stored preference and cache it a moment before
+        // the wipe removed the key, so the reset appeared to work except when
+        // it didn't.
+        if Self.wantsCleanSlate { resetForTesting() }
     }
 
     // MARK: - Derived
@@ -225,8 +230,6 @@ final class AskcalStore {
         // Distinguishes "still fetching" from "genuinely empty". Without it the
         // day surface rendered its empty copy over data in flight, which read
         // as an answer rather than a wait.
-        if Self.wantsCleanSlate { resetForTesting() }
-
         isBootstrapping = true
         defer { isBootstrapping = false }
 

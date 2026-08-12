@@ -30,6 +30,7 @@ from app.llm.structured import (
     validate_items,
 )
 from app.models import Email, TrackKey
+from app.services.scheduling import user_now
 
 logger = logging.getLogger("askcal.classifier")
 
@@ -117,8 +118,23 @@ Rules:
   for platform/no-reply notifications; reserve `client`/`recruiter`/`professor`
   for a real person writing to the user.
 - consequence = what the user loses by IGNORING the email, not how urgent it feels
-- deadline_utc: only if a concrete deadline is stated or strongly implied
-  (ISO 8601, UTC), resolved against the date given with the emails below.
+- deadline_utc: only when the email states or clearly implies a date something
+  is DUE. Resolve it in the user's LOCAL timezone (given below), then express
+  the result in UTC as ISO 8601. Never emit a deadline earlier than that
+  email's received_at.
+  A stated START is not a deadline. "begins next week", "available from Monday",
+  "you can start once X" -> deadline_utc is null unless a separate due date is
+  also given.
+  Vague wording resolves in LOCAL time as:
+    "by morning" / "first thing"        -> 09:00 on the NEXT local day
+    "EOD" / "end of day" / "by close"   -> 17:00 that local day, i.e. close of
+                                           business, NOT midnight
+    "by tonight" / "today"              -> 21:00 that local day
+    "end of the week"                   -> Friday 17:00 of the CURRENT local week
+    "end of the month"                  -> the LAST day of the CURRENT local
+                                           month at 17:00
+    "ASAP" / "urgent" with no date      -> null; urgency is consequence, not a
+                                           deadline
 - estimated_minutes: rough effort to fully handle the email's ask, null if no ask
 - confidence: how sure you are about the track + consequence overall
 - Return one result object per input email, echoing its gmail_id exactly.
@@ -128,7 +144,9 @@ Rules:
 SYSTEM_PROMPT = _RULES + "\n" + schema_block(EmailSignals, as_list=True)
 
 USER_TEMPLATE = """\
-Today is {today_utc}.
+Right now it is {now_local} in the user's timezone, {timezone}.
+Resolve every relative date against that, not against UTC — "by morning" means
+morning where they are, which can be a different calendar day in UTC.
 
 Emails:
 {emails_json}
@@ -155,15 +173,29 @@ def _email_payload(e: Email) -> dict:
     }
 
 
-def _build_user_prompt(emails: list[Email]) -> str:
+def _build_user_prompt(emails: list[Email], tz_name: str = "UTC") -> str:
+    """The prompt, anchored to the user's own clock.
+
+    It used to say only "Today is <UTC date>", which is why "by morning" came
+    back nineteen hours out: the model was resolving a local phrase against a
+    calendar day that had already rolled over somewhere else.
+    """
     return USER_TEMPLATE.format(
-        today_utc=datetime.now(timezone.utc).date().isoformat(),
+        now_local=user_now(tz_name).strftime("%Y-%m-%d %H:%M (%A)"),
+        timezone=tz_name,
         emails_json=json.dumps([_email_payload(e) for e in emails], indent=2),
     )
 
 
 def parse_deadline(value: str | None) -> datetime | None:
-    """Lenient ISO parse; naive values are assumed UTC."""
+    """Lenient ISO parse; naive values are assumed UTC.
+
+    Deliberately does no plausibility checking. A deadline earlier than the mail
+    that mentions it is perfectly ordinary — you get told about things that are
+    already late — so rejecting those here would throw away exactly the work
+    that most needs surfacing. `sanitize_deadline` in autotask.py owns the
+    plausibility window.
+    """
     if not value:
         return None
     try:
@@ -202,7 +234,9 @@ def classify_pacing() -> tuple[int, float]:
     return size, delay
 
 
-async def classify_batch(emails: list[Email]) -> dict[str, EmailSignals]:
+async def classify_batch(
+    emails: list[Email], tz_name: str = "UTC"
+) -> dict[str, EmailSignals]:
     """One LLM call (plus up to classify_max_retries follow-ups) for a batch.
 
     Returns signals keyed by gmail_id. Emails missing from the response stay
@@ -221,7 +255,7 @@ async def classify_batch(emails: list[Email]) -> dict[str, EmailSignals]:
     errors: list[str] = []
 
     for attempt in range(retries + 1):
-        user = _build_user_prompt(pending)
+        user = _build_user_prompt(pending, tz_name)
         if attempt:
             user += RETRY_SUFFIX.format(errors="\n".join(f"- {e}" for e in errors))
 

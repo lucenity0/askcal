@@ -31,6 +31,11 @@ struct SettingsPage: View {
 
     @AppStorage("themeMode") private var themeRaw = ThemeMode.storageDefault
     @AppStorage("userName") private var userName = ""
+    // The source of truth for the reminders, because the scheduler reads these.
+    @AppStorage("morningDigest") private var morningDigest = true
+    @AppStorage("morningHour") private var morningHour = 8
+    @AppStorage("eveningNudge") private var eveningNudge = true
+    @AppStorage("eveningHour") private var eveningHour = 21
 
     @State private var settings: AppSettings?
     @State private var loadError: String?
@@ -58,8 +63,8 @@ struct SettingsPage: View {
                 if store.isLive {
                     syncBlock
                     autoTaskBlock
-                    remindersBlock
                 }
+                remindersBlock
                 referenceBlock
                 if !store.isLive { localDataBlock }
             }
@@ -185,25 +190,31 @@ struct SettingsPage: View {
 
     // MARK: - Reminders
 
+    /// Local-first, deliberately.
+    ///
+    /// These are scheduled on the device by `NotificationManager`, which reads
+    /// them from UserDefaults — so they have to work with no account and no
+    /// network. Gating them on the settings fetch meant a backend that was down
+    /// (or, as it turned out, simply not deployed yet) removed two switches
+    /// that had worked offline for months. The server copy is a sync, not the
+    /// source.
     @ViewBuilder
     private var remindersBlock: some View {
-        if let r = settings?.reminders {
-            VStack(alignment: .leading, spacing: Space.lg) {
-                Rubric("reminders")
-                reminderRow("Morning digest", "what today asks of you",
-                            isOn: r.morningDigest, hour: r.morningHour,
-                            onKey: "morningDigest", hourKey: "morningHour")
-                reminderRow("Evening nudge", "how the day went",
-                            isOn: r.eveningNudge, hour: r.eveningHour,
-                            onKey: "eveningNudge", hourKey: "eveningHour")
-                PageRule()
-            }
+        VStack(alignment: .leading, spacing: Space.lg) {
+            Rubric("reminders")
+            reminderRow("Morning digest", "what today asks of you",
+                        isOn: $morningDigest, hour: $morningHour,
+                        onKey: "morningDigest", hourKey: "morningHour")
+            reminderRow("Evening nudge", "how the day went",
+                        isOn: $eveningNudge, hour: $eveningHour,
+                        onKey: "eveningNudge", hourKey: "eveningHour")
+            PageRule()
         }
     }
 
     private func reminderRow(
         _ title: String, _ note: String,
-        isOn: Bool, hour: Int, onKey: String, hourKey: String
+        isOn: Binding<Bool>, hour: Binding<Int>, onKey: String, hourKey: String
     ) -> some View {
         VStack(alignment: .leading, spacing: Space.md) {
             HStack {
@@ -217,20 +228,38 @@ struct SettingsPage: View {
                 }
                 Spacer()
                 Toggle("", isOn: Binding(
-                    get: { isOn },
-                    set: { new in Task { await patch([onKey: new]) } }
+                    get: { isOn.wrappedValue },
+                    set: { new in
+                        // Applies immediately; the server is told afterwards
+                        // and its failure does not undo the switch.
+                        isOn.wrappedValue = new
+                        Task {
+                            await NotificationManager.refreshSchedules(
+                                dayClosed: store.dayClosed
+                            )
+                            if store.isLive { await patch([onKey: new]) }
+                        }
+                    }
                 ))
                 .labelsHidden()
                 .toggleStyle(PaperToggleStyle())
                 .accessibilityLabel(title)
             }
-            if isOn {
+            if isOn.wrappedValue {
                 ChipPicker(
                     options: Array(stride(from: 5, through: 23, by: 1)),
-                    title: { String(format: "%02d:00", $0) },
+                    title: { (h: Int) in String(format: "%02d:00", h) },
                     selection: Binding(
-                        get: { hour },
-                        set: { new in Task { await patch([hourKey: new]) } }
+                        get: { hour.wrappedValue },
+                        set: { new in
+                            hour.wrappedValue = new
+                            Task {
+                                await NotificationManager.refreshSchedules(
+                                    dayClosed: store.dayClosed
+                                )
+                                if store.isLive { await patch([hourKey: new]) }
+                            }
+                        }
                     ),
                     wraps: true,
                     bordered: false
@@ -376,7 +405,12 @@ struct SettingsPage: View {
     private func load() async {
         guard store.isLive else { return }
         do {
-            settings = try await APIClient.shared.settings()
+            let fetched = try await APIClient.shared.settings()
+            settings = fetched
+            morningDigest = fetched.reminders.morningDigest
+            morningHour = fetched.reminders.morningHour
+            eveningNudge = fetched.reminders.eveningNudge
+            eveningHour = fetched.reminders.eveningHour
             loadError = nil
         } catch {
             loadError = (error as? LocalizedError)?.errorDescription
@@ -391,7 +425,6 @@ struct SettingsPage: View {
         do {
             settings = try await APIClient.shared.updateSettings(changes)
             Haptics.tick()
-            await NotificationManager.refreshSchedules(dayClosed: store.dayClosed)
         } catch {
             loadError = (error as? LocalizedError)?.errorDescription
                 ?? "couldn't save that."

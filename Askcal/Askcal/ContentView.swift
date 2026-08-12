@@ -30,6 +30,9 @@ struct ContentView: View {
     /// else. A plain Bool cannot drive `.popup(item:)`.
     private struct ReviewRequest: Identifiable { let id = "review" }
     @State private var review: ReviewRequest?
+    @State private var digestKind: DigestKind?
+    @State private var digest: Digest?
+    @State private var digestError: String?
     @State private var showGreeting = false
     @State private var didLaunch = false
 
@@ -67,6 +70,11 @@ struct ContentView: View {
         .popup(item: $review) { _ in
             ReviewSheet { review = nil }
         }
+        .popup(item: $digestKind) { kind in
+            DigestCard(kind: kind, digest: digest, error: digestError) {
+                digestKind = nil
+            }
+        }
         .environment(\.book, book)
         .preferredColorScheme(mode.polarity)
         .animation(.easeInOut(duration: 0.25), value: themeRaw)
@@ -86,7 +94,8 @@ struct ContentView: View {
                 TodayPage(
                     composing: $composing,
                     onConnect: connect,
-                    onOpenReview: { review = .init() }
+                    onOpenReview: { review = .init() },
+                    onOpenDigest: { openDigest($0) }
                 )
             }
 
@@ -105,6 +114,23 @@ struct ContentView: View {
         }
         .tint(book.ink)
         .toolbarBackground(book.recessed, for: .tabBar)
+    }
+
+    /// Opens the popup immediately and fills it when the fetch lands, rather
+    /// than waiting on the network before showing anything — a tap that does
+    /// nothing for a second reads as a tap that missed.
+    private func openDigest(_ kind: DigestKind) {
+        digest = nil
+        digestError = nil
+        digestKind = kind
+        Task {
+            do {
+                digest = try await APIClient.shared.digest(kind)
+            } catch {
+                digestError = (error as? LocalizedError)?.errorDescription
+                    ?? "couldn't put your day together."
+            }
+        }
     }
 
     private func connect() {
