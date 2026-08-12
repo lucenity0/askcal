@@ -217,8 +217,13 @@ final class APIClient {
     }
     struct ClosingOut: Decodable { let carryForwardCount: Int; let message: String }
 
-    func tasks() async throws -> [AskcalTask] {
-        (try await send("GET", "/api/tasks") as TasksOut).tasks
+    /// Today's list. `includeDone` keeps completed work in it: the day shows a
+    /// ticked task struck through rather than removing it, so leaving them out
+    /// here would make every refresh quietly erase the day's progress.
+    func tasks(includeDone: Bool = true) async throws -> [AskcalTask] {
+        (try await send("GET", "/api/tasks", query: [
+            .init(name: "includeDone", value: includeDone ? "true" : "false"),
+        ]) as TasksOut).tasks
     }
 
     func today() async throws -> TodayOut {

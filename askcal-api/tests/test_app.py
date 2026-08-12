@@ -71,7 +71,7 @@ def test_task_list_accepts_a_date_range():
             "parameters"
         ]
     }
-    assert {"on", "start", "end"} <= params
+    assert {"on", "start", "end", "includeDone"} <= params
 
 
 def test_task_delete_is_registered():

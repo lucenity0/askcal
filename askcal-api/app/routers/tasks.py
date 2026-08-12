@@ -1,8 +1,9 @@
 import datetime as dt
 import uuid
 from datetime import datetime, timezone
+from typing import Annotated
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from sqlalchemy import or_, select
 from sqlalchemy.orm import selectinload
 
@@ -51,6 +52,10 @@ async def list_tasks(
     on: dt.date | None = None,
     start: dt.date | None = None,
     end: dt.date | None = None,
+    # Aliased because the rest of the contract is camelCase and a lone
+    # snake_case query parameter is exactly the kind of inconsistency a client
+    # gets wrong once and then works around forever.
+    include_done: Annotated[bool, Query(alias="includeDone")] = False,
 ) -> TasksResponse:
     """Non-done tasks for today or earlier, highest consequence first.
 
@@ -74,9 +79,14 @@ async def list_tasks(
     elif start is not None and end is not None:
         stmt = stmt.where(Task.scheduled_for >= start, Task.scheduled_for <= end)
     else:
-        stmt = stmt.where(
-            Task.status != TaskStatus.done, due_by_today(user_today(user.timezone))
-        )
+        stmt = stmt.where(due_by_today(user_today(user.timezone)))
+        # `include_done` keeps today's completed work in the list. The app shows
+        # a ticked task struck through rather than removing it — a task that
+        # disappears the moment you complete it reads as having been deleted —
+        # so without this the next refresh would silently take them all away
+        # again.
+        if not include_done:
+            stmt = stmt.where(Task.status != TaskStatus.done)
     tasks = (await db.scalars(stmt)).all()
     return TasksResponse(tasks=[_task_full_out(t) for t in tasks])
 
