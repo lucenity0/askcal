@@ -11,6 +11,7 @@ from app.models.base import TimestampMixin
 from app.models.track import TrackKey
 
 if TYPE_CHECKING:
+    from app.models.mail_account import MailAccount
     from app.models.task import Task
     from app.models.track import Track
     from app.models.user import User
@@ -35,8 +36,13 @@ class Email(TimestampMixin, Base):
     )
     gmail_id: Mapped[str] = mapped_column(String(64))
     thread_id: Mapped[str | None] = mapped_column(String(64), index=True)
-    # Which connected mailbox this came from (uni vs work account)
+    # Which connected mailbox this came from (uni vs work account).
+    # `account_email` is the old denormalised copy, still written; `account_id`
+    # is the one to read.
     account_email: Mapped[str | None] = mapped_column(String(320))
+    account_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("mail_accounts.id", ondelete="CASCADE"), index=True
+    )
     subject: Mapped[str | None] = mapped_column(Text)
     sender: Mapped[str | None] = mapped_column(String(320))
     snippet: Mapped[str | None] = mapped_column(Text)
@@ -76,3 +82,6 @@ class Email(TimestampMixin, Base):
     # query rather than one per email — and so it works at all under async,
     # where a lazy load outside the session raises.
     track_ref: Mapped["Track | None"] = relationship(lazy="selectin")
+    # Which mailbox it arrived at. Loaded eagerly because the classifier reads
+    # the account's usual track off it for every mail in a batch.
+    account: Mapped["MailAccount | None"] = relationship(lazy="selectin")

@@ -10,6 +10,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.config import get_settings
 from app.core.errors import AskcalError, http_exception_handler, askcal_error_handler
 from app.routers import (
+    accounts,
     auth,
     calendar,
     closing_time,
@@ -74,6 +75,7 @@ app.include_router(digest.router)
 app.include_router(routines.router)
 app.include_router(settings_router.router)
 app.include_router(me.router)
+app.include_router(accounts.router)
 
 
 @app.get("/health", tags=["meta"])

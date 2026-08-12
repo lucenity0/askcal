@@ -33,7 +33,7 @@ from app.config import get_settings
 from app.core.errors import AskcalError
 from app.db import SessionLocal
 from app.llm.base import LLMLimitError
-from app.models import Email, Track, User
+from app.models import Email, MailAccount, Track, User
 from app.services.autotask import (
     NON_TASKING_CONSEQUENCES,
     build_task,
@@ -76,10 +76,19 @@ class SyncResult:
     auto_tasked: int = 0
 
 
-async def _store_new_messages(db: AsyncSession, user: User) -> SyncResult:
+async def _store_new_messages(
+    db: AsyncSession, user: User, account: MailAccount
+) -> SyncResult:
+    """Pull one mailbox.
+
+    Dedup is still on (user_id, gmail_id) rather than (account_id, gmail_id).
+    Gmail ids are per-mailbox, so the same message in two accounts carries two
+    different ids and both are stored — a collision across mailboxes would have
+    to be an id reused between accounts, which Gmail does not do.
+    """
     result = SyncResult()
     messages = await fetch_recent_messages(
-        user.google_refresh_token, since=local_midnight(user.timezone)
+        account.google_refresh_token, since=local_midnight(user.timezone)
     )
     result.fetched = len(messages)
     if messages:
@@ -101,7 +110,8 @@ async def _store_new_messages(db: AsyncSession, user: User) -> SyncResult:
                     user_id=user.id,
                     gmail_id=m.gmail_id,
                     thread_id=m.thread_id,
-                    account_email=user.email,
+                    account_email=account.email,
+                    account_id=account.id,
                     subject=m.subject,
                     sender=m.sender,
                     snippet=m.snippet,
@@ -111,7 +121,9 @@ async def _store_new_messages(db: AsyncSession, user: User) -> SyncResult:
                 )
             )
             result.new += 1
-    user.last_synced_at = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc)
+    account.last_synced_at = now
+    user.last_synced_at = now
     await db.commit()
     return result
 
@@ -263,15 +275,50 @@ async def _classify_pending(db: AsyncSession, user: User) -> tuple[int, int]:
     return classified, auto_tasked
 
 
+async def syncable_accounts(db: AsyncSession, user: User) -> list[MailAccount]:
+    """The mailboxes worth pulling: connected and not paused."""
+    rows = (
+        await db.scalars(
+            select(MailAccount).where(
+                MailAccount.user_id == user.id,
+                MailAccount.active.is_(True),
+                MailAccount.google_refresh_token.is_not(None),
+            )
+        )
+    ).all()
+    return list(rows)
+
+
 async def sync_user(db: AsyncSession, user: User) -> SyncResult:
-    """Full pass for one user. Raises GMAIL_DISCONNECTED if auth is dead."""
-    if not user.google_refresh_token:
+    """Full pass for one user, across every mailbox they have connected.
+
+    Raises GMAIL_DISCONNECTED only when there is nothing to pull at all.
+    """
+    accounts = await syncable_accounts(db, user)
+    if not accounts:
         raise AskcalError(401, "GMAIL_DISCONNECTED", "No Gmail connection for this account")
-    result = await _store_new_messages(db, user)
+
+    result = SyncResult()
+    for account in accounts:
+        try:
+            fetched = await _store_new_messages(db, user, account)
+        except Exception:
+            # One dead mailbox must not stop the others. A revoked token on a
+            # college address should cost you that inbox, not your whole day.
+            await db.rollback()
+            logger.exception("fetch failed for %s — continuing", account.email)
+            continue
+        result.fetched += fetched.fetched
+        result.new += fetched.new
+
+    # Classification is per-user, not per-mailbox: it runs over everything
+    # unclassified in one pass, so a batch can span accounts and the pass limit
+    # still means what it says.
     result.classified, result.auto_tasked = await _classify_pending(db, user)
     logger.info(
-        "sync %s: fetched=%d new=%d classified=%d auto_tasked=%d",
-        user.email, result.fetched, result.new, result.classified, result.auto_tasked,
+        "sync %s (%d mailbox%s): fetched=%d new=%d classified=%d auto_tasked=%d",
+        user.email, len(accounts), "" if len(accounts) == 1 else "es",
+        result.fetched, result.new, result.classified, result.auto_tasked,
     )
     return result
 
@@ -290,8 +337,19 @@ async def run_sync_for_user(user_id: uuid.UUID) -> None:
 
 async def sync_all_users() -> None:
     async with SessionLocal() as db:
+        # Anyone with at least one live mailbox. Keyed off the accounts now, so a
+        # user whose primary is disconnected but whose second inbox still works
+        # keeps syncing instead of dropping out of the loop entirely.
         users = (
-            await db.scalars(select(User).where(User.google_refresh_token.is_not(None)))
+            await db.scalars(
+                select(User)
+                .join(MailAccount, MailAccount.user_id == User.id)
+                .where(
+                    MailAccount.active.is_(True),
+                    MailAccount.google_refresh_token.is_not(None),
+                )
+                .distinct()
+            )
         ).all()
         for user in users:
             try:

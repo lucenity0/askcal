@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 
@@ -10,7 +11,7 @@ from app.config import get_settings
 from app.core.errors import AskcalError
 from app.core.security import create_access_token, hash_refresh_token, new_refresh_token
 from app.deps import CurrentUser, DbSession
-from app.models import RefreshToken, User
+from app.models import MailAccount, RefreshToken, User
 from app.schemas.auth import (
     AuthResponse,
     GoogleAuthRequest,
@@ -38,6 +39,52 @@ async def _issue_refresh_token(db: DbSession, user: User) -> str:
     return raw
 
 
+async def _primary_account(db: DbSession, user: User) -> MailAccount:
+    """The mailbox the user signs in with, created if this account predates
+    `mail_accounts` and somehow never got backfilled one."""
+    account = await db.scalar(
+        select(MailAccount).where(
+            MailAccount.user_id == user.id, MailAccount.is_primary.is_(True)
+        )
+    )
+    if account is None:
+        account = MailAccount(user_id=user.id, email=user.email, is_primary=True)
+        db.add(account)
+    return account
+
+
+async def _link_mailbox(
+    user_id: uuid.UUID, profile: GoogleProfile, db: DbSession
+) -> MailAccount:
+    """Attach a second (third, fourth) mailbox to an existing account.
+
+    Re-linking an address already connected refreshes its token rather than
+    erroring: the usual reason to do this is that Google revoked the old one,
+    and being told "already connected" while nothing syncs would be useless.
+    """
+    user = await db.get(User, user_id)
+    if user is None:
+        raise AskcalError(401, "AUTH_EXPIRED", "User no longer exists")
+
+    account = await db.scalar(
+        select(MailAccount).where(
+            MailAccount.user_id == user.id, MailAccount.email == profile.email
+        )
+    )
+    if account is None:
+        account = MailAccount(user_id=user.id, email=profile.email, is_primary=False)
+        db.add(account)
+    account.google_sub = profile.sub
+    if profile.refresh_token:
+        account.google_refresh_token = profile.refresh_token
+    # Re-linking a paused mailbox turns it back on. Going through the consent
+    # screen again is not something you do to leave an inbox switched off.
+    account.active = True
+    await db.commit()
+    await db.refresh(account)
+    return account
+
+
 async def _login(profile: GoogleProfile, db: DbSession) -> tuple[User, str, str]:
     """Upsert the user from a verified Google profile → (user, access, refresh)."""
     user = await db.scalar(select(User).where(User.google_sub == profile.sub))
@@ -52,10 +99,18 @@ async def _login(profile: GoogleProfile, db: DbSession) -> tuple[User, str, str]
     else:
         user.google_sub = profile.sub
         user.name = user.name or profile.name
+    # Still written so a rollback to the single-mailbox shape has its token.
+    # Every read goes through the account row below.
     if profile.refresh_token:
         user.google_refresh_token = profile.refresh_token
 
     await db.flush()
+
+    account = await _primary_account(db, user)
+    account.google_sub = profile.sub
+    if profile.refresh_token:
+        account.google_refresh_token = profile.refresh_token
+
     raw_refresh = await _issue_refresh_token(db, user)
     await db.commit()
     return user, create_access_token(user.id), raw_refresh
@@ -119,7 +174,7 @@ async def google_callback(code: str, state: str, db: DbSession) -> RedirectRespo
     s = get_settings()
     try:
         payload = jwt.decode(state, s.jwt_secret, algorithms=[s.jwt_algorithm])
-        if payload.get("type") != "oauth_state":
+        if payload.get("type") not in ("oauth_state", "oauth_link"):
             raise jwt.InvalidTokenError("wrong token type")
         scheme = payload["scheme"]
     except jwt.InvalidTokenError:
@@ -131,6 +186,17 @@ async def google_callback(code: str, state: str, db: DbSession) -> RedirectRespo
     _check_scheme(scheme)
 
     profile = await exchange_google_code(code, redirect_uri=_callback_url())
+
+    # Connecting another mailbox to an account that is already signed in. No
+    # tokens are issued here — the user has a session already, and minting a
+    # second one for a mailbox link would be a way to escalate a link into a
+    # sign-in as somebody else.
+    if payload["type"] == "oauth_link":
+        account = await _link_mailbox(uuid.UUID(payload["user_id"]), profile, db)
+        return RedirectResponse(
+            f"{scheme}://oauth-linked#{urlencode({'email': account.email})}"
+        )
+
     user, access, raw_refresh = await _login(profile, db)
 
     fragment = urlencode(

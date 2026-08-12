@@ -141,6 +141,11 @@ _RULES_TAIL = """\
                                            month at 17:00
     "ASAP" / "urgent" with no date      -> null; urgency is consequence, not a
                                            deadline
+- `arrived_at`, when present, is which of the user's mailboxes the email landed
+  in, and `mailbox_usually` is the track that mailbox's mail normally belongs
+  to. Treat it as a leaning, not a rule — a bill arriving at a college address
+  is still about money, and a personal note to a work address is still personal.
+  Use it to break a tie, not to override what the email plainly says.
 - estimated_minutes: rough effort to fully handle the email's ask, null if no ask
 - confidence: how sure you are about the track + consequence overall
 - Return one result object per input email, echoing its gmail_id exactly.
@@ -196,13 +201,22 @@ EXCERPT_CHARS = 1500
 
 def _email_payload(e: Email) -> dict:
     body = (e.body_text or e.snippet or "")[:EXCERPT_CHARS]
-    return {
+    payload = {
         "gmail_id": e.gmail_id,
         "from": e.sender,
         "subject": e.subject,
         "received_at": e.received_at.isoformat(),
         "body_excerpt": body,
     }
+    # Which of the user's mailboxes it landed in, and what that mailbox usually
+    # carries. With one account this said nothing; with a college address and a
+    # personal one it is often the strongest signal in the whole message.
+    account = getattr(e, "account", None)
+    if account is not None:
+        payload["arrived_at"] = account.email
+        if account.default_track is not None:
+            payload["mailbox_usually"] = account.default_track.slug
+    return payload
 
 
 def _build_user_prompt(emails: list[Email], tz_name: str = "UTC") -> str:

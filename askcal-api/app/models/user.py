@@ -11,6 +11,7 @@ from app.models.base import TimestampMixin
 
 if TYPE_CHECKING:
     from app.models.email import Email
+    from app.models.mail_account import MailAccount
     from app.models.refresh_token import RefreshToken
     from app.models.routine import Routine
     from app.models.task import Task
@@ -26,9 +27,11 @@ class User(TimestampMixin, Base):
     email: Mapped[str] = mapped_column(String(320), unique=True)
     name: Mapped[str | None] = mapped_column(String(200))
     google_sub: Mapped[str | None] = mapped_column(String(64), unique=True)
-    # Google's OAuth refresh token, used by the Gmail ingestion layer.
-    # TODO: encrypt at rest before production; move to a gmail_accounts table
-    # when multi-account (uni + work inbox) lands.
+    # The primary account's Google refresh token. Superseded by
+    # `mail_accounts` — still written so a rollback has its data, but every
+    # read should go through the account rows, since there is more than one
+    # mailbox now and this column can only ever hold one of them.
+    # TODO: encrypt at rest (#19).
     google_refresh_token: Mapped[str | None] = mapped_column(Text)
     timezone: Mapped[str] = mapped_column(String(64), default="UTC")
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -55,4 +58,7 @@ class User(TimestampMixin, Base):
     )
     routines: Mapped[list["Routine"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
+    )
+    mail_accounts: Mapped[list["MailAccount"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan", lazy="selectin"
     )

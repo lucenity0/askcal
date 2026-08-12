@@ -128,3 +128,12 @@ def test_a_track_can_be_edited_added_and_removed():
     paths = client.get("/openapi.json").json()["paths"]
     assert {"patch", "delete"} <= set(paths["/api/tracks/{slug}"])
     assert "post" in paths["/api/tracks"]
+
+
+def test_another_mailbox_can_be_connected():
+    """One Google account was baked into the user row, so college mail and
+    personal mail could not both reach Askcal."""
+    paths = client.get("/openapi.json").json()["paths"]
+    assert "post" in paths["/api/accounts/link"]
+    assert "get" in paths["/api/accounts"]
+    assert {"patch", "delete"} <= set(paths["/api/accounts/{account_id}"])

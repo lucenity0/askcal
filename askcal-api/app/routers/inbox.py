@@ -25,6 +25,7 @@ from app.services.brew_engine import temp_for_score
 from app.services.gmail import mark_as_read
 from app.services.scheduling import local_midnight, user_today
 from app.services.sync import run_sync_for_user
+from app.services.accounts import has_connected_mailbox, token_for_email
 from app.services.tracks import find_track
 
 router = APIRouter(prefix="/api", tags=["inbox"])
@@ -102,7 +103,7 @@ async def get_inbox(user: CurrentUser, db: DbSession) -> InboxResponse:
 async def trigger_sync(
     user: CurrentUser, background_tasks: BackgroundTasks
 ) -> SyncAccepted:
-    if not user.google_refresh_token:
+    if not has_connected_mailbox(user):
         raise AskcalError(401, "GMAIL_DISCONNECTED", "No Gmail connection for this account")
     background_tasks.add_task(run_sync_for_user, user.id)
     return SyncAccepted(status="syncing", message="pulling fresh beans")
@@ -158,8 +159,11 @@ async def handle_email(
     await db.commit()
     await db.refresh(task, ["track"])
 
-    if user.google_refresh_token:
-        background_tasks.add_task(mark_as_read, user.google_refresh_token, gmail_id)
+    # The mailbox it actually arrived at. The primary account's token would
+    # mark nothing read and say nothing about it — that id does not exist over
+    # there.
+    if token := token_for_email(user, email):
+        background_tasks.add_task(mark_as_read, token, gmail_id)
 
     return _task_full_out(task)
 

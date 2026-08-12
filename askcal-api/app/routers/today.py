@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 from app.deps import CurrentUser, DbSession
 from app.models import Task, TaskStatus
 from app.schemas.today import BrewData, PlanSlot, TaskOut, TodayResponse
+from app.services.accounts import calendar_token
 from app.services.brew_engine import BREWS, calculate_brew
 from app.routers.tasks import due_by_today
 from app.services.gcal import busy_blocks
@@ -41,9 +42,9 @@ async def get_today(user: CurrentUser, db: DbSession) -> TodayResponse:
     # calendar busy blocks are hard no-go zones for the scheduler;
     # no calendar (or a fetch failure) degrades to an open day, never a 500
     busy: list = []
-    if user.google_refresh_token:
+    if token := calendar_token(user):
         try:
-            busy = await busy_blocks(user.google_refresh_token, today, user.timezone)
+            busy = await busy_blocks(token, today, user.timezone)
         except Exception:
             logger.warning("calendar fetch failed; planning without busy blocks",
                            exc_info=True)

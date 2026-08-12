@@ -1,5 +1,6 @@
 from app.models.day_log import DayLog
 from app.models.email import Email
+from app.models.mail_account import MailAccount
 from app.models.refresh_token import RefreshToken
 from app.models.routine import Routine
 from app.models.task import CareerPipeline, Task, TaskStatus
@@ -10,6 +11,7 @@ __all__ = [
     "CareerPipeline",
     "DayLog",
     "Email",
+    "MailAccount",
     "RefreshToken",
     "Routine",
     "Task",

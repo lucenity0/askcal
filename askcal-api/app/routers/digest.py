@@ -14,6 +14,7 @@ from app.deps import CurrentUser, DbSession
 from app.models import Email, Task, TaskStatus
 from app.routers.tasks import due_by_today
 from app.schemas.digest import DigestResponse
+from app.services.accounts import calendar_token
 from app.services.digest import evening_digest, morning_digest
 from app.services.gcal import busy_blocks
 from app.services.scheduling import build_day_plan, user_now, user_today
@@ -49,9 +50,9 @@ async def get_morning(user: CurrentUser, db: DbSession) -> DigestResponse:
     # A calendar that will not load degrades to an open day, never a 500 — the
     # digest firing with a slightly optimistic plan beats it not firing at all.
     busy: list = []
-    if user.google_refresh_token:
+    if token := calendar_token(user):
         try:
-            busy = await busy_blocks(user.google_refresh_token, now.date())
+            busy = await busy_blocks(token, now.date())
         except Exception:  # noqa: BLE001 — logged upstream; never fails the digest
             busy = []
 
