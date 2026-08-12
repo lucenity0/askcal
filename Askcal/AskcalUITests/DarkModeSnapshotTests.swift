@@ -2,15 +2,20 @@
 //  DarkModeSnapshotTests.swift
 //  AskcalUITests
 //
-//  Captures the dark theme on screens that use the shared filled-pill and
-//  toggle styles.
+//  Captures the night theme on the screens that use the shared styles.
 //
-//  These exist because `PillButtonStyle` and `MonoToggleStyle` read
-//  `@Environment(\.book)` from a `ButtonStyle`/`ToggleStyle` struct. Those are
-//  not Views, and if SwiftUI does not inject into them the palette silently
-//  falls back to `PaperPaletteKey.defaultValue` — which is `.light`, whose
-//  `fill` is #000000. On the dark theme's #000000 background that makes every
-//  filled pill disappear. Reading the code cannot settle it; rendering can.
+//  These exist because `PillButtonStyle`, `PaperToggleStyle` and `ChipPicker`
+//  read `@Environment(\.book)` from inside a `ButtonStyle`/`ToggleStyle`
+//  struct. Those are not Views, and if SwiftUI does not inject into them the
+//  palette silently falls back to `PaperPaletteKey.defaultValue` — the day
+//  theme, whose `fill` is near-black. On the night theme's near-black page that
+//  makes every filled pill disappear. Reading the code cannot settle it;
+//  rendering can.
+//
+//  The launch arguments deliberately use the older theme names. They are the
+//  live check that `ThemeMode.stored` still maps every spelling these themes
+//  have had — light/dark, paper/slate, day/night — because an unmapped one
+//  silently returns that person to the light theme with no way to tell.
 //
 
 import XCTest
@@ -21,16 +26,14 @@ final class DarkModeSnapshotTests: XCTestCase {
         continueAfterFailure = false
     }
 
-    /// Launch in dark mode. `-themeMode dark` lands in UserDefaults, which is
-    /// where @AppStorage("themeMode") reads from.
-    private func launchDark() -> XCUIApplication {
+    private func launchDark(themeName: String = "dark") -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments += ["-themeMode", "dark"]
+        app.launchArguments += ["-themeMode", themeName]
         app.launch()
 
         // The notification permission alert belongs to SpringBoard, not us.
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        for label in ["Don’t Allow", "Don't Allow", "Allow"] {
+        for label in ["Allow", "Don’t Allow", "Don't Allow"] {
             let button = springboard.buttons[label]
             if button.waitForExistence(timeout: 3) {
                 button.tap()
@@ -38,8 +41,7 @@ final class DarkModeSnapshotTests: XCTestCase {
             }
         }
 
-        // The cold-launch greeting animation runs ~2.5s before content appears.
-        Thread.sleep(forTimeInterval: 4)
+        Thread.sleep(forTimeInterval: 5)   // the launch greeting
         return app
     }
 
@@ -51,46 +53,43 @@ final class DarkModeSnapshotTests: XCTestCase {
     }
 
     /// The launch scene is on screen for about two and a half seconds, so this
-    /// deliberately does not use `launchDark()` — that waits the greeting out.
-    func testLaunchSceneInDarkMode() throws {
+    /// deliberately does not wait the greeting out.
+    func testLaunchSceneAtNight() throws {
         let app = XCUIApplication()
-        app.launchArguments += ["-themeMode", "slate"]
+        app.launchArguments += ["-themeMode", "slate"]   // pre-rename name
         app.launch()
-        Thread.sleep(forTimeInterval: 0.9)
-        snapshot(app, "05-launch-scene-slate")
+        Thread.sleep(forTimeInterval: 1.2)
+        snapshot(app, "30-launch-scene-night")
     }
 
-    func testLaunchSceneInPaperMode() throws {
+    func testLaunchSceneOnPaper() throws {
         let app = XCUIApplication()
-        app.launchArguments += ["-themeMode", "paper"]
+        app.launchArguments += ["-themeMode", "paper"]   // pre-rename name
         app.launch()
-        Thread.sleep(forTimeInterval: 0.9)
-        snapshot(app, "06-launch-scene-paper")
+        Thread.sleep(forTimeInterval: 1.2)
+        snapshot(app, "31-launch-scene-day")
     }
 
-    func testMoreScreenInDarkMode() throws {
+    /// More carries the densest set of shared styles: filled and outlined
+    /// pills, the theme chip picker, and two toggles.
+    func testMoreScreenAtNight() throws {
         let app = launchDark()
-        snapshot(app, "01-today-dark")
+        snapshot(app, "32-day-night")
 
-        // More carries the densest set of shared styles: two filled pills
-        // (Connect, Delete everything), the theme segmented control, and two
-        // MonoToggleStyle switches.
-        let more = app.buttons["Settings"]
-        XCTAssertTrue(more.waitForExistence(timeout: 10), "Settings button not found")
+        let more = app.buttons["More"]
+        XCTAssertTrue(more.waitForExistence(timeout: 10), "More tab not found")
         more.tap()
         Thread.sleep(forTimeInterval: 2)
-        snapshot(app, "02-more-dark")
+        snapshot(app, "33-more-night")
     }
 
-    /// The global tint leaks in through the text caret, not through any Swift
-    /// source: `AccentColor.colorset` is empty while the build sets
-    /// ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME, so anything reading the
-    /// tint without an override falls back to system blue. Only visible while a
-    /// field has focus, which is why this test exists separately.
-    func testFocusedTextFieldCaretInDarkMode() throws {
+    /// The global tint leaks in through the text caret rather than through any
+    /// Swift source, so it is only visible while a field has focus — which is
+    /// why this is its own test.
+    func testFocusedTextFieldCaretAtNight() throws {
         let app = launchDark()
-        let more = app.buttons["Settings"]
-        XCTAssertTrue(more.waitForExistence(timeout: 10), "Settings button not found")
+        let more = app.buttons["More"]
+        XCTAssertTrue(more.waitForExistence(timeout: 10), "More tab not found")
         more.tap()
         Thread.sleep(forTimeInterval: 2)
 
@@ -99,15 +98,17 @@ final class DarkModeSnapshotTests: XCTestCase {
         field.tap()
         field.typeText("Nafees")
         Thread.sleep(forTimeInterval: 1)
-        snapshot(app, "04-caret-dark")
+        snapshot(app, "34-caret-night")
     }
 
-    func testReviewScreenInDarkMode() throws {
+    /// Review is reached from the day's end-of-day card rather than the tab
+    /// bar, so this also covers that route still working.
+    func testReviewScreenAtNight() throws {
         let app = launchDark()
-        let review = app.buttons["Close the day"].firstMatch
-        XCTAssertTrue(review.waitForExistence(timeout: 10), "close-the-day row not found")
+        let review = app.buttons["Review day"].firstMatch
+        XCTAssertTrue(review.waitForExistence(timeout: 10), "review-day button not found")
         review.tap()
         Thread.sleep(forTimeInterval: 2)
-        snapshot(app, "03-review-dark")
+        snapshot(app, "35-review-night")
     }
 }
