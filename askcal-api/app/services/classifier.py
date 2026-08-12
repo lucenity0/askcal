@@ -29,7 +29,7 @@ from app.llm.structured import (
     schema_block,
     validate_items,
 )
-from app.models import Email, TrackKey
+from app.models import Email, Track, TrackKey
 from app.services.scheduling import user_now
 
 logger = logging.getLogger("askcal.classifier")
@@ -41,6 +41,7 @@ __all__ = [
     "classify_pacing",
     "parse_deadline",
     "signals_track_key",
+    "system_prompt",
 ]
 
 SenderType = Literal[
@@ -56,7 +57,12 @@ class EmailSignals(BaseModel):
     email row — audit trail now, training labels for the ML model later."""
 
     gmail_id: str
-    track: Literal["career", "design", "uni", "feed", "finance", "none"]
+    # A track slug, or "none". Deliberately not a Literal: the structured-output
+    # schema is generated from this model, and a compile-time set cannot express
+    # a list of tracks that differs per user. The answer is checked against the
+    # user's own tracks after parsing instead, where an unknown value degrades
+    # to no track rather than failing the whole batch.
+    track: str
     sender_type: SenderType
     consequence: Consequence
     action_required: bool
@@ -78,21 +84,18 @@ class EmailSignals(BaseModel):
 # free of the current date, which used to live in the deadline bullet: a system
 # prompt that changes daily is fine for the CLI's --system-prompt but destroys
 # prompt caching for any SDK-based provider, and it is the wrong layer besides.
-_RULES = """\
-You are the email classifier for Askcal, a daily scheduler for a student
-freelancer who is simultaneously: a university student, a freelance designer,
-and a job/placement candidate.
+_RULES_HEAD = """\
+You are the email classifier for Askcal, a daily scheduler.
 
-Classify each email below into signals. Track meanings:
-- career: job applications, online assessments (OA), interviews, recruiters, placements
-- design: freelance client work, briefs, deliverables, client communication
-- uni: coursework, exams, assignments, professor/university emails
-- feed: newsletters/content worth reading but with no obligation
-- finance: invoices, payments due, banking alerts, fees — money matters that
-  are important only when urgent (a payment reminder yes, a paid receipt no)
-- none: everything else (spam, paid receipts, promotions, notifications)
+Classify each email below into signals. Use exactly one of these track names,
+or "none". The description after each name is the user's own words for what
+belongs there — follow it over any assumption about what the name usually means.
 
-Rules:
+{tracks}
+
+Rules:"""
+
+_RULES_TAIL = """\
 - action_required = TRUE only when the user must personally DO a concrete task
   with a real consequence. TRUE examples: an assignment or report due,
   "complete your online assessment", an interview slot to confirm, an
@@ -111,9 +114,12 @@ Rules:
   invoice, fee, or EMI that is DUE — an unpaid amount to actively pay — is
   action_required=TRUE. (A failed/declined payment may also be TRUE when it
   implies the user must retry or update a payment method.)
-- A job-board DIGEST or ALERT that lists openings is `feed`, not `career`. Only
-  a specific opportunity addressed to the user (an OA/interview invite, a
-  recruiter contacting them directly) is `career` with action_required.
+- A DIGEST or ALERT that merely lists opportunities ("50 new jobs for you") is
+  reading material: action_required=FALSE, and it belongs in whichever track
+  covers things worth reading. Only a specific opportunity addressed to the user
+  — an OA or interview invite, a recruiter writing to them directly — is real
+  work. (Track names are the user's, so match on the descriptions above rather
+  than on any name you expect to see.)
 - sender_type: use `newsletter` for bulk/marketing mail and `automated_system`
   for platform/no-reply notifications; reserve `client`/`recruiter`/`professor`
   for a real person writing to the user.
@@ -140,8 +146,34 @@ Rules:
 - Return one result object per input email, echoing its gmail_id exactly.
 """
 
-# Schema rendered from the model itself, so prompt and validator cannot drift.
-SYSTEM_PROMPT = _RULES + "\n" + schema_block(EmailSignals, as_list=True)
+
+def system_prompt(tracks: list[Track] | None = None) -> str:
+    """The system prompt for one user's tracks.
+
+    Still free of the current date, so it stays identical call after call for a
+    given user and prompt caching keeps working — it changes only when they
+    actually edit a track.
+
+    With no tracks supplied it falls back to the built-in set, which keeps the
+    classifier callable from tests and from any path that has no user in hand.
+    """
+    from app.services.tracks import BUILTIN_TRACKS, track_rules_block
+
+    if tracks:
+        rules = track_rules_block(tracks)
+    else:
+        rules = "\n".join(
+            f"- {spec['slug']}: {spec['description']}" for spec in BUILTIN_TRACKS
+        ) + "\n- none: everything else (spam, paid receipts, promotions, notifications)"
+
+    # Schema rendered from the model itself, so prompt and validator cannot drift.
+    return (
+        _RULES_HEAD.format(tracks=rules)
+        + "\n"
+        + _RULES_TAIL
+        + "\n"
+        + schema_block(EmailSignals, as_list=True)
+    )
 
 USER_TEMPLATE = """\
 Right now it is {now_local} in the user's timezone, {timezone}.
@@ -208,7 +240,16 @@ def parse_deadline(value: str | None) -> datetime | None:
 
 
 def signals_track_key(signals: EmailSignals) -> TrackKey | None:
-    return None if signals.track == "none" else TrackKey(signals.track)
+    """The old enum answer, for the columns that still hold one.
+
+    Only meaningful for the five built-in slugs; a track the user invented has
+    no enum member and resolves to None. Use `track_by_slug` against the user's
+    own tracks for anything that matters.
+    """
+    try:
+        return TrackKey(signals.track)
+    except ValueError:
+        return None
 
 
 def classify_pacing() -> tuple[int, float]:
@@ -235,12 +276,17 @@ def classify_pacing() -> tuple[int, float]:
 
 
 async def classify_batch(
-    emails: list[Email], tz_name: str = "UTC"
+    emails: list[Email],
+    tz_name: str = "UTC",
+    tracks: list[Track] | None = None,
 ) -> dict[str, EmailSignals]:
     """One LLM call (plus up to classify_max_retries follow-ups) for a batch.
 
     Returns signals keyed by gmail_id. Emails missing from the response stay
     unclassified and get retried on the next sync pass.
+
+    `tracks` are the user's own; without them the built-in five are described
+    instead, so this stays callable from tests and from any path with no user.
     """
     if not emails:
         return {}
@@ -248,6 +294,7 @@ async def classify_batch(
     if provider is None:
         return {}
 
+    system = system_prompt(tracks)
     retries = get_settings().classify_max_retries
     out: dict[str, EmailSignals] = {}
     pending = list(emails)
@@ -260,7 +307,7 @@ async def classify_batch(
             user += RETRY_SUFFIX.format(errors="\n".join(f"- {e}" for e in errors))
 
         response = await provider.complete(
-            SYSTEM_PROMPT, user, response_schema=list[EmailSignals]
+            system, user, response_schema=list[EmailSignals]
         )
         # A single unknown poisons the sum to unknown — a partial total would
         # read as a real number and quietly understate usage.

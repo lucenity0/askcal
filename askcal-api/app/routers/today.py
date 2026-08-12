@@ -56,7 +56,7 @@ async def get_today(user: CurrentUser, db: DbSession) -> TodayResponse:
     def task_out(t: Task) -> TaskOut:
         return TaskOut(
             id=t.id,
-            track=t.track.key.value,
+            track=t.track.slug,
             title=t.title,
             meta=humanize_due(t.due_at),
             regret_score=t.regret_score,

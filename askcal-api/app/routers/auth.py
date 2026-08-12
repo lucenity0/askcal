@@ -10,7 +10,7 @@ from app.config import get_settings
 from app.core.errors import AskcalError
 from app.core.security import create_access_token, hash_refresh_token, new_refresh_token
 from app.deps import CurrentUser, DbSession
-from app.models import RefreshToken, Track, TrackKey, User
+from app.models import RefreshToken, User
 from app.schemas.auth import (
     AuthResponse,
     GoogleAuthRequest,
@@ -19,12 +19,10 @@ from app.schemas.auth import (
     UserOut,
 )
 from app.services.gmail import GoogleProfile, authorization_url, exchange_google_code
+from app.services.tracks import default_tracks
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-# New accounts start with career + uni + finance; design activates when
-# freelance work is added, feed once the profile is set up.
-DEFAULT_ACTIVE_TRACKS = {TrackKey.career, TrackKey.uni, TrackKey.finance}
 
 
 async def _issue_refresh_token(db: DbSession, user: User) -> str:
@@ -47,9 +45,9 @@ async def _login(profile: GoogleProfile, db: DbSession) -> tuple[User, str, str]
         user = await db.scalar(select(User).where(User.email == profile.email))
     if user is None:
         user = User(email=profile.email, name=profile.name, google_sub=profile.sub)
-        user.tracks = [
-            Track(key=key, active=key in DEFAULT_ACTIVE_TRACKS) for key in TrackKey
-        ]
+        # A starting set, not a fixed one — every field on these is editable,
+        # and the user can add their own.
+        user.tracks = default_tracks()
         db.add(user)
     else:
         user.google_sub = profile.sub

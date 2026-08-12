@@ -35,7 +35,6 @@ from app.db import SessionLocal
 from app.llm.base import LLMLimitError
 from app.models import Email, Track, User
 from app.services.autotask import (
-    AUTO_TASK_TRACKS,
     NON_TASKING_CONSEQUENCES,
     build_task,
     open_task_exists_for_thread,
@@ -45,8 +44,8 @@ from app.services.classifier import (
     classifier_configured,
     classify_batch,
     classify_pacing,
-    signals_track_key,
 )
+from app.services.tracks import track_by_slug
 from app.services.gmail import fetch_recent_messages
 from app.services.regret import compute_regret
 from app.services.scheduling import local_midnight, user_today
@@ -56,7 +55,6 @@ logger = logging.getLogger("askcal.sync")
 # Re-exported: the gating rule lives in autotask.py (shared with the manual
 # swipe path) but has always been imported from here.
 __all__ = [
-    "AUTO_TASK_TRACKS",
     "NON_TASKING_CONSEQUENCES",
     "CLASSIFY_PASS_LIMIT",
     "SyncResult",
@@ -150,10 +148,12 @@ async def _classify_pending(db: AsyncSession, user: User) -> tuple[int, int]:
     if not pending_ids:
         return 0, 0
 
-    tracks_by_key = {
-        t.key: t
-        for t in (await db.scalars(select(Track).where(Track.user_id == user.id))).all()
-    }
+    # The list, not a lookup by enum key: the classifier is told about these by
+    # name and answers with one of their slugs, so the same rows have to build
+    # the prompt and resolve the reply.
+    tracks = list(
+        (await db.scalars(select(Track).where(Track.user_id == user.id))).all()
+    )
 
     classified = 0
     auto_tasked = 0
@@ -186,7 +186,7 @@ async def _classify_pending(db: AsyncSession, user: User) -> tuple[int, int]:
             continue
 
         try:
-            signals_by_id = await classify_batch(chunk, user.timezone)
+            signals_by_id = await classify_batch(chunk, user.timezone, tracks)
         except LLMLimitError:
             # Out of allowance, not broken. Grinding the remaining chunks against
             # the wall just burns retries against a limit that only time fixes.
@@ -210,9 +210,12 @@ async def _classify_pending(db: AsyncSession, user: User) -> tuple[int, int]:
                 # produce valid signals for eventually stops being retried.
                 email.classify_attempts += 1
                 continue
-            track = signals_track_key(signals)
-            track_row = tracks_by_key.get(track) if track else None
-            email.track = track
+            track_row = track_by_slug(tracks, signals.track)
+            email.track_id = track_row.id if track_row else None
+            # The old enum column, still written so a rollback has its data.
+            # None for a track the user invented — there is no enum member to
+            # put there, which is the whole reason the column is going.
+            email.track = track_row.key if track_row else None
             email.estimated_minutes = signals.estimated_minutes
             email.signals = signals.model_dump()
             email.regret_score = compute_regret(
@@ -223,7 +226,7 @@ async def _classify_pending(db: AsyncSession, user: User) -> tuple[int, int]:
             email.classified_at = now
             classified += 1
 
-            if not should_auto_task(signals, track, track_row, email.regret_score, user):
+            if not should_auto_task(signals, track_row, email.regret_score, user):
                 continue
             # Thread dedup. Checked against both the database and this pass,
             # because tasks added below are not flushed until the chunk commits —

@@ -117,10 +117,14 @@ def test_all_contract_routes_registered():
     } <= paths
 
 
-def test_a_track_can_be_turned_on():
+def test_a_track_can_be_edited_added_and_removed():
     """An inactive track silently blocks auto-tasking for everything filed
     under it, and design ships inactive — so design mail scored 97, sat in the
-    inbox and never became a task, with nothing in the app able to change it."""
+    inbox and never became a task, with nothing in the app able to change it.
+
+    Naming them is the other half: the five built-ins described a guess at
+    someone's life, and a track you cannot add is a taxonomy you cannot fix.
+    """
     paths = client.get("/openapi.json").json()["paths"]
-    assert "/api/tracks/{key}" in paths
-    assert "patch" in paths["/api/tracks/{key}"]
+    assert {"patch", "delete"} <= set(paths["/api/tracks/{slug}"])
+    assert "post" in paths["/api/tracks"]

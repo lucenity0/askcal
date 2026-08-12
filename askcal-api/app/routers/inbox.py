@@ -8,7 +8,7 @@ from sqlalchemy import and_, func, or_, select
 from app.config import get_settings
 from app.core.errors import AskcalError
 from app.deps import CurrentUser, DbSession
-from app.models import Email, Track, TrackKey
+from app.models import Email, Track
 from app.schemas.inbox import (
     EmailOut,
     HandleRequest,
@@ -25,6 +25,7 @@ from app.services.brew_engine import temp_for_score
 from app.services.gmail import mark_as_read
 from app.services.scheduling import local_midnight, user_today
 from app.services.sync import run_sync_for_user
+from app.services.tracks import find_track
 
 router = APIRouter(prefix="/api", tags=["inbox"])
 
@@ -74,7 +75,13 @@ async def get_inbox(user: CurrentUser, db: DbSession) -> InboxResponse:
         emails=[
             EmailOut(
                 id=e.gmail_id,
-                track=e.track.value if e.track else None,
+                # The slug of the track it was filed under. Falls back to the
+                # old enum column for mail classified before tracks became rows.
+                track=(
+                    e.track_ref.slug
+                    if e.track_ref
+                    else (e.track.value if e.track else None)
+                ),
                 subject=e.subject,
                 sender=e.sender,
                 received_at=e.received_at,
@@ -124,21 +131,19 @@ async def handle_email(
         raise AskcalError(409, "ALREADY_HANDLED", "That one's already been handled")
 
     if body.track:
-        try:
-            track_key = TrackKey(body.track)
-        except ValueError:
-            raise AskcalError(422, "INVALID_TRACK", f"Unknown track '{body.track}'")
+        track = await find_track(db, user.id, body.track)
+        if track is None:
+            raise AskcalError(422, "INVALID_TRACK", f"No '{body.track}' track on this account")
     else:
-        track_key = email.track
-    if track_key is None:
-        raise AskcalError(
-            422, "UNCLASSIFIED", "Email hasn't been classified yet — pass a track to file it under"
-        )
-    track = await db.scalar(
-        select(Track).where(Track.user_id == user.id, Track.key == track_key)
-    )
-    if track is None:
-        raise AskcalError(422, "INVALID_TRACK", f"No '{track_key.value}' track on this account")
+        # What the classifier filed it under. `track_id` rather than the old
+        # enum column, so mail in a track the user invented can still be filed.
+        track = await db.get(Track, email.track_id) if email.track_id else None
+        if track is None:
+            raise AskcalError(
+                422,
+                "UNCLASSIFIED",
+                "Email hasn't been classified yet — pass a track to file it under",
+            )
 
     # Same constructor the sync pipeline uses. These were two copies that had
     # already drifted — this one read the JSONB dict, that one the typed model —

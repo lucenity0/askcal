@@ -94,7 +94,7 @@ async def carry_forward(user: CurrentUser, db: DbSession) -> CarryForwardRespons
         tasks=[
             TaskOut(
                 id=t.id,
-                track=t.track.key.value,
+                track=t.track.slug,
                 title=t.title,
                 meta=humanize_due(t.due_at),
                 regret_score=t.regret_score,

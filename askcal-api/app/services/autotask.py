@@ -27,9 +27,9 @@ from app.services.classifier import parse_deadline
 
 logger = logging.getLogger("askcal.autotask")
 
-# Tracks whose actionable mail turns into tasks automatically. `feed` is
-# read-later by definition and never auto-tasks.
-AUTO_TASK_TRACKS = {TrackKey.career, TrackKey.design, TrackKey.uni, TrackKey.finance}
+# Which tracks auto-task is now a column on the track itself (`auto_tasks`).
+# It had to be: with tracks the user names there is no fixed set to hardcode,
+# and "does mail here make work for me" is a per-track question anyway.
 
 # A real task always has real stakes: social notifications ("add X", "someone
 # viewed you") and zero-consequence FYIs are never work, even when the model
@@ -103,15 +103,17 @@ def auto_task_gates(user) -> tuple[float, int]:
 
 def should_auto_task(
     signals,
-    track: TrackKey | None,
     track_row: Track | None,
     regret_score: int | None = None,
     user=None,
 ) -> bool:
     """A mail auto-tasks when the model says the user must personally do a
-    concrete task (action_required) with a real consequence, in a real
-    (non-feed) work track that's active for this user — and when the model was
-    actually confident and the stakes actually scored.
+    concrete task (action_required) with a real consequence, in a track that is
+    active and set to make work — and when the model was actually confident and
+    the stakes actually scored.
+
+    The track comes in as a row rather than an enum key, because the answer to
+    "may this track create tasks" now lives on the row.
 
     Channel/sender is not a gate: an assignment from a no-reply LMS is as real
     as a client email.
@@ -126,9 +128,9 @@ def should_auto_task(
     if not (
         signals.action_required
         and signals.consequence not in NON_TASKING_CONSEQUENCES
-        and track in AUTO_TASK_TRACKS
         and track_row is not None
         and track_row.active
+        and track_row.auto_tasks
     ):
         return False
     if signals.confidence < min_confidence:
@@ -206,12 +208,11 @@ async def reconsider_auto_tasks(db: AsyncSession, user) -> int:
     """
     from app.services.classifier import EmailSignals  # circular at module level
 
-    tracks = {
-        t.key: t
-        for t in (
-            await db.scalars(select(Track).where(Track.user_id == user.id))
-        ).all()
-    }
+    from app.services.tracks import track_by_slug
+
+    tracks = list(
+        (await db.scalars(select(Track).where(Track.user_id == user.id))).all()
+    )
     today = date.today()
     created = 0
 
@@ -232,9 +233,11 @@ async def reconsider_auto_tasks(db: AsyncSession, user) -> int:
         except Exception:  # noqa: BLE001 — a stored shape we no longer parse
             continue
 
-        track = None if signals.track == "none" else TrackKey(signals.track)
-        track_row = tracks.get(track) if track else None
-        if not should_auto_task(signals, track, track_row, email.regret_score, user):
+        # Resolved from the stored slug against the tracks as they are now — so
+        # renaming a track does not strand the mail already filed under it, and
+        # a track added today can pick up mail classified before it existed.
+        track_row = track_by_slug(tracks, signals.track)
+        if not should_auto_task(signals, track_row, email.regret_score, user):
             continue
         # Same dedup as the sync path: a mail already answered by a task must
         # not produce a second one just because a setting moved.

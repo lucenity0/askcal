@@ -12,6 +12,7 @@ from app.models.track import TrackKey
 
 if TYPE_CHECKING:
     from app.models.task import Task
+    from app.models.track import Track
     from app.models.user import User
 
 
@@ -45,7 +46,12 @@ class Email(TimestampMixin, Base):
     raw: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
     # Classifier output (async — track/consequence signals + regret scoring)
+    # `track` is the old enum column, still written so a rollback has its data.
+    # `track_id` is the one to read: it points at a row the user can rename.
     track: Mapped[TrackKey | None] = mapped_column(Enum(TrackKey, name="track_key"))
+    track_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("tracks.id", ondelete="SET NULL"), index=True
+    )
     regret_score: Mapped[int | None] = mapped_column(Integer)
     estimated_minutes: Mapped[int | None] = mapped_column(Integer)
     # Raw signals the model extracted (EmailSignals dump) — audit trail for the
@@ -66,3 +72,7 @@ class Email(TimestampMixin, Base):
 
     user: Mapped["User"] = relationship(back_populates="emails")
     tasks: Mapped[list["Task"]] = relationship(back_populates="source_email")
+    # selectin so reading the track's name off a list of emails is one extra
+    # query rather than one per email — and so it works at all under async,
+    # where a lazy load outside the session raises.
+    track_ref: Mapped["Track | None"] = relationship(lazy="selectin")

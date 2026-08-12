@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.errors import AskcalError
 from app.deps import CurrentUser, DbSession
-from app.models import Task, TaskStatus, Track, TrackKey
+from app.models import Task, TaskStatus, Track
 from app.schemas.tasks import (
     TaskCreateRequest,
     TaskFullOut,
@@ -17,6 +17,7 @@ from app.schemas.tasks import (
     TasksResponse,
 )
 from app.services.scheduling import humanize_due, user_today
+from app.services.tracks import find_track
 
 router = APIRouter(prefix="/api", tags=["tasks"])
 
@@ -26,7 +27,7 @@ QUICK_ADD_REGRET = 20  # manual adds start low; the classifier scores email-born
 def _task_full_out(task: Task) -> TaskFullOut:
     return TaskFullOut(
         id=task.id,
-        track=task.track.key.value,
+        track=task.track.slug,
         title=task.title,
         meta=humanize_due(task.due_at),
         regret_score=task.regret_score,
@@ -98,15 +99,11 @@ async def create_task(
     title = body.title.strip()
     if not title:
         raise AskcalError(422, "INVALID_TASK", "Title is empty")
-    try:
-        track_key = TrackKey(body.track)
-    except ValueError:
-        raise AskcalError(422, "INVALID_TRACK", f"Unknown track '{body.track}'")
-    track = await db.scalar(
-        select(Track).where(Track.user_id == user.id, Track.key == track_key)
-    )
+    # Looked up by slug against this account's own tracks. There is no valid
+    # list to check against first — what exists is whatever the user made.
+    track = await find_track(db, user.id, body.track)
     if track is None:
-        raise AskcalError(422, "INVALID_TRACK", f"No '{track_key.value}' track on this account")
+        raise AskcalError(422, "INVALID_TRACK", f"No '{body.track}' track on this account")
 
     # scheduled_for defaults to the pinned time's day, else today
     scheduled_for = body.scheduled_for
