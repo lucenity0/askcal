@@ -2,90 +2,52 @@
 //  ContentView.swift
 //  Askcal
 //
-//  Root: vertical tab rail with a sliding liquid-glass active indicator,
-//  coordinated content morph + brief skeleton on tab change, FAB, and the
-//  once-a-day greeting overlay.
+//  Root: one day surface in a navigation stack, a FAB, and the cold-launch
+//  greeting.
+//
+//  The seven-tab vertical rail is gone. It gave equal billing to reference
+//  material (Tracks, Routine, Calendar) and to the thing the app exists for,
+//  and its rotated labels were the least readable text on the screen. What
+//  replaced it is DayView: the day answers itself top to bottom, and anything
+//  that needs its own screen is reached from the row that summarises it.
 //
 
+import AuthenticationServices
 import SwiftUI
-
-enum RailTab: String, CaseIterable {
-    case today = "Today"
-    case inbox = "Inbox"
-    case calendar = "Calendar"
-    case routine = "Routine"
-    case tracks = "Tracks"
-    case review = "Review"
-    case more = "More"
-}
 
 struct ContentView: View {
     @Environment(AskcalStore.self) private var store
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.webAuthenticationSession) private var webAuth
     @AppStorage("themeMode") private var themeRaw = ThemeMode.storageDefault
-    @State private var tab: RailTab = .today
+    @AppStorage("hasLaunchedBefore") private var hasLaunchedBefore = false
+
     @State private var showComposer = false
-    @State private var isAddingRoutine = false
     @State private var showGreeting = false
     @State private var didLaunch = false
-    @Namespace private var railNS
 
     private var mode: ThemeMode { ThemeMode.stored(themeRaw) }
     private var mono: MonoPalette { .palette(for: mode) }
 
-    /// Rail + content share one clock so the glass slide and the content
-    /// morph read as a single motion.
-    private var transitionSpring: Animation { .spring(response: 0.38, dampingFraction: 0.86) }
-
-    // ── Tab sizing: each tab fits ITS OWN label, measured with the
-    // Dynamic-Type-scaled font (a fixed-size measurement is exactly how
-    // "Calendar" got clipped). Truncation only past a 12-char hard ceiling.
-    private static let railWidth: CGFloat = 46
-
-    private func tabTextWidth(_ label: String) -> CGFloat {
-        let font = UIFontMetrics.default.scaledFont(
-            for: .systemFont(ofSize: 12.5, weight: .medium)
-        )
-        let ceiling = ("MMMMMMMMMMMM" as NSString) // 12-char hard cap
-            .size(withAttributes: [.font: font]).width
-        let width = (label as NSString).size(withAttributes: [.font: font]).width
-        return ceil(min(width, ceiling)) + 2
-    }
-
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
-            HStack(spacing: 0) {
-                rail
-                contentArea
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(mono.bg)
-                    .clipShape(
-                        .rect(topLeadingRadius: 18, bottomLeadingRadius: 18)
-                    )
+            NavigationStack {
+                DayView(showComposer: $showComposer, onConnect: connect)
+                    .toolbar(.hidden, for: .navigationBar)
             }
-            .background(mono.railInactive.ignoresSafeArea())
+            .tint(mono.ink)
 
-            if tab == .today || tab == .tracks || tab == .routine {
-                FAB {
-                    if tab == .routine {
-                        isAddingRoutine = true
-                    } else {
-                        showComposer = true
-                    }
-                }
-                .padding(.trailing, 22)
+            FAB { showComposer = true }
+                .padding(.trailing, MonoSpace.gutter)
                 .padding(.bottom, 28)
-                .ignoresSafeArea(.keyboard) // FAB never rides the keyboard up
-            }
+                .ignoresSafeArea(.keyboard)   // FAB never rides the keyboard up
 
             if showGreeting {
-                // onboarding: plays on every cold launch, animated
                 GreetingView(loggedIn: APIClient.shared.isConnected) {
                     withAnimation(.easeInOut(duration: 0.55)) { showGreeting = false }
                 }
-                // Move only. Fading the greeting fades its background too, so
-                // Today read through it the whole time it was on screen —
-                // the greeting is meant to be the screen, not a scrim over it.
+                // Move only. Fading it fades its background too, and Today
+                // then reads through the whole time it is on screen.
                 .transition(.move(edge: .top))
                 .zIndex(2)
             }
@@ -97,109 +59,36 @@ struct ContentView: View {
         .environment(\.mono, mono)
         .preferredColorScheme(mode.polarity)
         .animation(.easeInOut(duration: 0.25), value: themeRaw)
-        .onAppear {
-            if !didLaunch { didLaunch = true; showGreeting = true }
-        }
         .task {
-            await store.bootstrap()
-            await NotificationManager.refreshSchedules(dayClosed: store.dayClosed)
-        }
-    }
-
-    // MARK: - Content area: smooth cross-dissolve between tabs
-
-    private var contentArea: some View {
-        content
-            .id(tab)
-            .transition(
-                reduceMotion
-                    ? .opacity
-                    : .asymmetric(
-                        insertion: .opacity.combined(with: .scale(scale: 0.99, anchor: .center)),
-                        removal: .opacity
-                    )
-            )
-            .animation(reduceMotion ? .easeInOut(duration: 0.15)
-                                    : .easeInOut(duration: 0.28), value: tab)
-    }
-
-    private var content: some View {
-        Group {
-            switch tab {
-            case .today: TodayView()
-            case .inbox: InboxView()
-            case .calendar: CalendarView()
-            case .routine: RoutineView(isAdding: $isAddingRoutine)
-            case .tracks: TracksView()
-            case .review: ReviewView()
-            case .more: MoreView()
-            }
-        }
-    }
-
-    private func switchTab(_ item: RailTab) {
-        guard item != tab else { return }
-        isAddingRoutine = false // leaving a tab always dismisses its inline input
-        // one clock for the rail glass (spring) and the content cross-dissolve;
-        // no skeleton flash — the content is already in memory, so faking a
-        // load only made the switch feel janky
-        withAnimation(transitionSpring) { tab = item }
-    }
-
-    // MARK: - Rail with liquid-glass indicator
-
-    private var rail: some View {
-        VStack(spacing: 0) {
-            ForEach(RailTab.allCases, id: \.rawValue) { item in
-                let textWidth = tabTextWidth(item.rawValue)
-                Button {
-                    switchTab(item)
-                } label: {
-                    Text(item.rawValue)
-                        .font(MonoType.item(12.5))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
-                        .foregroundStyle(tab == item ? mono.textPrimary : mono.textSecondary)
-                        .frame(width: textWidth)
-                        .rotationEffect(.degrees(-90))
-                        .frame(width: Self.railWidth, height: textWidth + 28)
-                        .background {
-                            if tab == item {
-                                glassIndicator
-                            }
-                        }
-                        .scaleEffect(tab == item ? 1.0 : 0.96)
-                        .opacity(tab == item ? 1.0 : 0.85)
+            if !didLaunch {
+                didLaunch = true
+                // First run only. A 2.5s interstitial before every single
+                // launch is a toll on the person who opens this most, and the
+                // greeting says nothing that changes between launches.
+                if !hasLaunchedBefore {
+                    showGreeting = true
+                    hasLaunchedBefore = true
                 }
-                .buttonStyle(.plain)
+                await store.bootstrap()
             }
-            Spacer()
         }
-        .padding(.top, 8)
-        .frame(width: Self.railWidth)
-        .animation(reduceMotion ? nil : transitionSpring, value: tab)
-        .ignoresSafeArea(.keyboard) // rail stays planted when the keyboard rises
     }
 
-    @ViewBuilder
-    private var glassIndicator: some View {
-        let shape = UnevenRoundedRectangle(topLeadingRadius: 12, bottomLeadingRadius: 12)
-        if reduceMotion {
-            // static fill, no morphing panel
-            shape.fill(mono.bg).padding(.vertical, 3)
-        } else {
-            shape
-                .fill(.ultraThinMaterial)
-                .overlay(shape.fill(mono.bg.opacity(0.55)))
-                .overlay(
-                    shape.strokeBorder(mono.border.opacity(0.6), lineWidth: 0.5)
+    private func connect() {
+        Task {
+            guard let url = APIClient.shared.authStartURL(scheme: "askcal") else { return }
+            do {
+                let callback = try await webAuth.authenticate(
+                    using: url,
+                    callbackURLScheme: "askcal",
+                    preferredBrowserSession: .shared
                 )
-                .padding(.vertical, 3)
-                .matchedGeometryEffect(id: "railGlass", in: railNS)
+                if let account = APIClient.shared.handleAuthCallback(callback) {
+                    await store.connected(email: account.email, name: account.name)
+                }
+            } catch {
+                // Cancelling the sheet is not an error worth reporting.
+            }
         }
     }
-}
-
-#Preview("Light") {
-    ContentView().environment(AskcalStore())
 }

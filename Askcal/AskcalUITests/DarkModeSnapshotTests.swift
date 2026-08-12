@@ -75,8 +75,8 @@ final class DarkModeSnapshotTests: XCTestCase {
         // More carries the densest set of shared styles: two filled pills
         // (Connect, Delete everything), the theme segmented control, and two
         // MonoToggleStyle switches.
-        let more = app.buttons["More"]
-        XCTAssertTrue(more.waitForExistence(timeout: 10), "rail tab 'More' not found")
+        let more = app.buttons["Settings"]
+        XCTAssertTrue(more.waitForExistence(timeout: 10), "Settings button not found")
         more.tap()
         Thread.sleep(forTimeInterval: 2)
         snapshot(app, "02-more-dark")
@@ -89,8 +89,8 @@ final class DarkModeSnapshotTests: XCTestCase {
     /// field has focus, which is why this test exists separately.
     func testFocusedTextFieldCaretInDarkMode() throws {
         let app = launchDark()
-        let more = app.buttons["More"]
-        XCTAssertTrue(more.waitForExistence(timeout: 10), "rail tab 'More' not found")
+        let more = app.buttons["Settings"]
+        XCTAssertTrue(more.waitForExistence(timeout: 10), "Settings button not found")
         more.tap()
         Thread.sleep(forTimeInterval: 2)
 
@@ -104,8 +104,8 @@ final class DarkModeSnapshotTests: XCTestCase {
 
     func testReviewScreenInDarkMode() throws {
         let app = launchDark()
-        let review = app.buttons["Review"]
-        XCTAssertTrue(review.waitForExistence(timeout: 10), "rail tab 'Review' not found")
+        let review = app.buttons["Close the day"].firstMatch
+        XCTAssertTrue(review.waitForExistence(timeout: 10), "close-the-day row not found")
         review.tap()
         Thread.sleep(forTimeInterval: 2)
         snapshot(app, "03-review-dark")

@@ -30,6 +30,8 @@ final class AskcalStore {
 
     /// True once a Askcal account is connected — data comes from askcal-api.
     var isLive = false
+    /// True while the cold-launch fetch is in flight.
+    var isBootstrapping = false
     var accountEmail: String?
     var syncError: String?
 
@@ -190,6 +192,12 @@ final class AskcalStore {
     /// Called once at launch — switches to live data if an account is
     /// connected, otherwise restores locally-saved offline data.
     func bootstrap() async {
+        // Distinguishes "still fetching" from "genuinely empty". Without it the
+        // day surface rendered its empty copy over data in flight, which read
+        // as an answer rather than a wait.
+        isBootstrapping = true
+        defer { isBootstrapping = false }
+
         guard APIClient.shared.isConnected else {
             loadLocal()
             return
