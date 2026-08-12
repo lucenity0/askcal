@@ -2,16 +2,17 @@
 //  InboxView.swift
 //  Askcal
 //
-//  Regret-ranked triage, in bands.
+//  Triage, grouped by what each mail wants from you.
 //
-//  A flat list sorted by score is technically ordered and reads as scattered:
-//  the ranking is real but invisible, so every row asks for the same attention
-//  and you end up reading all of them. Three bands make the ranking the shape
-//  of the page — the top one is short and worth your time, the bottom one you
-//  can ignore in one glance.
+//  A flat list sorted by consequence is technically ordered and reads as
+//  scattered: the ranking is real but invisible, so every row asks for the same
+//  attention and you read all of them. Reply needed, has a deadline, read when
+//  free, nothing to do — that is the only question you are actually asking, and
+//  it makes the page scannable in one glance.
 //
-//  The bands come from the score the classifier already produces. Nothing new
-//  is computed here, it is just no longer hidden inside a single dot.
+//  The band is decided server-side from signals the classifier already
+//  produces, so the app and the auto-tasker cannot end up disagreeing about
+//  what a piece of mail is.
 //
 
 import SwiftUI
@@ -33,8 +34,36 @@ struct InboxView: View {
             if store.inboxEmails.isEmpty {
                 empty
             } else {
-                ForEach(InboxBand.allCases) { band in
-                    band.section(in: store.inboxEmails, opened: $opened)
+                ForEach(MailNeed.allCases) { band in
+                    section(band)
+                }
+            }
+        }
+    }
+
+    /// One band. Empty ones are omitted entirely rather than shown with a zero
+    /// — a heading over nothing is noise on a page whose job is to be scannable.
+    @ViewBuilder
+    private func section(_ band: MailNeed) -> some View {
+        let mine = store.inboxEmails.filter { $0.needs == band }
+        if !mine.isEmpty {
+            VStack(alignment: .leading, spacing: Space.lg) {
+                HStack(alignment: .firstTextBaseline, spacing: Space.md) {
+                    Rubric(band.title)
+                    Text(band.note)
+                        .font(BookType.meta(9))
+                        .foregroundStyle(book.inkSub)
+                    Spacer()
+                    Text("\(mine.count)")
+                        .font(BookType.meta(10))
+                        .foregroundStyle(book.inkSub)
+                }
+                VStack(spacing: 0) {
+                    ForEach(mine) { email in
+                        EmailRow(email: email, dimmed: band == .none) {
+                            opened = email
+                        }
+                    }
                 }
             }
         }
@@ -51,73 +80,6 @@ struct InboxView: View {
             if store.isLive {
                 Button("Sync now") { Task { await store.syncInbox() } }
                     .buttonStyle(PillButtonStyle(filled: false))
-            }
-        }
-    }
-}
-
-/// How the inbox is divided.
-///
-/// The thresholds are the same ones the auto-tasker uses (`auto_task_min_regret`
-/// is 25), so "worth your time" here means the same thing it means when the
-/// backend decides something is a task. Two places disagreeing about what
-/// counts as consequential would be worse than either threshold being wrong.
-enum InboxBand: String, CaseIterable, Identifiable {
-    case needsYou, worthALook, noise
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .needsYou: return "needs you"
-        case .worthALook: return "worth a look"
-        case .noise: return "probably noise"
-        }
-    }
-
-    var note: String {
-        switch self {
-        case .needsYou: return "consequences if you don't"
-        case .worthALook: return "real, but not urgent"
-        case .noise: return "receipts, digests, promotions"
-        }
-    }
-
-    func contains(_ email: EmailItem) -> Bool {
-        // An unclassified mail is not noise — nobody has looked at it yet. It
-        // sits in the middle band rather than being buried, which matters most
-        // when the classifier is off and *everything* is unranked.
-        guard let score = email.regretScore else { return self == .worthALook }
-        switch self {
-        case .needsYou: return score >= 65
-        case .worthALook: return score >= 25
-        case .noise: return score < 25
-        }
-    }
-
-    @ViewBuilder
-    func section(in emails: [EmailItem], opened: Binding<EmailItem?>) -> some View {
-        let mine = emails.filter(contains)
-        if !mine.isEmpty {
-            VStack(alignment: .leading, spacing: Space.lg) {
-                HStack(alignment: .firstTextBaseline, spacing: Space.md) {
-                    Rubric(title)
-                    Text(note)
-                        .font(BookType.meta(9))
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text("\(mine.count)")
-                        .font(BookType.meta(10))
-                        .foregroundStyle(.secondary)
-                }
-
-                VStack(spacing: 0) {
-                    ForEach(mine) { email in
-                        EmailRow(email: email, dimmed: self == .noise) {
-                            opened.wrappedValue = email
-                        }
-                    }
-                }
             }
         }
     }
@@ -211,9 +173,7 @@ struct EmailDetail: View {
         }
     }
 
-    private var bandTitle: String {
-        InboxBand.allCases.first { $0.contains(email) }?.title ?? "mail"
-    }
+    private var bandTitle: String { email.needs.title }
 
     /// Only what the API actually returns. An unranked mail says so rather than
     /// showing a fabricated zero — with the classifier off everything is

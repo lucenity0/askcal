@@ -327,21 +327,6 @@ final class APIClient {
         let _: SyncOut = try await send("POST", "/api/inbox/sync", body: nil)
     }
 
-    struct RoutinesOut: Decodable { let routines: [Routine] }
-
-    func routines() async throws -> [Routine] {
-        (try await send("GET", "/api/routines") as RoutinesOut).routines
-    }
-
-    func createRoutine(title: String, cadence: String = "daily") async throws -> Routine {
-        try await send("POST", "/api/routines", body: ["title": title, "cadence": cadence])
-    }
-
-    func deleteRoutine(_ id: UUID) async throws {
-        let _: EmptyResponse = try await send(
-            "DELETE", "/api/routines/\(id.uuidString.lowercased())"
-        )
-    }
 
     func closingTime(date: String, pulled: [UUID], remaining: [UUID]) async throws -> ClosingOut {
         try await send("POST", "/api/closing-time", body: [

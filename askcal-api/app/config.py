@@ -114,7 +114,12 @@ class Settings(BaseSettings):
     # Background sync loop (in-process; POST /api/inbox/sync triggers on demand)
     sync_enabled: bool = True
     sync_interval_minutes: int = 10
-    gmail_lookback_days: int = 7
+    gmail_lookback_days: int = 14
+    # How far back the inbox itself will show. Snoozed mail used to return the
+    # moment its snooze expired "regardless of arrival day", so anything snoozed
+    # once came back every day thereafter and the inbox silently accumulated
+    # months of it. Past this, mail is gone from the view for good.
+    inbox_window_days: int = 14
     gmail_max_results: int = 50
 
     cors_origins: list[str] = [

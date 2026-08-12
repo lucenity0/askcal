@@ -25,9 +25,6 @@ struct MoreView: View {
     @AppStorage("eveningNudge") private var eveningNudge = true
     @State private var connectError: String?
 
-    /// Routine's inline add field is opened from this screen's toolbar, so the
-    /// flag has to live above the pushed view.
-    @Binding var isAddingRoutine: Bool
     @Binding var composing: ComposerIntent?
 
     @State private var nameDraft = ""
@@ -54,33 +51,23 @@ struct MoreView: View {
             page
                 .navigationDestination(for: MoreDestination.self) { destination in
                     switch destination {
-                    case .routine: RoutineView(isAdding: $isAddingRoutine)
                     case .tracks: TracksView(composing: $composing)
                     }
                 }
         }
     }
 
-    /// Where the reference material lives now.
-    ///
-    /// Routine and Tracks used to be rows under the day's entries, which meant
-    /// writing anything down pushed them further off the screen. They are
-    /// things you consult, so they sit behind More rather than competing with
-    /// the day for the top of it.
-    private enum MoreDestination: Hashable { case routine, tracks }
+    /// Tracks used to be a row under the day's entries, which meant writing
+    /// anything down pushed it further off the screen. It is something you
+    /// consult, so it sits behind More rather than competing with the day for
+    /// the top of it.
+    private enum MoreDestination: Hashable { case tracks }
 
     private var page: some View {
         NotebookPage {
             PageTitle(kicker: "Settings", title: "More")
 
                 VStack(spacing: 0) {
-                    NavigationLink(value: MoreDestination.routine) {
-                        SettingsRow(title: "Routine",
-                                    value: store.routines.isEmpty
-                                        ? "none set"
-                                        : "\(store.routinesDone.count) of \(store.routines.count)")
-                    }
-                    .buttonStyle(.plain)
                     NavigationLink(value: MoreDestination.tracks) {
                         SettingsRow(title: "Tracks", value: "\(store.openTasks.count) open")
                     }

@@ -30,9 +30,7 @@ final class AskcalStore {
     var tasks: [AskcalTask]
     var emails: [EmailItem]
     var dayPlan: [PlanSlot]
-    var routines: [Routine]
     var calendarEvents: [CalendarEvent]
-    var routinesDone: Set<UUID>
     var dayClosed = false
 
     /// True once a Askcal account is connected — data comes from askcal-api.
@@ -60,32 +58,12 @@ final class AskcalStore {
         tasks: [AskcalTask] = [],
         emails: [EmailItem] = [],
         dayPlan: [PlanSlot] = [],
-        routines: [Routine] = [],
         calendarEvents: [CalendarEvent] = []
     ) {
         self.tasks = tasks
         self.emails = emails
         self.dayPlan = dayPlan
-        self.routines = routines
         self.calendarEvents = calendarEvents
-        // checkmarks are day-keyed: yesterday's key never loads, so they
-        // reset every morning but survive an app relaunch mid-day
-        self.routinesDone = Self.loadRoutinesDone()
-    }
-
-    // MARK: - Routine checkmark persistence (device-local, resets daily)
-
-    private static var routinesDoneKey: String { "routinesDone-\(dayString(.now))" }
-
-    private static func loadRoutinesDone() -> Set<UUID> {
-        let raw = UserDefaults.standard.stringArray(forKey: routinesDoneKey) ?? []
-        return Set(raw.compactMap(UUID.init))
-    }
-
-    private func saveRoutinesDone() {
-        UserDefaults.standard.set(
-            routinesDone.map(\.uuidString), forKey: Self.routinesDoneKey
-        )
     }
 
     // MARK: - Derived
@@ -265,7 +243,6 @@ final class AskcalStore {
     // MARK: - Offline local persistence (not-signed-in users)
 
     private static let localTasksKey = "localTasks"
-    private static let localRoutinesKey = "localRoutines"
 
     /// UI tests share one simulator, and the signed-out store persists to
     /// UserDefaults — so without a way to ask for a clean slate each test
@@ -284,21 +261,17 @@ final class AskcalStore {
     /// it silently stops working.
     private func resetForTesting() {
         let ud = UserDefaults.standard
-        for key in [Self.localTasksKey, Self.localRoutinesKey, Self.routinesDoneKey,
-                    "weekStripExpanded", "userName", "streakCount", "lastClosedDate"] {
+        for key in [Self.localTasksKey, "localRoutines", "weekStripExpanded",
+                    "userName", "streakCount", "lastClosedDate"] {
             ud.removeObject(forKey: key)
         }
         tasks = []
-        routines = []
-        routinesDone = []
     }
 
     private func loadLocal() {
         let ud = UserDefaults.standard
         if let d = ud.data(forKey: Self.localTasksKey),
            let t = try? JSONDecoder().decode([AskcalTask].self, from: d) { tasks = t }
-        if let d = ud.data(forKey: Self.localRoutinesKey),
-           let r = try? JSONDecoder().decode([Routine].self, from: d) { routines = r }
     }
 
     /// Persist the offline session so a rebuild/relaunch keeps it. No-op when
@@ -307,18 +280,16 @@ final class AskcalStore {
         guard !isLive else { return }
         let ud = UserDefaults.standard
         ud.set(try? JSONEncoder().encode(tasks), forKey: Self.localTasksKey)
-        ud.set(try? JSONEncoder().encode(routines), forKey: Self.localRoutinesKey)
     }
 
     /// Full, irreversible wipe of the not-signed-in session's local data.
     func deleteLocalData() {
         tasks = []
-        routines = []
-        routinesDone = []
         let ud = UserDefaults.standard
         ud.removeObject(forKey: Self.localTasksKey)
-        ud.removeObject(forKey: Self.localRoutinesKey)
-        ud.removeObject(forKey: Self.routinesDoneKey)
+        // Left over from the routine tracker, which no longer exists — cleared
+        // so an old install stops carrying dead keys around forever.
+        ud.removeObject(forKey: "localRoutines")
         Haptics.medium()
     }
 
@@ -350,7 +321,6 @@ final class AskcalStore {
         tasks = []
         emails = []
         dayPlan = []
-        routines = []
         calendarEvents = []
     }
 
@@ -365,11 +335,9 @@ final class AskcalStore {
             async let tasksReq = APIClient.shared.tasks()
             async let todayReq = APIClient.shared.today()
             async let inboxReq = APIClient.shared.inbox()
-            async let routinesReq = APIClient.shared.routines()
             tasks = try await tasksReq
             dayPlan = try await todayReq.dayPlan
             emails = try await inboxReq
-            routines = try await routinesReq
             await refreshCalendar()
             syncError = nil
         } catch {
@@ -693,66 +661,6 @@ final class AskcalStore {
                     tasks[i] = previous
                 } else {
                     tasks.insert(previous, at: min(idx, tasks.count))
-                }
-                report(error)
-            }
-        }
-    }
-
-    // MARK: - Routines
-
-    func toggleRoutine(_ routine: Routine) {
-        if routinesDone.contains(routine.id) {
-            routinesDone.remove(routine.id)
-        } else {
-            routinesDone.insert(routine.id)
-            Haptics.tick()
-        }
-        saveRoutinesDone()
-    }
-
-    func addRoutine(title: String) {
-        let trimmed = title.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return }
-        Haptics.tick()
-
-        let optimistic = Routine(id: UUID(), title: trimmed, cadence: "daily")
-        routines.append(optimistic)
-
-        guard isLive else { saveLocal(); return }
-
-        Task {
-            do {
-                let saved = try await APIClient.shared.createRoutine(title: trimmed)
-                if let idx = routines.firstIndex(where: { $0.id == optimistic.id }) {
-                    routines[idx] = saved
-                }
-                actionError = nil
-            } catch {
-                routines.removeAll { $0.id == optimistic.id }
-                report(error)
-            }
-        }
-    }
-
-    func deleteRoutine(_ routine: Routine) {
-        guard let idx = routines.firstIndex(where: { $0.id == routine.id }) else { return }
-        let removed = routines.remove(at: idx)
-        let wasDone = routinesDone.remove(removed.id) != nil
-        saveRoutinesDone()
-        Haptics.tick()
-
-        guard isLive else { saveLocal(); return }
-
-        Task {
-            do {
-                try await APIClient.shared.deleteRoutine(removed.id)
-                actionError = nil
-            } catch {
-                routines.insert(removed, at: min(idx, routines.count))
-                if wasDone {
-                    routinesDone.insert(removed.id)
-                    saveRoutinesDone()
                 }
                 report(error)
             }

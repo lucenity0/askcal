@@ -1,10 +1,11 @@
 import datetime as dt
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, BackgroundTasks
 from sqlalchemy import and_, func, or_, select
 
+from app.config import get_settings
 from app.core.errors import AskcalError
 from app.deps import CurrentUser, DbSession
 from app.models import Email, Track, TrackKey
@@ -17,6 +18,7 @@ from app.schemas.inbox import (
     SyncAccepted,
 )
 from app.routers.tasks import _task_full_out
+from app.services.triage import mail_need
 from app.schemas.tasks import TaskFullOut
 from app.services.autotask import build_task
 from app.services.brew_engine import temp_for_score
@@ -29,22 +31,29 @@ router = APIRouter(prefix="/api", tags=["inbox"])
 
 @router.get("/inbox", response_model=InboxResponse)
 async def get_inbox(user: CurrentUser, db: DbSession) -> InboxResponse:
-    """Today's unhandled mail only — anything auto-tasked by the pipeline or
-    already swiped is out; yesterday's leftovers don't resurface."""
+    """Unhandled mail, within the window — anything auto-tasked by the pipeline
+    or already swiped is out.
+
+    Both branches are bounded by `inbox_window_days`. The returning-from-snooze
+    branch used to have no such bound, so a mail snoozed once came back every
+    day forever and the inbox filled with months of it.
+    """
     now = datetime.now(timezone.utc)
+    window_start = now - timedelta(days=get_settings().inbox_window_days)
     emails = (
         await db.scalars(
             select(Email)
             .where(
                 Email.user_id == user.id,
                 Email.handled.is_(False),
+                Email.received_at >= window_start,
                 or_(
                     # fresh: arrived today, not snoozed away
                     and_(
                         Email.received_at >= local_midnight(user.timezone),
                         Email.snoozed_until.is_(None),
                     ),
-                    # returning: snooze expired (regardless of arrival day)
+                    # returning: snooze expired
                     and_(Email.snoozed_until.is_not(None), Email.snoozed_until <= now),
                 ),
             )
@@ -72,6 +81,7 @@ async def get_inbox(user: CurrentUser, db: DbSession) -> InboxResponse:
                 regret_score=e.regret_score,
                 estimated_minutes=e.estimated_minutes,
                 temp_indicator=temp_for_score(e.regret_score),
+                needs=mail_need(e.signals, now),
                 snippet=e.snippet,
             )
             for e in emails

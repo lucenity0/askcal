@@ -14,6 +14,10 @@ class EmailOut(CamelModel):
     regret_score: int | None  # returned but never displayed as a number in UI
     estimated_minutes: int | None
     temp_indicator: str  # "hot" | "warm" | "iced"
+    # What this mail wants from you: reply | deadline | read | none. Derived
+    # server-side from the stored signals so the app and the auto-tasker cannot
+    # disagree about what a piece of mail is.
+    needs: str
     snippet: str | None
 
 

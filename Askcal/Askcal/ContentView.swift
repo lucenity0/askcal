@@ -30,7 +30,6 @@ struct ContentView: View {
     /// else. A plain Bool cannot drive `.popup(item:)`.
     private struct ReviewRequest: Identifiable { let id = "review" }
     @State private var review: ReviewRequest?
-    @State private var isAddingRoutine = false
     @State private var showGreeting = false
     @State private var didLaunch = false
 
@@ -101,7 +100,7 @@ struct ContentView: View {
             }
 
             Tab(PageDestination.more.title, systemImage: "ellipsis.circle", value: .more) {
-                MoreView(isAddingRoutine: $isAddingRoutine, composing: $composing)
+                MoreView(composing: $composing)
             }
         }
         .tint(book.ink)

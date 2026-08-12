@@ -147,14 +147,50 @@ struct EmailItem: Identifiable, Codable, Equatable {
     var regretScore: Int?
     var estimatedMinutes: Int?
     var snippet: String?
+    /// What this mail wants from you, decided server-side from the stored
+    /// signals. Derived there rather than here so the app and the auto-tasker
+    /// cannot disagree about what a piece of mail is.
+    var needs: MailNeed = .read
 
     enum CodingKeys: String, CodingKey {
         case id, track, subject
         case sender = "from"
-        case receivedAt, regretScore, estimatedMinutes, snippet
+        case receivedAt, regretScore, estimatedMinutes, snippet, needs
     }
 
     var priority: PriorityBand { PriorityBand(regretScore: regretScore) }
+}
+
+/// The four things a piece of mail can want. Ordered as the inbox reads them.
+enum MailNeed: String, Codable, CaseIterable, Identifiable {
+    case reply, deadline, read, none
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .reply: return "reply needed"
+        case .deadline: return "has a deadline"
+        case .read: return "read when free"
+        case .none: return "nothing to do"
+        }
+    }
+
+    var note: String {
+        switch self {
+        case .reply: return "someone is waiting on you"
+        case .deadline: return "there is a date on it"
+        case .read: return "worth a look, no rush"
+        case .none: return "receipts, digests, notices"
+        }
+    }
+
+    /// An unrecognised value must not fail the decode and take the whole inbox
+    /// with it — a new band added server-side should degrade to "read".
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = MailNeed(rawValue: raw) ?? .read
+    }
 }
 
 struct PlanSlot: Identifiable, Codable, Equatable {
@@ -164,13 +200,6 @@ struct PlanSlot: Identifiable, Codable, Equatable {
     var id: UUID { taskId }
 }
 
-/// Recurring habit, backend-owned (askcal-api routines table). Fresh accounts
-/// start with zero — routines exist only by explicit user action.
-struct Routine: Identifiable, Codable, Equatable {
-    let id: UUID
-    var title: String
-    var cadence: String        // "daily", "mon–fri", "sun"
-}
 
 /// External calendar block. IDs come from Google, so they're strings;
 /// start/end stay "HH:mm" — the API's ISO datetimes are converted on decode.

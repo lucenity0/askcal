@@ -312,7 +312,13 @@ async def fetch_recent_messages(
     # fetched, stored, paid for in LLM tokens, and made eligible for auto-tasking.
     # `updates` is deliberately NOT excluded — that is where LMS, ATS and billing
     # mail lands, i.e. most of the real work.
-    scope = "-in:spam -in:trash -category:promotions -category:social"
+    # Unread or starred only. Mail already read and not flagged has been dealt
+    # with by definition — pulling it anyway is what filled the inbox with
+    # months of things that were never going to be acted on.
+    scope = (
+        "(is:unread OR is:starred) "
+        "-in:spam -in:trash -category:promotions -category:social"
+    )
     if since is not None:
         query = f"after:{int(since.timestamp())} {scope}"
     else:
