@@ -385,14 +385,15 @@ final class APIClient {
 
     @discardableResult
     func updateAccount(
-        _ id: UUID, active: Bool? = nil, defaultTrack: String?? = nil
+        _ id: UUID, label: String? = nil, active: Bool? = nil, tracks: [String]? = nil
     ) async throws -> MailAccount {
         var body: [String: Any?] = [:]
+        if let label { body["label"] = label }
         if let active { body["active"] = active }
-        // Double optional on purpose: `.some(nil)` clears the leaning, `nil`
-        // leaves it alone. Collapsing them would make "no usual track" and
-        // "don't touch it" the same request.
-        if let defaultTrack { body["defaultTrack"] = defaultTrack }
+        // An empty array clears the leaning; omitting the key leaves it alone.
+        // Collapsing those would make "no usual track" and "don't touch it" the
+        // same request.
+        if let tracks { body["tracks"] = tracks }
         return try await send("PATCH", "/api/accounts/\(id.uuidString)", body: body)
     }
 

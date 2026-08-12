@@ -39,6 +39,8 @@ struct SettingsPage: View {
 
     @State private var settings: AppSettings?
     @State private var accounts: [MailAccount] = []
+    @State private var expanded: Set<UUID> = []
+    @State private var labelDrafts: [UUID: String] = [:]
     @State private var linking = false
     @State private var loadError: String?
     @State private var nameDraft = ""
@@ -319,68 +321,126 @@ struct SettingsPage: View {
         }
     }
 
+    /// One mailbox: a name, a switch, and everything else behind a tap.
+    ///
+    /// The address used to be the title, set in the big serif, so it wrapped
+    /// across two lines and shouted the one thing you already know. It is a
+    /// caption now. What you actually came here to change — what this mailbox
+    /// is usually about — is what opens.
     @ViewBuilder
     private func mailboxRow(_ account: MailAccount) -> some View {
+        let open = expanded.contains(account.id)
+
         VStack(alignment: .leading, spacing: Space.md) {
             HStack(spacing: Space.md) {
-                VStack(alignment: .leading, spacing: Space.hair) {
-                    Text(account.email)
-                        .font(BookType.body(15))
-                        .foregroundStyle(book.ink)
-                    Text(mailboxStatus(account))
-                        .font(BookType.meta(10))
-                        .foregroundStyle(book.inkSub)
+                Button {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        if open { expanded.remove(account.id) } else { expanded.insert(account.id) }
+                    }
+                } label: {
+                    HStack(spacing: Space.md) {
+                        Image(systemName: "chevron.right")
+                            .font(BookType.icon(10))
+                            .foregroundStyle(book.inkSub)
+                            .rotationEffect(.degrees(open ? 90 : 0))
+                        VStack(alignment: .leading, spacing: Space.hair) {
+                            Text(account.title)
+                                .font(BookType.entry(16))
+                                .foregroundStyle(book.ink)
+                            Text(mailboxCaption(account))
+                                .font(BookType.meta(10))
+                                .foregroundStyle(book.inkSub)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                        Spacer(minLength: Space.md)
+                    }
                 }
-                Spacer()
+                .buttonStyle(.plain)
+                .accessibilityLabel(account.title)
+                .accessibilityHint(open ? "Collapse" : "Expand")
+
                 Toggle("", isOn: Binding(
                     get: { account.active },
                     set: { on in setAccount(account, active: on) }
                 ))
                 .labelsHidden()
                 .toggleStyle(PaperToggleStyle())
-                .accessibilityLabel("Read \(account.email)")
+                .accessibilityLabel("Read \(account.title)")
             }
 
-            if !store.tracks.isEmpty {
-                VStack(alignment: .leading, spacing: Space.sm) {
-                    Text("mail here is usually")
-                        .font(BookType.meta(10))
-                        .foregroundStyle(book.inkSub)
-                    // "anything" included deliberately: an inbox with no usual
-                    // track is an ordinary answer, and leaving it out would
-                    // force a leaning onto every account whether or not one is
-                    // true.
-                    ChipPicker(
-                        options: [""] + store.tracks.map(\.id),
-                        title: { $0.isEmpty ? "anything" : store.trackLabel($0) },
-                        selection: Binding(
-                            get: { account.defaultTrack ?? "" },
-                            set: { slug in
-                                setAccount(account, defaultTrack: slug.isEmpty ? nil : slug)
-                            }
-                        ),
-                        wraps: true,
-                        bordered: false
-                    )
-                }
-            }
-
-            // The sign-in account cannot be unlinked — it owns the calendar and
-            // the session. Pausing it is the way to stop it being read.
-            if !account.isPrimary {
-                Button("Unlink") { unlink(account) }
-                    .font(BookType.meta(11))
-                    .foregroundStyle(book.inkSub)
+            if open {
+                mailboxDetail(account)
             }
         }
         .padding(.vertical, Space.md)
         .ruled()
     }
 
-    private func mailboxStatus(_ account: MailAccount) -> String {
-        if !account.connected { return "needs reconnecting" }
-        if account.isPrimary { return account.active ? "signed in" : "signed in · paused" }
-        return account.active ? "connected" : "paused"
+    @ViewBuilder
+    private func mailboxDetail(_ account: MailAccount) -> some View {
+        VStack(alignment: .leading, spacing: Space.lg) {
+            VStack(alignment: .leading, spacing: Space.sm) {
+                Text("call it")
+                    .font(BookType.meta(10))
+                    .foregroundStyle(book.inkSub)
+                TextField(
+                    "college, work, personal…",
+                    text: Binding(
+                        get: { labelDrafts[account.id] ?? account.label ?? "" },
+                        set: { labelDrafts[account.id] = $0 }
+                    )
+                )
+                .font(BookType.body(15))
+                .foregroundStyle(book.ink)
+                .submitLabel(.done)
+                .onSubmit {
+                    setAccount(account, label: labelDrafts[account.id] ?? "")
+                }
+            }
+
+            if !store.tracks.isEmpty {
+                VStack(alignment: .leading, spacing: Space.sm) {
+                    Text("mail here is usually about")
+                        .font(BookType.meta(10))
+                        .foregroundStyle(book.inkSub)
+                    // As many as apply. No address is one thing — this one
+                    // carries coursework and fees and the occasional recruiter,
+                    // and being made to pick the closest single track is how
+                    // mail ends up somewhere it never belonged.
+                    TagPicker(
+                        options: store.tracks.map(\.id),
+                        title: { store.trackLabel($0) },
+                        selection: Binding(
+                            get: { Set(account.tracks) },
+                            set: { setAccount(account, tracks: Array($0)) }
+                        )
+                    )
+                    Text("a leaning, not a rule — a bill here is still money.")
+                        .font(BookType.meta(10))
+                        .foregroundStyle(book.inkSub)
+                }
+            }
+
+            // The sign-in account cannot be unlinked — it owns the calendar and
+            // the session. Pausing it is the way to stop it being read.
+            if !account.isPrimary {
+                Button("Unlink this mailbox") { unlink(account) }
+                    .font(BookType.meta(11))
+                    .foregroundStyle(book.inkSub)
+            }
+        }
+        .padding(.leading, Space.xl)
+    }
+
+    /// The address, plus anything wrong with it. Deliberately one quiet line:
+    /// "signed in" on its own row was a second thing competing with the name.
+    private func mailboxCaption(_ account: MailAccount) -> String {
+        var parts = [account.email]
+        if !account.connected { parts.append("needs reconnecting") }
+        else if !account.active { parts.append("paused") }
+        else if account.isPrimary { parts.append("signed in") }
+        return parts.joined(separator: " · ")
     }
 
     private var nameField: some View {
@@ -578,17 +638,19 @@ struct SettingsPage: View {
     }
 
     private func setAccount(
-        _ account: MailAccount, active: Bool? = nil, defaultTrack: String?? = nil
+        _ account: MailAccount, label: String? = nil, active: Bool? = nil,
+        tracks: [String]? = nil
     ) {
         guard let index = accounts.firstIndex(where: { $0.id == account.id }) else { return }
         let previous = accounts[index]
+        if let label { accounts[index].label = label.isEmpty ? nil : label }
         if let active { accounts[index].active = active }
-        if let defaultTrack { accounts[index].defaultTrack = defaultTrack }
+        if let tracks { accounts[index].tracks = tracks }
 
         Task {
             do {
                 let saved = try await APIClient.shared.updateAccount(
-                    account.id, active: active, defaultTrack: defaultTrack
+                    account.id, label: label, active: active, tracks: tracks
                 )
                 if let i = accounts.firstIndex(where: { $0.id == saved.id }) {
                     accounts[i] = saved

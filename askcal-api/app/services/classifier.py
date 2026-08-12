@@ -142,10 +142,12 @@ _RULES_TAIL = """\
     "ASAP" / "urgent" with no date      -> null; urgency is consequence, not a
                                            deadline
 - `arrived_at`, when present, is which of the user's mailboxes the email landed
-  in, and `mailbox_usually` is the track that mailbox's mail normally belongs
-  to. Treat it as a leaning, not a rule — a bill arriving at a college address
-  is still about money, and a personal note to a work address is still personal.
-  Use it to break a tie, not to override what the email plainly says.
+  in, and `mailbox_usually` lists the tracks that mailbox normally carries.
+  Treat it as a leaning, not a rule — a bill arriving at a college address is
+  still about money, and a personal note to a work address is still personal.
+  Use it to choose between tracks the email could plausibly belong to, never to
+  override what it plainly says. An email may well belong to a track that is not
+  on that list.
 - estimated_minutes: rough effort to fully handle the email's ask, null if no ask
 - confidence: how sure you are about the track + consequence overall
 - Return one result object per input email, echoing its gmail_id exactly.
@@ -213,9 +215,12 @@ def _email_payload(e: Email) -> dict:
     # personal one it is often the strongest signal in the whole message.
     account = getattr(e, "account", None)
     if account is not None:
-        payload["arrived_at"] = account.email
-        if account.default_track is not None:
-            payload["mailbox_usually"] = account.default_track.slug
+        payload["arrived_at"] = account.label or account.email
+        if account.tracks:
+            # Plural: no address is one thing. A college account carries
+            # coursework, fees and the odd recruiter, and naming only the
+            # closest one would push the other two into it.
+            payload["mailbox_usually"] = [t.slug for t in account.tracks]
     return payload
 
 

@@ -40,7 +40,8 @@ def _account_out(account: MailAccount) -> AccountOut:
         is_primary=account.is_primary,
         active=account.active,
         connected=account.google_refresh_token is not None,
-        default_track=account.default_track.slug if account.default_track else None,
+        label=account.label,
+        tracks=[t.slug for t in sorted(account.tracks, key=lambda t: (t.sort_order, t.slug))],
         last_synced_at=account.last_synced_at,
     )
 
@@ -93,11 +94,11 @@ async def start_link(user: CurrentUser, db: DbSession, scheme: str = "askcal") -
 async def update_account(
     account_id: uuid.UUID, body: AccountPatchRequest, user: CurrentUser, db: DbSession
 ) -> AccountOut:
-    """Pause a mailbox, or say what its mail usually is.
+    """Name a mailbox, pause it, or say what its mail is usually about.
 
-    The default track is a leaning passed to the classifier, never a rule. An
-    account that forced its track would file a bill arriving at a college
-    address as coursework every time, with nothing on screen explaining why.
+    Tracks are a leaning passed to the classifier, never a rule. An account that
+    forced them would file a bill arriving at a college address as coursework
+    every time, with nothing on screen explaining why.
     """
     account = await db.scalar(
         select(MailAccount).where(
@@ -110,16 +111,18 @@ async def update_account(
     fields = body.model_fields_set
     if "active" in fields and body.active is not None:
         account.active = body.active
-    if "default_track" in fields:
-        if body.default_track is None:
-            account.default_track_id = None
-        else:
-            track = await find_track(db, user.id, body.default_track)
+    if "label" in fields:
+        account.label = (body.label or "").strip() or None
+    if "tracks" in fields and body.tracks is not None:
+        resolved = []
+        for slug in body.tracks:
+            track = await find_track(db, user.id, slug)
             if track is None:
                 raise AskcalError(
-                    422, "INVALID_TRACK", f"No '{body.default_track}' track on this account"
+                    422, "INVALID_TRACK", f"No '{slug}' track on this account"
                 )
-            account.default_track_id = track.id
+            resolved.append(track)
+        account.tracks = resolved
     await db.commit()
     await db.refresh(account)
     return _account_out(account)

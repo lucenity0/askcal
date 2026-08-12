@@ -13,7 +13,10 @@ class AccountOut(CamelModel):
     # after Google revokes access, and "connected" is the only honest way to
     # show that rather than silently never syncing.
     connected: bool
-    default_track: str | None  # track slug this mailbox's mail usually is
+    label: str | None  # what the user calls this mailbox
+    # Track slugs this mailbox usually carries. Plural because no address is
+    # one thing.
+    tracks: list[str]
     last_synced_at: dt.datetime | None
 
 
@@ -27,6 +30,8 @@ class AccountLinkOut(CamelModel):
 
 class AccountPatchRequest(CamelModel):
     active: bool | None = None
-    # Explicitly nullable: sending null clears the leaning, which is different
-    # from omitting the field and leaving it alone.
-    default_track: str | None = None
+    label: str | None = None
+    # An empty list clears the leaning; omitting the field leaves it alone.
+    # Collapsing those two would make "no usual track" and "do not touch it"
+    # the same request.
+    tracks: list[str] | None = None

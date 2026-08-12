@@ -277,14 +277,25 @@ func minutesSinceMidnight(_ hhmm: String) -> Int? {
 struct MailAccount: Identifiable, Codable, Equatable {
     let id: UUID
     var email: String
+    /// What the user calls it — "college", "work". The address makes a poor
+    /// title: it is long, it wraps, and they already know it.
+    var label: String?
     var isPrimary: Bool
     var active: Bool
     /// Whether there is still a usable token. An account outlives its access
     /// when Google revokes it, and saying so is the only way that stops looking
     /// like an inbox that simply never delivers.
     var connected: Bool
-    var defaultTrack: String?
+    /// Tracks this mailbox usually carries — as many as apply.
+    var tracks: [String] = []
     var lastSyncedAt: Date?
+
+    /// What to call it on screen. Falls back to the part of the address before
+    /// the @, which is shorter than the whole thing and usually recognisable.
+    var title: String {
+        if let label, !label.isEmpty { return label }
+        return String(email.prefix(while: { $0 != "@" }))
+    }
 }
 
 /// classifier half is reported and cannot be set from here, because the

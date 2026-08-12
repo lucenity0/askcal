@@ -74,6 +74,52 @@ struct ChipPicker<Value: Hashable>: View {
     }
 }
 
+/// Any number from a small set, as the same capsule chips.
+///
+/// A mailbox is the case that needed this: a college address carries coursework,
+/// fees and the odd recruiter, and being made to pick the closest single one is
+/// how mail ends up filed somewhere it never belonged.
+///
+/// Deliberately has no "none" chip. An empty selection *is* none, and an option
+/// that means "I picked nothing" competes with the picking.
+struct TagPicker: View {
+    let options: [String]
+    let title: (String) -> String
+    @Binding var selection: Set<String>
+
+    @Environment(\.book) private var book
+
+    var body: some View {
+        FlowRow(spacing: Space.md) {
+            ForEach(options, id: \.self) { option in
+                let isOn = selection.contains(option)
+                Button {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        if isOn { selection.remove(option) } else { selection.insert(option) }
+                    }
+                } label: {
+                    Text(title(option))
+                        .font(BookType.meta(11))
+                        .lineLimit(1)
+                        .fixedSize()
+                        .foregroundStyle(isOn ? book.fillText : book.inkSub)
+                        .padding(.horizontal, Space.lg)
+                        .padding(.vertical, Space.sm)
+                        .background(Capsule().fill(isOn ? book.fill : .clear))
+                        .overlay(
+                            Capsule().strokeBorder(
+                                isOn ? .clear : book.rule, lineWidth: Stroke.hair
+                            )
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(title(option))
+                .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
+            }
+        }
+    }
+}
+
 /// Minimal wrapping stack so a set of chips never clips on small widths.
 struct FlowRow: Layout {
     var spacing: CGFloat = Space.md

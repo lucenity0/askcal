@@ -2,12 +2,40 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    String,
+    Table,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
 from app.models.base import TimestampMixin
+
+# Which tracks a mailbox usually carries. A plain association table: the pair
+# is the whole fact, and there is nothing else to say about it.
+mail_account_tracks = Table(
+    "mail_account_tracks",
+    Base.metadata,
+    Column(
+        "account_id",
+        UUID(as_uuid=True),
+        ForeignKey("mail_accounts.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "track_id",
+        UUID(as_uuid=True),
+        ForeignKey("tracks.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+)
 
 if TYPE_CHECKING:
     from app.models.track import Track
@@ -33,15 +61,16 @@ class MailAccount(TimestampMixin, Base):
         ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
     email: Mapped[str] = mapped_column(String(320))
+    # What the user calls this mailbox — "college", "work". The address itself
+    # is not something they need read back to them, and it makes a poor title:
+    # it is long, it wraps, and they already know it.
+    label: Mapped[str | None] = mapped_column(String(80))
     google_sub: Mapped[str | None] = mapped_column(String(64))
     # TODO: encrypt at rest (#19). Moving it here changed where it lives, not
     # how it is stored, and it is still the most sensitive column in the schema.
     google_refresh_token: Mapped[str | None] = mapped_column(Text)
 
-    # What mail at this address usually is. Passed to the classifier as a
-    # leaning, never as a rule — a bill arriving at a college address is still
-    # a bill, and an account that forced its track would file it wrong every
-    # time with nothing on screen explaining why.
+    # Superseded by `tracks` below. Kept one release; nothing reads it.
     default_track_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("tracks.id", ondelete="SET NULL")
     )
@@ -57,3 +86,15 @@ class MailAccount(TimestampMixin, Base):
 
     user: Mapped["User"] = relationship(back_populates="mail_accounts")
     default_track: Mapped["Track | None"] = relationship(lazy="selectin")
+
+    # What mail at this address is usually about — as many as apply. No address
+    # is one thing: a college account carries coursework, fees and the odd
+    # recruiter, and being forced to pick the closest single one is the same
+    # mistake the five hardcoded tracks made.
+    #
+    # Passed to the classifier as a leaning, never a rule. An account that
+    # forced its tracks would file a bill arriving at a college address as
+    # coursework every time, with nothing on screen explaining why.
+    tracks: Mapped[list["Track"]] = relationship(
+        secondary="mail_account_tracks", lazy="selectin"
+    )
