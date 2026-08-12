@@ -33,6 +33,17 @@ struct NotebookPage<Content: View>: View {
             PaperSurface()
                 .ignoresSafeArea()
 
+            // `onRefresh` and `scrollable` decide which branch of an `if` builds
+            // the page, so changing either at runtime destroys the whole scroll
+            // view and builds a new one — every row, the scroll offset, all of
+            // it. On screen that is a hard flash.
+            //
+            // Both are meant to be fixed for the life of a page. TodayPage once
+            // flipped `onRefresh` to nil on any day but today, and that single
+            // nil was the date-change blink that survived three attempts at
+            // fixing the list and the animations. If a caller needs the gesture
+            // to do different things on different days, vary what the closure
+            // *does* — never whether it exists.
             if scrollable {
                 if let onRefresh {
                     scroll.refreshable { await onRefresh() }

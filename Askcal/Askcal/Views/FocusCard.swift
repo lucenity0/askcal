@@ -34,15 +34,12 @@ struct FocusCard: View {
 
     private var card: some View {
         VStack(alignment: .leading, spacing: Space.lg) {
-            HStack(spacing: Space.md) {
-                Rubric(focus.kicker)
-                Spacer(minLength: Space.md)
-                if let remaining = remainingLabel {
-                    Text(remaining)
-                        .font(BookType.meta(10))
-                        .foregroundStyle(book.inkSub)
-                }
-            }
+            // "56 min left" used to sit opposite the kicker. It was measuring
+            // the planned slot, and a task with no estimate gets a one-hour
+            // slot by default — so it counted down an hour nobody chose, next
+            // to a real deadline saying something else entirely. Two clocks
+            // disagreeing is worse than one clock.
+            Rubric(focus.kicker)
 
             HStack(alignment: .center, spacing: Space.lg) {
                 VStack(alignment: .leading, spacing: Space.sm) {
@@ -95,20 +92,12 @@ struct FocusCard: View {
         return now.timeIntervalSince(start) / end.timeIntervalSince(start)
     }
 
-    private var remainingLabel: String? {
-        guard let slot = focus.slot, let start = slot.start(on: .now) else { return nil }
-        let end = start.addingTimeInterval(Double(slot.duration) * 60)
-        let left = Int(end.timeIntervalSinceNow / 60)
-        guard left > 0 else { return nil }
-        return left >= 60 ? "\(left / 60)h \(left % 60)m left" : "\(left) min left"
-    }
-
+    /// Track and start time. Not the deadline — the kicker above already says
+    /// it, in the same words, and printing "due in 19 min" twice in one card
+    /// makes a reader look for the difference between them.
     private var metaLine: String {
         var parts: [String] = focus.task.track.isEmpty ? [] : [store.trackLabel(focus.task.track)]
         if let slot = focus.slot { parts.append(slot.time) }
-        if let deadline = focus.task.deadlineLabel, !deadline.isEmpty {
-            parts.append(deadline)
-        }
         return parts.joined(separator: " · ")
     }
 }

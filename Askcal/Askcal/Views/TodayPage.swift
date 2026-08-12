@@ -62,11 +62,29 @@ struct TodayPage: View {
         entries.filter { $0.status == .done }.count
     }
 
-    /// Only today pulls to refresh — a past day has nothing new to fetch, and
-    /// the gesture promising otherwise would be a lie.
-    private var refreshAction: (() async -> Void)? {
-        guard isToday else { return nil }
-        return { await store.syncInbox() }
+    /// Pull to refresh, on every day — and always non-nil.
+    ///
+    /// This used to return nil for any day but today, on the reasoning that a
+    /// past day has nothing to fetch. That reasoning was wrong twice over.
+    ///
+    /// It was the blink. `NotebookPage` chooses between `scroll.refreshable {}`
+    /// and a bare `scroll`, and those are two different branches of an `if`, so
+    /// flipping this from nil to non-nil made SwiftUI tear the entire ScrollView
+    /// down and build a new one. That is why the flash happened only when
+    /// leaving or returning to today, and never between two other days — the
+    /// only transitions where this value changes. Three previous attempts
+    /// looked at the list and the animation; neither was ever involved.
+    ///
+    /// It was also untrue. Another device can edit any day, so refetching one
+    /// is a real answer to the gesture, not a placebo.
+    private var refreshAction: () async -> Void {
+        {
+            if isToday {
+                await store.syncInbox()
+            } else {
+                await load(force: true)
+            }
+        }
     }
 
     var body: some View {
@@ -78,13 +96,12 @@ struct TodayPage: View {
             addRow
             endOfDay
         }
-        // The blocks that only exist on today — the connect card, the
-        // now-working card, the end-of-day card — appear and disappear as
-        // `isToday` flips. Without this they pop in and out in a single frame
-        // and the whole page jumps under your thumb, which is the blink that
-        // survived two attempts at fixing the *list*: the list was never the
-        // part that was flashing.
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: isToday)
+        // Deliberately no page-level animation on `isToday`. One was added here
+        // to smooth the blink and could not have worked: the page was being
+        // destroyed and rebuilt (see `refreshAction`), and animating a subtree
+        // that is about to be torn down just fades the wreckage. With the
+        // rebuild gone, the today-only blocks simply are or are not there —
+        // which is what turning to another page should look like.
         .task(id: selected) { await load() }
         .task(id: weekKey) { await loadMarks() }
         // Today is live: a tick has to land immediately. This is also what
@@ -271,7 +288,7 @@ struct TodayPage: View {
     /// Loads the selected day, leaving whatever is on screen in place until the
     /// new day is actually in hand. Blanking first and filling afterwards is
     /// what made every date change flicker.
-    private func load() async {
+    private func load(force: Bool = false) async {
         guard !isToday else {
             loaded = nil
             loadedDay = AskcalStore.dayString(selected)
@@ -281,7 +298,7 @@ struct TodayPage: View {
         let day = selected
         // `displayed` is deliberately left alone: whatever is on screen stays
         // there until the new day is in hand.
-        let data = await store.dayData(for: day)
+        let data = await store.dayData(for: day, force: force)
         // The day can change again while this is in flight — a second tap on
         // the strip — and the slower answer must not overwrite the newer one.
         guard day == selected else { return }

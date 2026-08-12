@@ -465,12 +465,15 @@ final class AskcalStore {
     /// A day's tasks and events, from cache where possible. Today is always
     /// served live from the store — it is the day being edited, and a cached
     /// copy of it would go stale the moment anything was ticked.
-    func dayData(for date: Date) async -> DayData {
+    /// `force` skips the cache — what pull-to-refresh on a day that isn't today
+    /// means. Without it the gesture would spin and hand back the same cached
+    /// answer, which is worse than not offering it.
+    func dayData(for date: Date, force: Bool = false) async -> DayData {
         if Calendar.current.isDateInToday(date) {
             return DayData(tasks: scheduledTasks, events: calendarEvents)
         }
         let key = Self.dayString(date)
-        if let cached = dayCache[key] { return cached }
+        if !force, let cached = dayCache[key] { return cached }
         let data = await loadDay(date)
         dayCache[key] = data
         return data
