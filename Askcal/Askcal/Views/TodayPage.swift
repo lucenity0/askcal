@@ -187,7 +187,7 @@ struct TodayPage: View {
                     ForEach(Array(entries.enumerated()), id: \.element.id) { index, task in
                         TimelineRow(
                             task: task,
-                            time: store.slot(for: task)?.time ?? pinnedTime(task),
+                            time: rowTime(task),
                             isFirst: index == 0,
                             isLast: index == entries.count - 1,
                             toggle: {
@@ -212,7 +212,28 @@ struct TodayPage: View {
     /// A task with a pinned start but no plan slot still knows its own time.
     private func pinnedTime(_ task: AskcalTask) -> String? {
         guard let at = task.scheduledAt else { return nil }
-        return at.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute())
+        return Self.clock(at)
+    }
+
+    /// The time beside the mark: where the plan put it while it is still to do,
+    /// and when it was actually finished once it is done.
+    ///
+    /// The plan only contains open work, so a task used to lose its slot the
+    /// instant it was ticked — the day list got less informative the more of it
+    /// you did, and the finished rows sat flush left against an empty column.
+    /// A closed-out day should read as a record of when things happened.
+    private func rowTime(_ task: AskcalTask) -> String? {
+        if task.status == .done, let done = task.completedAt {
+            return Self.clock(done)
+        }
+        return store.slot(for: task)?.time ?? pinnedTime(task)
+    }
+
+    /// One column, one format. The server's plan slots are "HH:MM", so
+    /// everything in that column is written the same way rather than switching
+    /// to the device's 12-hour clock halfway down the list.
+    private static func clock(_ date: Date) -> String {
+        date.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute())
     }
 
     // MARK: - Connect / errors

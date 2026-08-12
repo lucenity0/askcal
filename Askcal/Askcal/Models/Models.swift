@@ -121,6 +121,10 @@ struct AskcalTask: Identifiable, Codable, Equatable {
     var scheduledFor: Date?    // the day this task lives on
     var scheduledAt: Date?     // pinned start time, if the user chose one
     var dueAt: Date?           // deadline — drives the live countdown
+    /// When it was actually ticked. The day list showed the planned slot and
+    /// lost it on completion, so finishing something erased the only evidence
+    /// of when it happened.
+    var completedAt: Date?
 
     var priority: PriorityBand { PriorityBand(regretScore: regretScore) }
 
@@ -148,7 +152,8 @@ struct AskcalTask: Identifiable, Codable, Equatable {
         id: UUID, track: String, title: String, meta: String? = nil,
         regretScore: Int, estimatedHours: Double? = nil,
         status: TaskStatus = .pending, pipeline: String? = nil,
-        scheduledFor: Date? = nil, scheduledAt: Date? = nil, dueAt: Date? = nil
+        scheduledFor: Date? = nil, scheduledAt: Date? = nil, dueAt: Date? = nil,
+        completedAt: Date? = nil
     ) {
         self.id = id
         self.track = track
@@ -161,6 +166,7 @@ struct AskcalTask: Identifiable, Codable, Equatable {
         self.scheduledFor = scheduledFor
         self.scheduledAt = scheduledAt
         self.dueAt = dueAt
+        self.completedAt = completedAt
     }
 
     // Defensive decoding: a missing `status` (older/leaner API responses)
@@ -182,6 +188,7 @@ struct AskcalTask: Identifiable, Codable, Equatable {
         scheduledFor = try c.decodeIfPresent(Date.self, forKey: .scheduledFor)
         scheduledAt = try c.decodeIfPresent(Date.self, forKey: .scheduledAt)
         dueAt = try c.decodeIfPresent(Date.self, forKey: .dueAt)
+        completedAt = try c.decodeIfPresent(Date.self, forKey: .completedAt)
     }
 }
 

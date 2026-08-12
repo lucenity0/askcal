@@ -13,6 +13,10 @@ class TaskFullOut(TaskOut):
     scheduled_for: dt.date | None = None
     scheduled_at: dt.datetime | None = None   # pinned start time, if any
     due_at: dt.datetime | None = None         # raw deadline for client countdown
+    # When it was actually ticked. Stored since the beginning and never sent,
+    # so a finished task lost the only trace of when it happened — the day list
+    # got less informative the more of it you did.
+    completed_at: dt.datetime | None = None
 
 
 class TasksResponse(CamelModel):

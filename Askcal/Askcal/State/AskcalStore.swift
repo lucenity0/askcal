@@ -606,6 +606,10 @@ final class AskcalStore {
         guard let idx = tasks.firstIndex(where: { $0.id == task.id }) else { return }
         let previous = tasks[idx].status
         tasks[idx].status = previous == .done ? .pending : .done
+        // Stamped here as well as on the server, so the time appears beside the
+        // mark on the same frame as the tick rather than after the next
+        // refresh. The server's own stamp replaces it when the list reloads.
+        tasks[idx].completedAt = tasks[idx].status == .done ? .now : nil
         if tasks[idx].status == .done { Haptics.tick() }
         pushStatus(task.id, tasks[idx].status, revertingTo: previous)
         saveLocal()
@@ -623,6 +627,9 @@ final class AskcalStore {
                 // server refused it is a lie the next refresh silently undoes
                 if let idx = tasks.firstIndex(where: { $0.id == id }) {
                     tasks[idx].status = previous
+                    // Rolled back with it, or a refused tick leaves a finish
+                    // time on a task that was never finished.
+                    if previous != .done { tasks[idx].completedAt = nil }
                 }
                 report(error)
             }

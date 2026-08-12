@@ -37,6 +37,7 @@ def _task_full_out(task: Task) -> TaskFullOut:
         scheduled_for=task.scheduled_for,
         scheduled_at=task.scheduled_at,
         due_at=task.due_at,
+        completed_at=task.completed_at,
     )
 
 
