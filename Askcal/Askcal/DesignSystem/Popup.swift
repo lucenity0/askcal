@@ -66,6 +66,8 @@ private struct PopupModifier<Item: Identifiable, PopupBody: View>: ViewModifier 
                         // than a different screen.
                         Rectangle()
                             .fill(.ultraThinMaterial)
+                            .opacity(PaperTexture.popupScrim)
+                            .overlay(Color.black.opacity(PaperTexture.popupDim))
                             .ignoresSafeArea()
                             .onTapGesture { dismiss() }
                             .accessibilityLabel("Close")

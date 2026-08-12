@@ -108,7 +108,10 @@ final class DarkModeSnapshotTests: XCTestCase {
         let review = app.buttons["Review day"].firstMatch
         XCTAssertTrue(review.waitForExistence(timeout: 10), "review-day button not found")
         review.tap()
-        Thread.sleep(forTimeInterval: 2)
+        // The popup, not a full page — and the same glass as every other modal.
+        // Rubric uppercases, so this is the string actually rendered.
+        XCTAssertTrue(app.staticTexts["END OF DAY"].waitForExistence(timeout: 5),
+                      "review popup did not open")
         snapshot(app, "35-review-night")
     }
 }

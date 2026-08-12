@@ -35,7 +35,7 @@ enum ThemeMode: String, CaseIterable {
     var note: String {
         switch self {
         case .day: return "Cream page, ruled in sepia"
-        case .night: return "Ink-dark page, chalk writing"
+        case .night: return "Blackboard, chalk writing"
         }
     }
 
@@ -123,28 +123,32 @@ struct PaperPalette: Equatable {
         sceneInk: Color(hex: "#2A2724")
     )
 
+    /// A blackboard, not a dimmed page. The first dark theme was the day
+    /// palette turned down — warm brown-black, which reads as a sepia
+    /// photograph of paper rather than as its own surface. This is slate:
+    /// cooler, darker, and chalk rather than ink on top of it.
     static let nightTheme = PaperPalette(
-        paper: Color(hex: "#1F1C18"),
-        recessed: Color(hex: "#171410"),   // sunken — still the darkest
-        card: Color(hex: "#272320"),       // raised is the *lightest* under dark
-        rule: Color(hex: "#3D3730"),       //  1.44:1 — rules vanish on dark,
-        ruleStrong: Color(hex: "#554D42"), //  2.04:1   so these sit prouder
-        margin: Color(hex: "#A55C43"),     //  3.40:1
-        ink: Color(hex: "#EDE6D8"),        // 13.67:1  chalk, not white
-        inkDim: Color(hex: "#B5AD9E"),     //  7.62:1
-        inkSub: Color(hex: "#968F82"),     //  5.29:1 page · 4.86 card · 5.72 well
-        board: Color(hex: "#100E0B"),
-        binding: Color(hex: "#6B5F4C"),
-        fill: Color(hex: "#EDE6D8"),
-        fillText: Color(hex: "#1F1C18"),
-        swipeConfirm: Color(hex: "#3D3730"),
-        swipeSnooze: Color(hex: "#554D42"),
-        sceneWall: Color(hex: "#241F1A"),
-        sceneWallLo: Color(hex: "#191510"),
-        sceneSky: Color(hex: "#14110E"),
-        sceneSkyLo: Color(hex: "#241C15"),
-        sceneCloud: Color(hex: "#2E2921"),
-        sceneInk: Color(hex: "#EDE6D8")
+        paper: Color(hex: "#16191B"),
+        recessed: Color(hex: "#101314"),   // sunken — still the darkest
+        card: Color(hex: "#1E2224"),       // raised is the *lightest* under dark
+        rule: Color(hex: "#2E3336"),       //  1.38:1 — chalk dust, barely there
+        ruleStrong: Color(hex: "#454B4E"), //  1.99:1
+        margin: Color(hex: "#9C5B47"),     //  3.37:1 — a line, never text
+        ink: Color(hex: "#E9ECE9"),        // 14.84:1  chalk, not white
+        inkDim: Color(hex: "#B2B8B5"),     //  8.76:1
+        inkSub: Color(hex: "#949B98"),     //  6.22:1 page · 5.65 card · 6.58 well
+        board: Color(hex: "#0A0C0D"),
+        binding: Color(hex: "#5A6265"),
+        fill: Color(hex: "#E9ECE9"),
+        fillText: Color(hex: "#16191B"),
+        swipeConfirm: Color(hex: "#2E3336"),
+        swipeSnooze: Color(hex: "#454B4E"),
+        sceneWall: Color(hex: "#1B1F21"),
+        sceneWallLo: Color(hex: "#121517"),
+        sceneSky: Color(hex: "#0D1113"),
+        sceneSkyLo: Color(hex: "#1A2124"),
+        sceneCloud: Color(hex: "#252B2E"),
+        sceneInk: Color(hex: "#E9ECE9")
     )
 
     static func palette(for mode: ThemeMode) -> PaperPalette {

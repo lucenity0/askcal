@@ -26,7 +26,10 @@ struct ContentView: View {
     @State private var tab: PageDestination = .today
     @State private var composing: ComposerIntent?
     @State private var openedEmail: EmailItem?
-    @State private var showReview = false
+    /// Identifiable so Review rides the same popup machinery as everything
+    /// else. A plain Bool cannot drive `.popup(item:)`.
+    private struct ReviewRequest: Identifiable { let id = "review" }
+    @State private var review: ReviewRequest?
     @State private var isAddingRoutine = false
     @State private var showGreeting = false
     @State private var didLaunch = false
@@ -62,13 +65,8 @@ struct ContentView: View {
                 onClose: { openedEmail = nil }
             )
         }
-        // Review is a whole page, not a card, so it gets a sheet. It used to be
-        // a hidden tab that "Review day" selected — which silently did nothing,
-        // because a hidden tab is not selectable.
-        .sheet(isPresented: $showReview) {
-            ReviewView()
-                .environment(\.book, book)
-                .presentationBackground(book.paper)
+        .popup(item: $review) { _ in
+            ReviewSheet { review = nil }
         }
         .environment(\.book, book)
         .preferredColorScheme(mode.polarity)
@@ -89,7 +87,7 @@ struct ContentView: View {
                 TodayPage(
                     composing: $composing,
                     onConnect: connect,
-                    onOpenReview: { showReview = true }
+                    onOpenReview: { review = .init() }
                 )
             }
 

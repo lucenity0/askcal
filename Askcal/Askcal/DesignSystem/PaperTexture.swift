@@ -43,6 +43,19 @@ enum PaperTexture {
     /// one reads as paper curving into the binding.
     static let spineFalloff: Double = 0.55
 
+    // ── Popups ───────────────────────────────────────────────────────────
+    /// How much of the blurred layer shows behind a popup.
+    ///
+    /// A full-strength material hides the page completely, which turns every
+    /// popup into a different screen — the opposite of the point. At a third,
+    /// the page is still legible underneath and the card reads as something
+    /// laid on top of what you were doing. One number, so the composer, an
+    /// opened mail and the evening review all sit behind the same glass.
+    static let popupScrim: Double = 0.32
+    /// A whisper of ink over the blur, so a pale card still separates from a
+    /// pale page.
+    static let popupDim: Double = 0.06
+
     // ── Ruling ───────────────────────────────────────────────────────────
     /// The margin rule is a guide, not a border — it should be visible without
     /// ever competing with what is written next to it.

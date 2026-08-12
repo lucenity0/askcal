@@ -27,9 +27,9 @@ struct TodayPage: View {
     /// "yesterday, still loading" from "yesterday, genuinely empty", and shows
     /// the empty copy for a beat before the real entries arrive — the flash.
     @State private var loadedDay: String?
-    /// The last list actually shown, kept so the page has something to display
-    /// while the next day is in flight rather than emptying.
-    @State private var held: [AskcalTask] = []
+    /// What is actually on screen. The single source of truth for the list, so
+    /// it can be left alone while the next day loads.
+    @State private var displayed: [AskcalTask] = []
     @State private var marked: Set<String> = []
 
     private var isLoadingDay: Bool {
@@ -54,11 +54,7 @@ struct TodayPage: View {
     /// the case the first flicker fix missed: leaving today swapped a populated
     /// list for an empty one in the same frame, so the page emptied and refilled
     /// even though the previous content was still perfectly good to look at.
-    private var entries: [AskcalTask] {
-        if isToday { return store.dayEntries }
-        if let loaded, loadedDay == AskcalStore.dayString(selected) { return loaded.tasks }
-        return held
-    }
+    private var entries: [AskcalTask] { displayed }
 
     private var doneCount: Int {
         entries.filter { $0.status == .done }.count
@@ -82,6 +78,13 @@ struct TodayPage: View {
         }
         .task(id: selected) { await load() }
         .task(id: weekKey) { await loadMarks() }
+        // Today is live: a tick has to land immediately. This is also what
+        // keeps today's list in `displayed` at the moment you leave it, which
+        // is what the previous fix got wrong — it captured inside load(), by
+        // which point isToday was already false and today's entries were gone.
+        .onChange(of: store.dayEntries) { _, latest in
+            if isToday { displayed = latest }
+        }
     }
 
     private var header: some View {
@@ -258,18 +261,20 @@ struct TodayPage: View {
     private func load() async {
         guard !isToday else {
             loaded = nil
-            loadedDay = nil
-            held = store.dayEntries
+            loadedDay = AskcalStore.dayString(selected)
+            displayed = store.dayEntries
             return
         }
         let day = selected
-        held = entries          // whatever is on screen stays there meanwhile
+        // `displayed` is deliberately left alone: whatever is on screen stays
+        // there until the new day is in hand.
         let data = await store.dayData(for: day)
         // The day can change again while this is in flight — a second tap on
         // the strip — and the slower answer must not overwrite the newer one.
         guard day == selected else { return }
         withAnimation(.easeInOut(duration: 0.18)) {
             loaded = data
+            displayed = data.tasks
             loadedDay = AskcalStore.dayString(day)
         }
     }
