@@ -17,6 +17,7 @@ from app.routers import (
     inbox,
     me,
     routines,
+    settings as settings_router,
     tasks,
     today,
     tracks,
@@ -71,6 +72,7 @@ app.include_router(calendar.router)
 app.include_router(closing_time.router)
 app.include_router(digest.router)
 app.include_router(routines.router)
+app.include_router(settings_router.router)
 app.include_router(me.router)
 
 

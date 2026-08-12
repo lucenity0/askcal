@@ -166,3 +166,51 @@ def test_an_overdue_deadline_lands_on_today_not_in_the_past():
     """Overdue work belongs on today's list, not the day it was missed."""
     due = dt.datetime(2026, 8, 1, 12, 0, tzinfo=timezone.utc)
     assert scheduled_day_for(due, TODAY) == TODAY
+
+
+# ── Per-user thresholds ────────────────────────────────────────────────────
+
+
+class _User:
+    def __init__(self, **prefs):
+        self.preferences = prefs
+
+
+def test_gates_fall_back_to_deployment_defaults():
+    """A fresh account behaves exactly as the server was configured to, and
+    only diverges once someone deliberately moves a dial."""
+    from app.config import get_settings
+    from app.services.autotask import auto_task_gates
+
+    s = get_settings()
+    assert auto_task_gates(_User()) == (
+        s.auto_task_min_confidence,
+        s.auto_task_min_regret,
+    )
+    assert auto_task_gates(None) == (
+        s.auto_task_min_confidence,
+        s.auto_task_min_regret,
+    )
+
+
+def test_a_user_who_raised_the_bar_gets_their_own_thresholds():
+    from app.services.autotask import auto_task_gates
+
+    user = _User(auto_task_min_confidence=0.9, auto_task_min_regret=70)
+    assert auto_task_gates(user) == (0.9, 70)
+
+
+def test_raising_confidence_stops_a_borderline_mail_auto_tasking():
+    """The whole point of exposing the dial: the same mail, a different answer."""
+    from app.models import TrackKey
+    from app.services.autotask import should_auto_task
+
+    signals = SimpleNamespace(
+        action_required=True, consequence="grade_loss", confidence=0.7
+    )
+    track_row = SimpleNamespace(active=True)
+
+    assert should_auto_task(signals, TrackKey.uni, track_row, 60, _User())
+    assert not should_auto_task(
+        signals, TrackKey.uni, track_row, 60, _User(auto_task_min_confidence=0.95)
+    )

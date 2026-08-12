@@ -217,3 +217,79 @@ func minutesSinceMidnight(_ hhmm: String) -> Int? {
     guard parts.count == 2, let h = Int(parts[0]), let m = Int(parts[1]) else { return nil }
     return h * 60 + m
 }
+
+// MARK: - Settings
+
+/// What the settings screen reads. Split the way the backend splits it: the
+/// classifier half is reported and cannot be set from here, because the
+/// credential behind it lives in the environment on the server and a settings
+/// screen able to write it would mean a subscription token travelling from a
+/// phone into a database.
+struct AppSettings: Codable, Equatable {
+    var classifier: ClassifierStatus
+    var sync: SyncStatus
+    var autoTask: AutoTaskPrefs
+    var reminders: ReminderPrefs
+    var timezone: String
+
+    struct ClassifierStatus: Codable, Equatable {
+        var provider: String
+        var model: String
+        var configured: Bool
+        /// Only present when something is wrong, and then it says what.
+        var detail: String?
+    }
+
+    struct SyncStatus: Codable, Equatable {
+        var intervalMinutes: Int
+        var windowDays: Int
+        var lastSyncedAt: Date?
+        var enabled: Bool
+    }
+
+    struct AutoTaskPrefs: Codable, Equatable {
+        var minConfidence: Double
+        var minRegret: Int
+    }
+
+    struct ReminderPrefs: Codable, Equatable {
+        var morningDigest: Bool
+        var morningHour: Int
+        var eveningNudge: Bool
+        var eveningHour: Int
+    }
+}
+
+/// One end-of-day or start-of-day summary. Both digests share a shape because
+/// they answer the same question at different ends of the day.
+struct Digest: Codable, Equatable {
+    var date: Date
+    var headline: String
+    var lines: [String] = []
+
+    var taskCount: Int = 0
+    var dueToday: Int = 0
+    var carriedOver: Int = 0
+    var firstSlot: String?
+    var plannedMinutes: Int = 0
+    var needsReply: Int = 0
+    var mailWithDeadlines: Int = 0
+
+    var done: Int = 0
+    var carried: Int = 0
+    var stillOpen: Int = 0
+    var streak: Int = 0
+}
+
+enum DigestKind: String, CaseIterable, Identifiable {
+    case morning, evening
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .morning: return "Your day"
+        case .evening: return "How it went"
+        }
+    }
+}

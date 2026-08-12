@@ -309,6 +309,22 @@ final class APIClient {
                             body: ["timezone": TimeZone.current.identifier]) as MeOut
     }
 
+    // MARK: - Settings and digests
+
+    func settings() async throws -> AppSettings {
+        try await send("GET", "/api/settings")
+    }
+
+    /// Patches only what it is given. Every field is optional server-side, so
+    /// omitting one leaves it alone rather than resetting it.
+    func updateSettings(_ changes: [String: Any?]) async throws -> AppSettings {
+        try await send("PATCH", "/api/settings", body: changes)
+    }
+
+    func digest(_ which: DigestKind) async throws -> Digest {
+        try await send("GET", "/api/digest/\(which.rawValue)")
+    }
+
     func me() async throws -> MeOut {
         try await send("GET", "/api/me")
     }

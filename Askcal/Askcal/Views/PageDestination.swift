@@ -13,7 +13,7 @@
 import SwiftUI
 
 enum PageDestination: String, Hashable, CaseIterable, Identifiable {
-    case today, inbox, calendar, more, review
+    case today, inbox, calendar, settings, review
 
     var id: String { rawValue }
 
@@ -22,7 +22,7 @@ enum PageDestination: String, Hashable, CaseIterable, Identifiable {
         case .today: return "Today"
         case .inbox: return "Inbox"
         case .calendar: return "Calendar"
-        case .more: return "More"
+        case .settings: return "Settings"
         case .review: return "Review"
         }
     }

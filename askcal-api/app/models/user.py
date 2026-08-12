@@ -1,9 +1,9 @@
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import DateTime, Float, String, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import DateTime, Float, String, Text, text
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -35,6 +35,13 @@ class User(TimestampMixin, Base):
     # Profile setting from the spec ("carry-forward sensitivity"). Not yet
     # wired into the brew engine — the JS source of truth uses a fixed penalty.
     carry_forward_sensitivity: Mapped[float] = mapped_column(Float, default=1.0)
+
+    # Small, changeable knobs the settings screen writes. JSONB because these
+    # keep changing shape; anything that grows a query against it earns a real
+    # column at that point.
+    preferences: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb"), default=dict
+    )
 
     tracks: Mapped[list["Track"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"

@@ -87,6 +87,22 @@ def test_digest_routes_are_registered():
     assert {"/api/digest/morning", "/api/digest/evening"} <= paths
 
 
+def test_settings_routes_are_registered():
+    paths = client.get("/openapi.json").json()["paths"]
+    assert "/api/settings" in paths
+    assert {"get", "patch"} <= set(paths["/api/settings"])
+
+
+def test_settings_cannot_set_the_classifier_credential():
+    """The token lives in the environment on the server. A settings screen that
+    could write it would mean a subscription credential travelling from a phone
+    through the API into a database."""
+    schema = client.get("/openapi.json").json()["components"]["schemas"]
+    patchable = set(schema["SettingsPatch"]["properties"])
+    forbidden = {"oauthToken", "token", "apiKey", "provider", "llmProvider"}
+    assert not (patchable & forbidden), f"patchable: {patchable & forbidden}"
+
+
 def test_all_contract_routes_registered():
     paths = set(client.get("/openapi.json").json()["paths"])
     assert {

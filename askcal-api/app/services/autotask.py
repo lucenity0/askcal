@@ -86,11 +86,27 @@ def scheduled_day_for(due_at: datetime | None, today: date) -> date:
     return max(today, (due_at.astimezone(timezone.utc).date() - lead))
 
 
+def auto_task_gates(user) -> tuple[float, int]:
+    """The two thresholds, for this user.
+
+    Falls back to the deployment defaults when they have never been set, so a
+    fresh account behaves exactly as the server was configured to and only
+    diverges once someone deliberately moves a dial.
+    """
+    s = get_settings()
+    prefs = getattr(user, "preferences", None) or {}
+    return (
+        prefs.get("auto_task_min_confidence", s.auto_task_min_confidence),
+        prefs.get("auto_task_min_regret", s.auto_task_min_regret),
+    )
+
+
 def should_auto_task(
     signals,
     track: TrackKey | None,
     track_row: Track | None,
     regret_score: int | None = None,
+    user=None,
 ) -> bool:
     """A mail auto-tasks when the model says the user must personally do a
     concrete task (action_required) with a real consequence, in a real
@@ -102,8 +118,11 @@ def should_auto_task(
 
     regret_score is optional so the predicate stays callable without a scored
     email; when omitted the regret floor is simply not applied.
+
+    `user` supplies the thresholds. Omitting it uses the deployment defaults,
+    which keeps every existing test and caller working unchanged.
     """
-    s = get_settings()
+    min_confidence, min_regret = auto_task_gates(user)
     if not (
         signals.action_required
         and signals.consequence not in NON_TASKING_CONSEQUENCES
@@ -112,9 +131,9 @@ def should_auto_task(
         and track_row.active
     ):
         return False
-    if signals.confidence < s.auto_task_min_confidence:
+    if signals.confidence < min_confidence:
         return False
-    if regret_score is not None and regret_score < s.auto_task_min_regret:
+    if regret_score is not None and regret_score < min_regret:
         return False
     return True
 

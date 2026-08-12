@@ -223,7 +223,7 @@ async def _classify_pending(db: AsyncSession, user: User) -> tuple[int, int]:
             email.classified_at = now
             classified += 1
 
-            if not should_auto_task(signals, track, track_row, email.regret_score):
+            if not should_auto_task(signals, track, track_row, email.regret_score, user):
                 continue
             # Thread dedup. Checked against both the database and this pass,
             # because tasks added below are not flushed until the chunk commits —

@@ -99,8 +99,8 @@ struct ContentView: View {
                 CalendarView(composing: $composing)
             }
 
-            Tab(PageDestination.more.title, systemImage: "ellipsis.circle", value: .more) {
-                MoreView(composing: $composing)
+            Tab(PageDestination.settings.title, systemImage: "gearshape", value: .settings) {
+                SettingsPage(composing: $composing)
             }
         }
         .tint(book.ink)

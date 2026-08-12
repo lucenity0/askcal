@@ -76,8 +76,8 @@ final class DarkModeSnapshotTests: XCTestCase {
         let app = launchDark()
         snapshot(app, "32-day-night")
 
-        let more = app.buttons["More"]
-        XCTAssertTrue(more.waitForExistence(timeout: 10), "More tab not found")
+        let more = app.buttons["Settings"]
+        XCTAssertTrue(more.waitForExistence(timeout: 10), "Settings tab not found")
         more.tap()
         Thread.sleep(forTimeInterval: 2)
         snapshot(app, "33-more-night")
@@ -88,8 +88,8 @@ final class DarkModeSnapshotTests: XCTestCase {
     /// why this is its own test.
     func testFocusedTextFieldCaretAtNight() throws {
         let app = launchDark()
-        let more = app.buttons["More"]
-        XCTAssertTrue(more.waitForExistence(timeout: 10), "More tab not found")
+        let more = app.buttons["Settings"]
+        XCTAssertTrue(more.waitForExistence(timeout: 10), "Settings tab not found")
         more.tap()
         Thread.sleep(forTimeInterval: 2)
 
