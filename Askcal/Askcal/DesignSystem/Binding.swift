@@ -57,7 +57,14 @@ struct BindingEdge: View {
     private var board: some View {
         switch placement {
         case .leading:
-            book.board
+            LinearGradient(
+                stops: [
+                    .init(color: book.board, location: 0),
+                    .init(color: book.board, location: PaperTexture.spineFalloff),
+                    .init(color: book.board.opacity(0), location: 1),
+                ],
+                startPoint: .leading, endPoint: .trailing
+            )
         case .gutter:
             LinearGradient(
                 colors: [book.board.opacity(0), book.board.opacity(0.28),

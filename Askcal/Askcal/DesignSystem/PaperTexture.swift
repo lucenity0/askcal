@@ -27,13 +27,21 @@ enum PaperTexture {
 
     // ── Binding ──────────────────────────────────────────────────────────
     /// Width of the bound edge. 0 removes the binding entirely.
-    static let bindingWidth: CGFloat = 26
+    ///
+    /// Kept narrow on purpose. At 26pt the spine took nearly 7% of a phone's
+    /// width as a solid dark slab and became the loudest thing on a page whose
+    /// whole point is the writing.
+    static let bindingWidth: CGFloat = 14
     /// Distance between rings, centre to centre.
-    static let ringSpacing: CGFloat = 34
+    static let ringSpacing: CGFloat = 30
     /// How tall a single loop of wire stands.
-    static let ringHeight: CGFloat = 19
+    static let ringHeight: CGFloat = 15
     /// Thickness of the wire itself.
-    static let wireWidth: CGFloat = 2
+    static let wireWidth: CGFloat = 1.8
+    /// Where the spine stops being solid and starts falling away into the page.
+    /// A hard edge reads as a black bar stuck to the side of the screen; a soft
+    /// one reads as paper curving into the binding.
+    static let spineFalloff: Double = 0.55
 
     // ── Ruling ───────────────────────────────────────────────────────────
     /// The margin rule is a guide, not a border — it should be visible without

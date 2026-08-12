@@ -296,6 +296,7 @@ final class AskcalStore {
     }
 
     private func fetchAll() async {
+        invalidateDayCache()
         do {
             async let tasksReq = APIClient.shared.tasks()
             async let todayReq = APIClient.shared.today()
@@ -315,6 +316,31 @@ final class AskcalStore {
     struct DayData: Equatable {
         var tasks: [AskcalTask]
         var events: [CalendarEvent]
+    }
+
+    /// Days already fetched, keyed by `dayString`. Turning pages back and forth
+    /// across a week would otherwise refetch the same day every time it came
+    /// back on screen.
+    private var dayCache: [String: DayData] = [:]
+
+    /// A day's tasks and events, from cache where possible. Today is always
+    /// served live from the store — it is the day being edited, and a cached
+    /// copy of it would go stale the moment anything was ticked.
+    func dayData(for date: Date) async -> DayData {
+        if Calendar.current.isDateInToday(date) {
+            return DayData(tasks: scheduledTasks, events: calendarEvents)
+        }
+        let key = Self.dayString(date)
+        if let cached = dayCache[key] { return cached }
+        let data = await loadDay(date)
+        dayCache[key] = data
+        return data
+    }
+
+    /// Any write can move a task onto or off another day, so the cache is
+    /// dropped wholesale rather than guessing which days it touched.
+    private func invalidateDayCache() {
+        dayCache.removeAll()
     }
 
     /// Tasks + external events for a specific day — powers the calendar's

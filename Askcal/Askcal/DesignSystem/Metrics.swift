@@ -29,7 +29,25 @@ enum Space {
 
     /// Distance from the paper's leading edge to the margin rule. Entries begin
     /// after it; only checkboxes and priority marks live to its left.
-    static let margin: CGFloat = 44
+    static let margin: CGFloat = 50
+
+    /// The visible width of an entry's mark — the checkbox. Marks belong to the
+    /// entry but not to its text, which is what a notebook's margin is for.
+    static let markColumn: CGFloat = 26
+
+    /// Where the writing starts: clear of the margin rule, never on it.
+    static var textInset: CGFloat { margin + lg }
+
+    /// How far a mark reaches back from the text inset, so it lands in the band
+    /// between the binding and the rule with clearance on both sides.
+    ///
+    /// Derived rather than written down: the mark used to sit at a hand-picked
+    /// offset and ended up underneath the spine. Expressed this way the binding
+    /// can change width — or be turned off entirely — and the mark still lands
+    /// somewhere sensible.
+    static var markReach: CGFloat {
+        margin + lg - PaperTexture.bindingWidth - sm
+    }
 
     /// Vertical rhythm between major sections.
     static let section: CGFloat = 34

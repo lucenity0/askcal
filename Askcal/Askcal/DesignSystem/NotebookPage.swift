@@ -31,9 +31,6 @@ struct NotebookPage<Content: View>: View {
 
     @ViewBuilder var content: () -> Content
 
-    /// Where the writing starts: clear of the margin rule, never on it.
-    private var textInset: CGFloat { Space.margin + Space.lg }
-
     var body: some View {
         ZStack(alignment: .topLeading) {
             PaperSurface()
@@ -73,7 +70,7 @@ struct NotebookPage<Content: View>: View {
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.leading, textInset)
+        .padding(.leading, Space.textInset)
         .padding(.trailing, Space.gutter)
         .padding(.top, Space.md)
         .padding(.bottom, Space.fabClearance)

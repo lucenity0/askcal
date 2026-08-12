@@ -33,7 +33,7 @@ struct ContentView: View {
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             NavigationStack {
-                DayView(
+                DayPager(
                     showComposer: $showComposer,
                     editingTask: $editingTask,
                     onConnect: connect
@@ -43,6 +43,7 @@ struct ContentView: View {
             .tint(book.ink)
 
             FAB { showComposer = true }
+                .accessibilityLabel("New task")
                 .padding(.trailing, Space.gutter)
                 .padding(.bottom, 28)
                 .ignoresSafeArea(.keyboard)   // FAB never rides the keyboard up
