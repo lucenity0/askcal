@@ -25,6 +25,13 @@ class RefreshToken(Base):
     token_hash: Mapped[str] = mapped_column(String(64), unique=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # The token minted when this one was used. Set only by rotation, which is
+    # what makes a retired token's reuse meaningful: a rotated token presented
+    # again is a copy, because the legitimate client moved on to its successor.
+    # A token revoked by signing out has no replacement and reads differently.
+    replaced_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("refresh_tokens.id", ondelete="SET NULL")
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

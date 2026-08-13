@@ -124,13 +124,26 @@ final class APIClient {
         guard let refresh = Keychain.read("askcalRefreshToken") else {
             throw APIError.disconnected
         }
-        struct RefreshOut: Decodable { let accessToken: String }
+        // The server rotates: the token just sent is retired by this call, and
+        // the replacement comes back in the response. Storing it is not
+        // optional — ignoring it means the next refresh presents a token the
+        // server has already retired, which reads as a stolen copy and signs
+        // every session out.
+        struct RefreshOut: Decodable {
+            let accessToken: String
+            // Optional so a client can still talk to a server from before
+            // rotation, where there is nothing to store.
+            let refreshToken: String?
+        }
         let out: RefreshOut = try await send(
             "POST", "/auth/refresh",
             body: ["refreshToken": refresh],
             authenticated: false
         )
         accessToken = out.accessToken
+        if let rotated = out.refreshToken {
+            Keychain.save("askcalRefreshToken", rotated)
+        }
     }
 
     // MARK: - Core request

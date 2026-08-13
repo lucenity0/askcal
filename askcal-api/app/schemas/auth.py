@@ -26,3 +26,7 @@ class RefreshRequest(CamelModel):
 
 class RefreshResponse(CamelModel):
     access_token: str
+    # Rotation: the presented token is retired by this call, so the caller must
+    # store this one. Returning it is not optional — a client that ignores it
+    # has no way back once its own copy stops working.
+    refresh_token: str

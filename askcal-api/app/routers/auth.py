@@ -210,17 +210,72 @@ async def google_callback(code: str, state: str, db: DbSession) -> RedirectRespo
     return RedirectResponse(f"{scheme}://oauth#{fragment}")
 
 
+# How long after rotation a retired token is still merely stale rather than
+# suspicious. A client that retries a request whose response it never saw will
+# present the old token again through no fault of anyone; treating that as theft
+# would sign people out for having a bad connection.
+ROTATION_GRACE = timedelta(seconds=30)
+
+
 @router.post("/refresh", response_model=RefreshResponse)
 async def refresh(body: RefreshRequest, db: DbSession) -> RefreshResponse:
+    """Exchange a refresh token for a new pair, retiring the one presented.
+
+    A refresh token used to live thirty days and be accepted every time, so a
+    single captured copy was thirty days of silent access and nothing anywhere
+    looked unusual. Each use now mints a replacement and retires the old one,
+    which shrinks a stolen token's life to "until the real client next refreshes"
+    — and makes the theft visible when it happens.
+    """
+    now = datetime.now(timezone.utc)
     token = await db.scalar(
         select(RefreshToken).where(
             RefreshToken.token_hash == hash_refresh_token(body.refresh_token)
         )
     )
-    now = datetime.now(timezone.utc)
-    if token is None or token.revoked_at is not None or token.expires_at <= now:
+    if token is None or token.expires_at <= now:
         raise AskcalError(401, "AUTH_EXPIRED", "Refresh token invalid or expired")
-    return RefreshResponse(access_token=create_access_token(token.user_id))
+
+    if token.revoked_at is not None:
+        # A token that was *rotated* and comes back is a copy: the real client
+        # holds its successor and would never send this one. Two parties have
+        # it, we cannot tell which is which, so every session ends and the real
+        # one signs in again.
+        rotated = token.replaced_by_id is not None
+        stale = now - token.revoked_at > ROTATION_GRACE
+        if rotated and stale:
+            await db.execute(
+                update(RefreshToken)
+                .where(
+                    RefreshToken.user_id == token.user_id,
+                    RefreshToken.revoked_at.is_(None),
+                )
+                .values(revoked_at=now)
+            )
+            await db.commit()
+            raise AskcalError(
+                401,
+                "AUTH_EXPIRED",
+                "That session was replaced. Everything has been signed out — sign in again.",
+            )
+        raise AskcalError(401, "AUTH_EXPIRED", "Refresh token invalid or expired")
+
+    user = await db.get(User, token.user_id)
+    if user is None:
+        raise AskcalError(401, "AUTH_EXPIRED", "User no longer exists")
+
+    raw = await _issue_refresh_token(db, user)
+    await db.flush()
+    successor = await db.scalar(
+        select(RefreshToken).where(RefreshToken.token_hash == hash_refresh_token(raw))
+    )
+    token.revoked_at = now
+    token.replaced_by_id = successor.id if successor else None
+    await db.commit()
+
+    return RefreshResponse(
+        access_token=create_access_token(token.user_id), refresh_token=raw
+    )
 
 
 @router.post("/revoke", status_code=204)
