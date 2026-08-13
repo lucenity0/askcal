@@ -631,9 +631,15 @@ struct SettingsPage: View {
             eveningNudge = fetched.reminders.eveningNudge
             eveningHour = fetched.reminders.eveningHour
             loadError = nil
+        } catch let error as APIError {
+            loadError = error.errorDescription ?? "couldn't read your settings."
         } catch {
-            loadError = (error as? LocalizedError)?.errorDescription
-                ?? "couldn't read your settings."
+            // Anything that is not an APIError here is a decode failure, which
+            // means the app and the server disagree about the shape of a
+            // response — almost always an app rebuilt ahead of its backend.
+            // "couldn't read your settings" described nothing and sent me
+            // looking at the network.
+            loadError = "couldn't read your settings — this build may be newer than the server."
         }
     }
 

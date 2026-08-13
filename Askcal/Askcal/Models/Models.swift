@@ -368,7 +368,25 @@ struct AppSettings: Codable, Equatable {
         var minRegret: Int
         /// How hard work you keep pushing to tomorrow argues for a place in
         /// the day. 0 leaves the classifier's ranking untouched.
-        var carryForwardSensitivity: Double
+        ///
+        /// Optional with a default because a client can always be newer than
+        /// the server it is talking to — a rebuilt app against a not-yet-deployed
+        /// backend. Declared non-optional, one missing field failed the whole
+        /// settings decode and the screen said only "couldn't read your
+        /// settings", which describes nothing.
+        var carryForwardSensitivity: Double = 1.0
+
+        enum CodingKeys: String, CodingKey {
+            case minConfidence, minRegret, carryForwardSensitivity
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            minConfidence = try c.decodeIfPresent(Double.self, forKey: .minConfidence) ?? 0.6
+            minRegret = try c.decodeIfPresent(Int.self, forKey: .minRegret) ?? 40
+            carryForwardSensitivity =
+                try c.decodeIfPresent(Double.self, forKey: .carryForwardSensitivity) ?? 1.0
+        }
     }
 
     struct ReminderPrefs: Codable, Equatable {
