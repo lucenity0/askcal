@@ -29,7 +29,7 @@ from app.llm.structured import (
     schema_block,
     validate_items,
 )
-from app.models import Email, Track, TrackKey
+from app.models import Email, Track
 from app.services.scheduling import user_now
 
 logger = logging.getLogger("askcal.classifier")
@@ -40,7 +40,6 @@ __all__ = [
     "classify_batch",
     "classify_pacing",
     "parse_deadline",
-    "signals_track_key",
     "system_prompt",
 ]
 
@@ -256,19 +255,6 @@ def parse_deadline(value: str | None) -> datetime | None:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed
-
-
-def signals_track_key(signals: EmailSignals) -> TrackKey | None:
-    """The old enum answer, for the columns that still hold one.
-
-    Only meaningful for the five built-in slugs; a track the user invented has
-    no enum member and resolves to None. Use `track_by_slug` against the user's
-    own tracks for anything that matters.
-    """
-    try:
-        return TrackKey(signals.track)
-    except ValueError:
-        return None
 
 
 def classify_pacing() -> tuple[int, float]:

@@ -99,11 +99,6 @@ async def _login(profile: GoogleProfile, db: DbSession) -> tuple[User, str, str]
     else:
         user.google_sub = profile.sub
         user.name = user.name or profile.name
-    # Still written so a rollback to the single-mailbox shape has its token.
-    # Every read goes through the account row below.
-    if profile.refresh_token:
-        user.google_refresh_token = profile.refresh_token
-
     await db.flush()
 
     account = await _primary_account(db, user)

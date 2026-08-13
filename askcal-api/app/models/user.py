@@ -8,7 +8,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
 from app.models.base import TimestampMixin
-from app.models.types import EncryptedText
 
 if TYPE_CHECKING:
     from app.models.day_note import DayNote
@@ -29,12 +28,6 @@ class User(TimestampMixin, Base):
     email: Mapped[str] = mapped_column(String(320), unique=True)
     name: Mapped[str | None] = mapped_column(String(200))
     google_sub: Mapped[str | None] = mapped_column(String(64), unique=True)
-    # The primary account's Google refresh token. Superseded by
-    # `mail_accounts` — still written so a rollback has its data, but every
-    # read should go through the account rows, since there is more than one
-    # mailbox now and this column can only ever hold one of them.
-    # Encrypted at rest, like the account rows that supersede it.
-    google_refresh_token: Mapped[str | None] = mapped_column(EncryptedText)
     timezone: Mapped[str] = mapped_column(String(64), default="UTC")
     # When mail last actually arrived.
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

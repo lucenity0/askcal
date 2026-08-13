@@ -22,7 +22,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.crypto import encryption_configured, is_encrypted
 from app.db import SessionLocal
-from app.models import MailAccount, User
+from app.models import MailAccount
 
 
 async def main(apply: bool) -> int:
@@ -46,18 +46,11 @@ async def main(apply: bool) -> int:
                 select(MailAccount.id, MailAccount.email, MailAccount.__table__.c.google_refresh_token)
             )
         ).all()
-        users = (
-            await db.execute(
-                select(User.id, User.email, User.__table__.c.google_refresh_token)
-            )
-        ).all()
-
-        for label, rows in (("mailbox", accounts), ("user", users)):
-            for _id, email, token in rows:
-                if not token or is_encrypted(token):
-                    continue
-                plain += 1
-                print(f"  {label}: {email}")
+        for _id, email, token in accounts:
+            if not token or is_encrypted(token):
+                continue
+            plain += 1
+            print(f"  mailbox: {email}")
 
         if not plain:
             print("Every stored token is already encrypted.")
@@ -80,9 +73,6 @@ async def main(apply: bool) -> int:
         for account in (await db.scalars(select(MailAccount))).all():
             if account.google_refresh_token:
                 flag_modified(account, "google_refresh_token")
-        for user in (await db.scalars(select(User))).all():
-            if user.google_refresh_token:
-                flag_modified(user, "google_refresh_token")
         await db.commit()
         print(f"\nEncrypted {plain} token(s).")
     return plain

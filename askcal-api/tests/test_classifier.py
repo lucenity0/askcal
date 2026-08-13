@@ -9,9 +9,8 @@ from app.services.classifier import (
     EmailSignals,
     classify_batch,
     parse_deadline,
-    signals_track_key,
 )
-from app.models import Email, TrackKey
+from app.models import Email
 
 
 def test_parse_deadline_iso_with_z():
@@ -29,15 +28,18 @@ def test_parse_deadline_garbage_and_none():
     assert parse_deadline(None) is None
 
 
-def test_signals_track_key_mapping():
-    def sig(track):
-        return EmailSignals(
-            gmail_id="x", track=track, sender_type="other", consequence="none",
-            action_required=False, confidence=0.9,
-        )
+def test_a_track_answer_is_resolved_against_the_users_own_tracks():
+    """`signals_track_key` mapped the answer onto a five-member enum. Tracks are
+    rows the user names, so the answer is matched against theirs — and anything
+    unrecognised means no track rather than inventing one."""
+    from types import SimpleNamespace
 
-    assert signals_track_key(sig("career")) == TrackKey.career
-    assert signals_track_key(sig("none")) is None
+    from app.services.tracks import track_by_slug
+
+    tracks = [SimpleNamespace(slug="work"), SimpleNamespace(slug="uni")]
+    assert track_by_slug(tracks, "work") is tracks[0]
+    assert track_by_slug(tracks, "none") is None
+    assert track_by_slug(tracks, "career") is None
 
 
 def test_classify_batch_without_a_provider_returns_empty(monkeypatch):

@@ -76,13 +76,7 @@ async def get_inbox(user: CurrentUser, db: DbSession) -> InboxResponse:
         emails=[
             EmailOut(
                 id=e.gmail_id,
-                # The slug of the track it was filed under. Falls back to the
-                # old enum column for mail classified before tracks became rows.
-                track=(
-                    e.track_ref.slug
-                    if e.track_ref
-                    else (e.track.value if e.track else None)
-                ),
+                track=e.track_ref.slug if e.track_ref else None,
                 subject=e.subject,
                 sender=e.sender,
                 received_at=e.received_at,

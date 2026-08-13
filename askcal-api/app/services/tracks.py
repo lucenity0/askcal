@@ -17,7 +17,7 @@ import unicodedata
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Track, TrackKey
+from app.models import Track
 
 __all__ = [
     "BUILTIN_TRACKS",
@@ -84,14 +84,9 @@ BUILTIN_TRACKS: list[dict] = [
 
 
 def default_tracks() -> list[Track]:
-    """The rows a brand-new account gets.
-
-    `key` is still set for the five built-ins so a rollback to the enum world
-    finds what it expects. Nothing reads it.
-    """
+    """The rows a brand-new account gets."""
     return [
         Track(
-            key=TrackKey(spec["slug"]),
             slug=spec["slug"],
             label=spec["label"],
             description=spec["description"],

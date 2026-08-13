@@ -22,7 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.models import Email, Task, TaskStatus, Track, TrackKey
+from app.models import Email, Task, TaskStatus, Track
 from app.services.classifier import parse_deadline
 from app.services.scheduling import local_day
 

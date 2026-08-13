@@ -110,7 +110,6 @@ async def _store_new_messages(
                     user_id=user.id,
                     gmail_id=m.gmail_id,
                     thread_id=m.thread_id,
-                    account_email=account.email,
                     account_id=account.id,
                     subject=m.subject,
                     sender=m.sender,
@@ -224,10 +223,6 @@ async def _classify_pending(db: AsyncSession, user: User) -> tuple[int, int]:
                 continue
             track_row = track_by_slug(tracks, signals.track)
             email.track_id = track_row.id if track_row else None
-            # The old enum column, still written so a rollback has its data.
-            # None for a track the user invented — there is no enum member to
-            # put there, which is the whole reason the column is going.
-            email.track = track_row.key if track_row else None
             email.estimated_minutes = signals.estimated_minutes
             email.signals = signals.model_dump()
             email.regret_score = compute_regret(

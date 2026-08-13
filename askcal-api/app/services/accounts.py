@@ -1,9 +1,9 @@
 """Which mailbox answers which question.
 
-With one Google account every call could read `user.google_refresh_token` and
-be right. With several, "whose calendar?" and "which inbox do I mark this read
-in?" have different answers, and getting them from the same column would mean
-marking mail read in the wrong mailbox.
+With one Google account every call could read the same token and be right. With
+several, "whose calendar?" and "which inbox do I mark this read in?" have
+different answers, and getting them from one column would mean marking mail read
+in the wrong mailbox.
 """
 
 from app.models import Email, MailAccount, User
@@ -15,13 +15,12 @@ def calendar_token(user: User) -> str | None:
     """The token for calendar and busy-block reads.
 
     The primary account's, because that is the one the user signed in with and
-    the only one whose calendar Askcal was ever asked about. Falls back to the
-    old user column for a row that predates `mail_accounts`.
+    the only one whose calendar Askcal was ever asked about.
     """
     for account in user.mail_accounts:
         if account.is_primary and account.google_refresh_token:
             return account.google_refresh_token
-    return user.google_refresh_token
+    return None
 
 
 def has_connected_mailbox(user: User) -> bool:
@@ -31,9 +30,7 @@ def has_connected_mailbox(user: User) -> bool:
     second inbox still works is connected — telling them otherwise would hide
     mail that is arriving perfectly well.
     """
-    return any(
-        a.google_refresh_token and a.active for a in user.mail_accounts
-    ) or bool(user.google_refresh_token)
+    return any(a.google_refresh_token and a.active for a in user.mail_accounts)
 
 
 def token_for_email(user: User, email: Email) -> str | None:

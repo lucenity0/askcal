@@ -121,8 +121,6 @@ def test_a_new_account_gets_the_built_ins_named_and_described():
     assert [t.slug for t in tracks] == [s["slug"] for s in BUILTIN_TRACKS]
     assert all(t.label and t.description for t in tracks)
     assert all(t.is_builtin for t in tracks)
-    # key still set, so a rollback to the enum world finds what it expects.
-    assert all(t.key is not None for t in tracks)
 
 
 def test_the_read_later_track_ships_unable_to_make_work():

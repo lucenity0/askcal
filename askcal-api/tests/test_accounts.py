@@ -20,8 +20,8 @@ def account(email: str, token: str | None = "t", primary: bool = False, active: 
     )
 
 
-def user(*accounts, legacy_token: str | None = None):
-    return SimpleNamespace(mail_accounts=list(accounts), google_refresh_token=legacy_token)
+def user(*accounts):
+    return SimpleNamespace(mail_accounts=list(accounts))
 
 
 # ── the calendar belongs to the sign-in account ────────────────────────────
@@ -32,12 +32,9 @@ def test_the_calendar_reads_the_primary_mailbox():
     assert calendar_token(u) == "me-token"
 
 
-def test_an_account_with_no_rows_yet_falls_back_to_the_old_column():
-    """A user row that predates mail_accounts must keep working untouched."""
-    assert calendar_token(user(legacy_token="old")) == "old"
-
-
 def test_no_mailbox_at_all_has_no_calendar():
+    """The single-account column this used to fall back to is gone: every token
+    lives on an account row now."""
     assert calendar_token(user()) is None
 
 

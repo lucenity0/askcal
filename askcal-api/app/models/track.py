@@ -23,30 +23,9 @@ if TYPE_CHECKING:
     from app.models.user import User
 
 
-class TrackKey(enum.StrEnum):
-    """The five tracks every account starts with.
-
-    Being an enum is on its way out: a track is now a row the user can name,
-    rename and add to, and `slug` is what identifies one. This survives only to
-    seed those five rows and to read the `key` column on accounts created
-    before that change.
-    """
-
-    career = "career"
-    design = "design"
-    uni = "uni"
-    feed = "feed"
-    # invoices, payments, banking — matters only when urgent; the regret
-    # formula's money_loss consequence carries the urgency weight
-    finance = "finance"
-
-
 class Track(TimestampMixin, Base):
     __tablename__ = "tracks"
-    __table_args__ = (
-        UniqueConstraint("user_id", "key"),
-        UniqueConstraint("user_id", "slug", name="uq_tracks_user_slug"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "slug", name="uq_tracks_user_slug"),)
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -54,12 +33,7 @@ class Track(TimestampMixin, Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
-    # NULL for anything the user made themselves. Kept so accounts created
-    # before user-defined tracks keep working; nothing new should read it.
-    key: Mapped[TrackKey | None] = mapped_column(
-        Enum(TrackKey, name="track_key"), nullable=True
-    )
-    # What identifies a track now. Stable across renames, unique per user.
+    # What identifies a track. Stable across renames, unique per user.
     slug: Mapped[str] = mapped_column(String(40))
     # What the user typed. Free to change without moving any mail.
     label: Mapped[str] = mapped_column(String(80))

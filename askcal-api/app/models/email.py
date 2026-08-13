@@ -2,13 +2,12 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
 from app.models.base import TimestampMixin
-from app.models.track import TrackKey
 
 if TYPE_CHECKING:
     from app.models.mail_account import MailAccount
@@ -37,9 +36,9 @@ class Email(TimestampMixin, Base):
     gmail_id: Mapped[str] = mapped_column(String(64))
     thread_id: Mapped[str | None] = mapped_column(String(64), index=True)
     # Which connected mailbox this came from (uni vs work account).
-    # `account_email` is the old denormalised copy, still written; `account_id`
-    # is the one to read.
-    account_email: Mapped[str | None] = mapped_column(String(320))
+    # Deleting a mailbox deletes its mail with it, which is why the address is
+    # not also denormalised here — there is no state where the row outlives the
+    # account it points at.
     account_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("mail_accounts.id", ondelete="CASCADE"), index=True
     )
@@ -52,9 +51,7 @@ class Email(TimestampMixin, Base):
     raw: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
     # Classifier output (async — track/consequence signals + regret scoring)
-    # `track` is the old enum column, still written so a rollback has its data.
-    # `track_id` is the one to read: it points at a row the user can rename.
-    track: Mapped[TrackKey | None] = mapped_column(Enum(TrackKey, name="track_key"))
+    # The track it was filed under — a row the user can rename.
     track_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("tracks.id", ondelete="SET NULL"), index=True
     )

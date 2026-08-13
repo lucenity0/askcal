@@ -126,9 +126,8 @@ block.
 
 ## Mailboxes
 
-`mail_accounts` holds every connected Google account; `users.google_refresh_token`
-is the superseded single-account column. One is `is_primary` — it owns the
-sign-in and the calendar — and the rest are mailboxes only.
+`mail_accounts` holds every connected Google account. One is `is_primary` — it
+owns the sign-in and the calendar — and the rest are mailboxes only.
 
 Each carries the set of tracks its mail is usually about, passed to the
 classifier as a leaning and never a rule. A sync pulls every active mailbox and
