@@ -110,7 +110,7 @@ struct DeleteTaskTests {
     @Test func deletingAnAlreadyGoneTaskIsHarmless() {
         let store = freshStore()
         store.quickAdd(title: "keep me", scheduledAt: .now)
-        let stranger = AskcalTask(id: UUID(), track: .uni, title: "never added",
+        let stranger = AskcalTask(id: UUID(), track: "uni", title: "never added",
                                   regretScore: 20)
 
         store.deleteTask(stranger)
@@ -210,10 +210,15 @@ struct UpdateScheduleTests {
     }
 
     @Test func retimingWithinTodayKeepsTheTask() throws {
+        // Pinned to fixed hours rather than `.now` and `.now + 90m`: run after
+        // 22:30 the "later" time crossed midnight, the task moved to tomorrow,
+        // and a test named "within today" failed for being right.
         let store = freshStore()
-        store.quickAdd(title: "stay put", scheduledAt: .now)
+        let morning = try #require(cal.date(bySettingHour: 9, minute: 0, second: 0, of: .now))
+        let later = try #require(cal.date(bySettingHour: 10, minute: 30, second: 0, of: .now))
+
+        store.quickAdd(title: "stay put", scheduledAt: morning)
         let task = try #require(store.tasks.first)
-        let later = try #require(cal.date(byAdding: .minute, value: 90, to: .now))
 
         store.updateTaskSchedule(task, scheduledAt: later, dueAt: nil,
                                  scheduledFor: cal.startOfDay(for: later))
@@ -241,7 +246,9 @@ struct TaskDecodingTests {
          "estimatedHours":null,"status":"pending"}
         """)
 
-        #expect(task.track == .uni)
+        // A slug now, not an enum case: tracks are rows the user names, so a
+        // null one has no five-member set to fall back into.
+        #expect(task.track == "")
         #expect(task.title == "no track")
     }
 
