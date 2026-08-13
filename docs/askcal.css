@@ -861,9 +861,33 @@ html:not(.js) .fig-opt:not([aria-checked="true"]) .fig-opt-m { border-style: dot
    Both degradations collapse it to a plain table with every refusal already
    applied — the argument is the refusals, and it has to survive without the
    scrolling. */
-.gates-track { position: relative; height: 210vh; }
-.gates-stick { position: sticky; top: calc(var(--nav-h) + 1.5rem); }
-@media (max-width: 54rem) { .gates-track { height: 175vh; } }
+.gates-track { position: relative; height: 240vh; }
+/* The pane fills the viewport and centres its contents, so what locks is
+   the whole argument — heading, the paragraph that sets it up, the table
+   and the line that closes it — not the table alone with a screen of empty
+   page under it, which is what a top-anchored sticky gave.
+
+   svh, not vh: on mobile the collapsing URL bar is inside 100vh, so a 100vh
+   pane is taller than what can be seen and its bottom edge sits below the
+   fold until you scroll. */
+.gates-stick {
+  position: sticky;
+  top: var(--nav-h);
+  min-height: calc(100vh - var(--nav-h));
+  min-height: calc(100svh - var(--nav-h));
+  display: flex; flex-direction: column; justify-content: center;
+  gap: clamp(1rem, 2.5vw, 1.75rem);
+  padding-block: clamp(1rem, 3vh, 2.5rem);
+}
+.gates-stick .sec-hd { margin-bottom: 0; }
+.gates-stick .fig-note { margin-top: 0; }
+/* Too short to hold all four parts centred — stop centring and let it sit
+   from the top rather than clipping the ends off. */
+@media (max-height: 52rem) {
+  .gates-stick { justify-content: flex-start; }
+  .gates-stick .prose { font-size: 1rem; line-height: 1.5; }
+}
+@media (max-width: 54rem) { .gates-track { height: 200vh; } }
 @media (prefers-reduced-motion: reduce) {
   .gates-track { height: auto; }
   .gates-stick { position: static; }
