@@ -45,7 +45,7 @@ from app.services.classifier import (
     classify_batch,
     classify_pacing,
 )
-from app.services.tracks import track_by_slug
+from app.services.tracks import fallback_track, track_by_slug
 from app.services.gmail import fetch_recent_messages
 from app.services.regret import compute_regret
 from app.services.scheduling import local_midnight, user_today
@@ -222,6 +222,18 @@ async def _classify_pending(db: AsyncSession, user: User) -> tuple[int, int]:
                 email.classify_attempts += 1
                 continue
             track_row = track_by_slug(tracks, signals.track)
+            if track_row is None and signals.action_required:
+                # The model said there is something to do and named no track,
+                # which used to mean no task at all — silently, with the mail
+                # still sitting in the inbox looking triaged.
+                track_row = fallback_track(
+                    tracks, getattr(email.account, "tracks", None)
+                )
+                if track_row is not None:
+                    logger.info(
+                        "filing untracked actionable mail %s under %s",
+                        email.gmail_id, track_row.slug,
+                    )
             email.track_id = track_row.id if track_row else None
             email.estimated_minutes = signals.estimated_minutes
             email.signals = signals.model_dump()

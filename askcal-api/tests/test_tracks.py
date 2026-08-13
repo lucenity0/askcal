@@ -138,3 +138,57 @@ def test_onboarding_only_has_an_opinion_about_the_built_ins():
     settings = profile_track_settings("student", "design")
     assert set(settings) == {"career", "uni", "design", "feed", "finance"}
     assert "work" not in settings
+
+
+# ── actionable mail the model filed nowhere ───────────────────────────────
+
+
+def usable_track(slug, order=0, active=True, auto_tasks=True):
+    return SimpleNamespace(
+        slug=slug, sort_order=order, active=active, auto_tasks=auto_tasks
+    )
+
+
+def test_actionable_mail_with_no_track_lands_in_the_mailbox_it_arrived_at():
+    """"There is something to do, and it belongs nowhere" is a contradiction the
+    model returns anyway — and it used to mean no task at all, silently, with
+    the mail still sitting in the inbox looking triaged."""
+    from app.services.tracks import fallback_track
+
+    uni = usable_track("uni", 1)
+    all_tracks = [usable_track("career", 0), uni]
+    assert fallback_track(all_tracks, [uni]) is uni
+
+
+def test_it_falls_back_to_the_first_track_that_can_make_work():
+    from app.services.tracks import fallback_track
+
+    career = usable_track("career", 0)
+    assert fallback_track([career, usable_track("uni", 1)], []) is career
+
+
+def test_a_track_that_is_off_never_receives_the_fallback():
+    """Landing work in a track the user switched off recreates the same silence
+    one step further down."""
+    from app.services.tracks import fallback_track
+
+    off = usable_track("career", 0, active=False)
+    read_only = usable_track("feed", 1, auto_tasks=False)
+    on = usable_track("uni", 2)
+    assert fallback_track([off, read_only, on]) is on
+
+
+def test_nothing_usable_means_nothing_invented():
+    from app.services.tracks import fallback_track
+
+    assert fallback_track([usable_track("feed", 0, auto_tasks=False)]) is None
+    assert fallback_track([]) is None
+
+
+def test_the_mailbox_is_only_preferred_when_it_can_take_work():
+    """A mailbox tagged read-later must not swallow an actionable mail."""
+    from app.services.tracks import fallback_track
+
+    read_only = usable_track("feed", 0, auto_tasks=False)
+    on = usable_track("uni", 1)
+    assert fallback_track([read_only, on], [read_only]) is on

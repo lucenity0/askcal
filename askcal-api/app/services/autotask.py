@@ -215,7 +215,7 @@ async def reconsider_auto_tasks(db: AsyncSession, user) -> int:
     """
     from app.services.classifier import EmailSignals  # circular at module level
 
-    from app.services.tracks import track_by_slug
+    from app.services.tracks import fallback_track, track_by_slug
 
     tracks = list(
         (await db.scalars(select(Track).where(Track.user_id == user.id))).all()
@@ -244,6 +244,8 @@ async def reconsider_auto_tasks(db: AsyncSession, user) -> int:
         # renaming a track does not strand the mail already filed under it, and
         # a track added today can pick up mail classified before it existed.
         track_row = track_by_slug(tracks, signals.track)
+        if track_row is None and signals.action_required:
+            track_row = fallback_track(tracks, getattr(email.account, "tracks", None))
         if not should_auto_task(signals, track_row, email.regret_score, user):
             continue
         # Same dedup as the sync path: a mail already answered by a task must

@@ -22,6 +22,7 @@ from app.models import Track
 __all__ = [
     "BUILTIN_TRACKS",
     "default_tracks",
+    "fallback_track",
     "find_track",
     "slugify",
     "track_by_slug",
@@ -124,6 +125,30 @@ def track_by_slug(tracks: list[Track], slug: str | None) -> Track | None:
         if track.slug.lower() == wanted:
             return track
     return None
+
+
+def fallback_track(tracks: list[Track], mailbox_tracks: list[Track] | None = None) -> Track | None:
+    """Where actionable mail goes when the model named no track.
+
+    "There is something you must do, and it belongs nowhere" is a contradiction,
+    but the model returns it — and the result was silent: no track meant no
+    task, so a bank security alert sat in the inbox looking triaged while never
+    becoming work. Nothing on screen could have explained that.
+
+    Filing it somewhere is the lesser wrong. The mailbox's own tracks go first,
+    because "this arrived at my college address" is a real signal even when the
+    content was ambiguous; failing that, the first track that can make work.
+    Only tracks that are on and set to auto-task are eligible — landing work in
+    a track the user switched off would recreate the same silence one step
+    further down.
+    """
+    def usable(candidates: list[Track]) -> Track | None:
+        for track in sorted(candidates, key=lambda t: (t.sort_order, t.slug)):
+            if track.active and track.auto_tasks:
+                return track
+        return None
+
+    return usable(list(mailbox_tracks or [])) or usable(tracks)
 
 
 async def user_tracks(db: AsyncSession, user_id) -> list[Track]:

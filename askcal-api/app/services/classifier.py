@@ -147,6 +147,9 @@ _RULES_TAIL = """\
   Use it to choose between tracks the email could plausibly belong to, never to
   override what it plainly says. An email may well belong to a track that is not
   on that list.
+- If action_required is TRUE you must name a track. "There is something the
+  user must do, and it belongs nowhere" is a contradiction — pick the track its
+  description fits best, and use "none" only when action_required is FALSE.
 - estimated_minutes: rough effort to fully handle the email's ask, null if no ask
 - confidence: how sure you are about the track + consequence overall
 - Return one result object per input email, echoing its gmail_id exactly.
