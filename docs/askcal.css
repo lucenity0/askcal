@@ -46,9 +46,20 @@
      nothing else. Sans sets everything written. Mono sets everything
      measured — a rule the app itself keeps, so a number always looks like
      a number. */
+  /* Two faces, and only two. There was a third — the system monospace —
+     doing the labels, the data and the nav, and it was the one borrowed
+     register on the page: SF Mono is what Liffy is set in, and this is not
+     that project.
+     
+     What mono was providing is now provided by weight and tracking instead,
+     which is why the family ships four weights. The one thing genuinely
+     lost is tabular figures: Blauer Nue has no `tnum` and its digits are
+     proportional (the 1 is a third narrower than the 0), so every numeric
+     column on this page is right-aligned and none of them are compared
+     down a column by eye. */
   --display: "Elegancy", "Bodoni 72", Didot, "Playfair Display", Georgia, serif;
   --sans: "Blauer Nue", -apple-system, BlinkMacSystemFont, "Helvetica Neue", system-ui, sans-serif;
-  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  --mono: "Blauer Nue", -apple-system, BlinkMacSystemFont, "Helvetica Neue", system-ui, sans-serif;
 
   --page: 72rem;
   --gutter: clamp(18px, 4vw, 40px);
@@ -189,6 +200,11 @@ body::after {
  * wanted, add the face rather than letting the browser shear the roman. */
 @font-face {
   font-family: "Blauer Nue";
+  src: url("fonts/blauernue-300.woff2") format("woff2");
+  font-weight: 300; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "Blauer Nue";
   src: url("fonts/blauernue-400.woff2") format("woff2");
   font-weight: 400; font-style: normal; font-display: swap;
 }
@@ -202,6 +218,8 @@ body::after {
   src: url("fonts/blauernue-600.woff2") format("woff2");
   font-weight: 600; font-style: normal; font-display: swap;
 }
+
+
 
 /* ----------------------------------------------------------------------- *
  * Frame
@@ -248,12 +266,15 @@ a { color: inherit; }
  * Density is a lot of information at one size. Clutter is a little
  * information at six.
  * ----------------------------------------------------------------------- */
+/* Label and data used to differ from body by being another typeface. They
+   differ by weight and tracking now: the label is Light and tracked wide,
+   the data is Regular and untracked. */
 .t-label {
-  font-family: var(--mono); font-size: .75rem;
-  letter-spacing: .13em; text-transform: uppercase;
+  font-family: var(--mono); font-size: .75rem; font-weight: 300;
+  letter-spacing: .16em; text-transform: uppercase;
   color: var(--ink-3); margin: 0;
 }
-.t-data { font-family: var(--mono); font-size: .875rem; }
+.t-data { font-family: var(--mono); font-size: .875rem; font-weight: 400; font-variant-numeric: tabular-nums; }
 .t-body { font-size: 1rem; line-height: 1.45; }
 
 h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -.02em; line-height: 1.1; }
@@ -318,15 +339,15 @@ p { margin: 0; }
   letter-spacing: -.01em;
 }
 .nav-a {
-  font-family: var(--mono); font-size: .75rem;
-  letter-spacing: .1em; text-transform: uppercase;
+  font-family: var(--mono); font-size: .75rem; font-weight: 500;
+  letter-spacing: .12em; text-transform: uppercase;
   color: var(--ink-3); text-decoration: none; white-space: nowrap;
   padding: .4rem .2rem;
 }
 .nav-a:hover { color: var(--ink); }
 .nav-b {
-  font: inherit; font-family: var(--mono); font-size: .75rem;
-  letter-spacing: .1em; text-transform: uppercase;
+  font: inherit; font-family: var(--mono); font-size: .75rem; font-weight: 500;
+  letter-spacing: .12em; text-transform: uppercase;
   color: var(--ink-3); background: none; border: 0; cursor: pointer;
   padding: .4rem .2rem;
 }
@@ -518,7 +539,7 @@ p { margin: 0; }
   padding: .85rem 1.5rem;
 }
 .fig-t { font-size: 1.0625rem; font-weight: 600; letter-spacing: -.012em; }
-.fig-src { margin-left: auto; font-family: var(--mono); font-size: .75rem; color: var(--ink-3); }
+.fig-src { margin-left: auto; font-family: var(--mono); font-size: .75rem; font-weight: 300; letter-spacing: .04em; color: var(--ink-3); }
 @media (max-width: 34rem) { .fig-src { margin-left: 0; } }
 
 .fig { display: grid; grid-template-columns: minmax(0, 22rem) minmax(0, 1fr); }
@@ -568,7 +589,7 @@ p { margin: 0; }
 .row .k { flex: 0 0 7.5rem; color: var(--ink-3); }
 .row .v { flex: 0 1 auto; color: var(--ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row .lead { flex: 1 1 auto; min-width: 1.5rem; border-bottom: 1px dotted var(--line); transform: translateY(-.3em); }
-.row .n { flex: 0 0 3rem; text-align: right; font-variant-numeric: tabular-nums; color: var(--ink); }
+.row .n { flex: 0 0 3.25rem; text-align: right; font-variant-numeric: tabular-nums; color: var(--ink); }
 .row.mul .v, .row.mul .n { color: var(--ink-3); }
 
 .total {
@@ -789,8 +810,8 @@ html:not(.js) .fig-opt:not([aria-checked="true"]) .fig-opt-m { border-style: dot
 .accent { color: var(--accent); }
 
 .btn {
-  font-family: var(--mono); font-size: .75rem;
-  letter-spacing: .1em; text-transform: uppercase;
+  font-family: var(--mono); font-size: .75rem; font-weight: 500;
+  letter-spacing: .12em; text-transform: uppercase;
   text-decoration: none; cursor: pointer;
   display: inline-flex; align-items: center; gap: .5rem;
   padding: .7rem 1.1rem; line-height: 1.4;
@@ -933,7 +954,7 @@ html:not(.js) .gates-stick { position: static; }
 .const dl > div { display: flex; align-items: baseline; gap: .5rem; padding: 5px 0; }
 .const dt { color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .const dl > div::after { content: ""; flex: 1 1 auto; min-width: .75rem; border-bottom: 1px dotted var(--line); transform: translateY(-.3em); }
-.const dd { margin: 0; order: 3; color: var(--ink); font-variant-numeric: tabular-nums; }
+.const dd { margin: 0; order: 3; color: var(--ink); font-variant-numeric: tabular-nums; font-weight: 500; }
 .const dd.neg { color: var(--accent); }
 .const p { margin-top: 14px; font-family: var(--mono); font-size: .6875rem; line-height: 1.8; color: var(--ink-3); }
 
