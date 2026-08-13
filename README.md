@@ -1,141 +1,121 @@
 <div align="center">
 
-# Askcal
+<img src="assets/header.svg" alt="Askcal — your inbox, ranked by regret" width="880">
 
-**A context-aware daily scheduler that ranks your inbox by regret, not urgency.**
+**A daily scheduler that ranks your inbox by regret, not urgency.**
 
-Built for the student freelancer juggling classes, client work, and job hunting at once —
-one inbox, three lives, zero patience for another to-do app that just lists things.
+Built for the student freelancer juggling classes, client work and a job hunt at once —
+several inboxes, one life, no patience for another app that just lists things.
 
-[![backend tests](https://img.shields.io/badge/backend%20tests-79%20passing-000000?style=flat-square)](askcal-api)
-[![stack](https://img.shields.io/badge/stack-FastAPI%20%C2%B7%20Postgres%20%C2%B7%20SwiftUI-000000?style=flat-square)]()
-[![python](https://img.shields.io/badge/python-3.13-000000?style=flat-square)]()
-[![license](https://img.shields.io/badge/license-unreleased-000000?style=flat-square)]()
+[![backend tests](https://img.shields.io/badge/backend%20tests-240%20passing-2A2724?style=flat-square)](askcal-api)
+[![stack](https://img.shields.io/badge/stack-SwiftUI%20%C2%B7%20FastAPI%20%C2%B7%20Postgres-2A2724?style=flat-square)]()
+[![python](https://img.shields.io/badge/python-3.13-2A2724?style=flat-square)]()
+[![license](https://img.shields.io/badge/license-unreleased-2A2724?style=flat-square)]()
 
 </div>
 
----
+<img src="assets/divider.svg" alt="" width="880">
 
 ## What it actually does
 
-Every email doesn't deserve the same amount of your attention. Askcal reads your inbox with
-Gemini, scores each message by **regret** — what it actually costs you to ignore it, not how
-loud it shouts — and turns the ones that matter into tasks on your day, already slotted
-around your calendar.
+Every email doesn't deserve the same amount of your attention. Askcal reads your mail with
+Claude, scores each message by **regret** — what it costs you to ignore it, not how loudly it
+shouts — and turns the ones that matter into tasks on your day, already slotted around your
+calendar.
 
-- **Regret-ranked inbox** — swipe an email into today, or push it to tomorrow. No manual triage.
-- **Auto-task pipeline** — actionable mail (a due invoice, an OA link, a client brief) becomes
-  a task the moment it's classified. Newsletters stay newsletters.
-- **A day that plans itself** — tasks flow around your real Google Calendar busy blocks;
-  pin one to an exact time and everything else routes around it, never landing in the past.
-- **Deadline countdowns that actually count down** — "due in 25 min," "due in 6 h," "due in
-  3 days" — computed live, not frozen at whatever it said when the page loaded.
-- **Tracks, not folders** — Uni, Career, Design, Finance, Feed — each weighted to *your*
-  actual life (a freelance designer and a full-time student get different regret scores for
-  the identical email).
-- **Routines + a closing ritual** — daily habits that reset at midnight, and an evening
-  review that carries unfinished work into tomorrow instead of guilt-tripping you about it.
+- **Regret-ranked inbox**, grouped by what each mail wants from you: a reply, a deadline,
+  a read when you have a minute, or nothing at all.
+- **Auto-tasking with real gates.** Actionable mail — a due invoice, an assessment link, a
+  client brief — becomes a task the moment it is classified. A confidence floor and a stakes
+  floor stop the model's guesses becoming your workload.
+- **Tracks you name yourself.** Not folders and not a fixed five: you write what belongs in
+  each one, and *that description* is what the classifier reads. A track can be switched off,
+  or set to never make work.
+- **Several mailboxes, one day.** College mail and personal mail arrive in the same list.
+  Each mailbox carries the tracks its mail is usually about, passed to the classifier as a
+  leaning — never a rule, so a bill at a college address is still about money.
+- **A day that plans itself.** Tasks flow around your real Google Calendar busy blocks; pin
+  one to an exact time and everything else routes around it, never landing in the past.
+- **A page you can write on.** Every day has one, in markdown, handwritten with a Pencil on
+  iPad via Scribble — which converts to text, so the note is searchable and readable on your
+  phone.
+- **A morning digest and an evening nudge** that say something: what today asks of you,
+  and how it actually went.
 
-No accent colors, no gradients, no cute mascot pretending to be your friend. Strictly
-off-white and black, switchable, quiet by design.
+<img src="assets/divider.svg" alt="" width="880">
 
-<br>
+## The design
 
-## The stack
+Warm paper, ruled, with a red margin line. New York for anything written, mono for times and
+counts — a rule the whole app keeps, so a number always looks like a number. One check shape,
+one heading hierarchy, one page container that every screen is built from.
+
+On iPad it opens flat: the day on the left, the day's page on the right. That is decided by
+measuring the window rather than reading the size class, so it follows a Split View divider
+as you drag it.
+
+Both themes clear 4.5:1 on every surface — page, card and recessed well — verified against a
+contrast checker rather than assumed.
+
+<img src="assets/divider.svg" alt="" width="880">
+
+## How it fits together
 
 ```
-┌──────────────────────┐      ┌───────────────────────────┐      ┌───────────────────┐
-│   Askcal (iOS)         │◄────►│   askcal-api                │◄────►│  Google APIs        │
-│   SwiftUI, monochrome  │ JWT  │   FastAPI + Postgres         │      │  Gmail · Calendar    │
-│   @Observable state    │      │   Alembic · async SQLAlchemy │      │  Gemini classifier   │
-└──────────────────────┘      └───────────────────────────┘      └───────────────────┘
+Gmail ──► ingest ──► classify (Claude) ──► regret score ──► auto-task ──► your day
+              │            │                                    │
+        every mailbox   your tracks,                    confidence + stakes
+        you connected   in your words                        floors
 ```
 
-| Layer | Tech |
+Classification never blocks ingestion: mail lands immediately and is scored in batches
+afterwards, so a slow model never costs you an inbox.
+
+| | |
 |---|---|
-| **Backend** | FastAPI, Python 3.13, SQLAlchemy 2.0 (async, asyncpg), Alembic, PostgreSQL 16 |
-| **Auth** | Google OAuth 2.0 → short-lived JWT (15 min) + DB-backed opaque refresh tokens |
-| **Classification** | Gemini (structured output) extracts signals; a deterministic formula turns them into a 0–100 regret score — reproducible, tunable, never a black box |
-| **iOS** | SwiftUI, `@Observable`, Dynamic Type–aware monochrome design system |
-| **Landing** | Three.js + GSAP scroll experience *(currently mid-rebrand — see [Status](#status))* |
+| **iOS app** | SwiftUI, iOS 26.4, `@Observable`. Optimistic writes with rollback — a create shows instantly and says so if the server refuses. |
+| **Backend** | FastAPI, SQLAlchemy async, Alembic, Postgres. Deployed with Docker Compose behind Caddy. |
+| **Classifier** | Claude via the Claude Code CLI (a Gemini path exists behind a setting). Structured output validated against the same model the prompt is generated from, so prompt and parser cannot drift. |
+| **Secrets** | Google refresh tokens are encrypted at rest; `/health` reports whether that is on. |
 
-<br>
+<img src="assets/divider.svg" alt="" width="880">
 
-## Repo layout
+## Running it
 
-```
-Askcal/
-├── askcal-api/          FastAPI backend — the brain
-│   ├── app/
-│   │   ├── models/       users, tasks, tracks, emails, routines, refresh_tokens
-│   │   ├── routers/      auth · today · tasks · inbox · calendar · tracks · routines · me
-│   │   ├── services/     gmail ingestion · Gemini classifier · regret scoring ·
-│   │   │                 day-plan scheduling · sync orchestration + auto-tasking
-│   │   └── schemas/      camelCase API contracts
-│   ├── alembic/versions/  5 migrations, schema history
-│   └── tests/             79 tests — regret formula, scheduler, classifier, auth
-│
-├── Askcal/               SwiftUI iOS app — the face
-│   └── Askcal/
-│       ├── Views/         Today · Inbox · Calendar · Routine · Tracks · Review · More
-│       ├── DesignSystem/  MonoTheme, MonoType, shared components
-│       ├── State/         AskcalStore — single source of truth, offline-first
-│       └── Services/      APIClient, Keychain, notifications
-│
-└── askcal-landing/       Scroll-driven marketing site (WebGL)
-```
-
-<br>
-
-## Getting started
-
-### Backend
+The backend, with Postgres:
 
 ```bash
 cd askcal-api
-cp .env.example .env              # then set ASKCAL_JWT_SECRET (openssl rand -hex 32)
-docker compose up -d               # Postgres 16 on :5432
-uv sync                            # deps into .venv
-uv run alembic upgrade head        # schema
-uv run uvicorn app.main:app --reload --host 0.0.0.0
+cp .env.example .env          # fill in Google OAuth + a JWT secret
+docker compose up -d
+uv run pytest                 # 240 tests, no database required
 ```
 
-API docs at `http://localhost:8000/docs`. Run the suite with `uv run pytest`.
+The app: open `Askcal/Askcal.xcodeproj`, set the API base URL in Settings (defaults to the
+hosted one), and run. Sign in with Google to connect a mailbox.
 
-Gmail ingestion and Gemini classification are both optional at boot — the API degrades
-gracefully (`503`/skipped) until you drop in `ASKCAL_GOOGLE_CLIENT_ID` /
-`ASKCAL_GEMINI_API_KEY`. Full walkthrough in [`askcal-api/README.md`](askcal-api/README.md).
+Full backend setup, deployment overlays and the API contract are in
+[`askcal-api/README.md`](askcal-api/README.md).
 
-### iOS
+<img src="assets/divider.svg" alt="" width="880">
 
-Open `Askcal/Askcal.xcodeproj` in Xcode 26. Point `APIClient.defaultBaseURL` at your running
-backend (a tunnel like ngrok if you're testing on a physical device — localhost won't resolve
-from a phone), build, run.
+## Repository
 
-<br>
+```
+Askcal/            iOS app
+  DesignSystem/    the page, the row, the palette, the type scale
+  Views/           one file per screen
+  State/           AskcalStore — the single source of truth
+  Services/        APIClient
+askcal-api/        FastAPI backend
+  app/routers/     one per resource
+  app/services/    classifier, regret, scheduling, sync, digests
+  app/scripts/     one-off maintenance, dry-run by default
+  alembic/         migrations
+scripts/           generate_header.py — regenerates the artwork above
+assets/            header.svg, divider.svg (generated; don't hand-edit)
+```
 
-## Status
-
-Actively built in daily sessions, backend-first. Current state:
-
-- ✅ Auth, Gmail ingestion, Gemini classification, regret scoring — all live and tested
-- ✅ Auto-scheduling around real Google Calendar events, with user-pinnable task times and
-  live deadline countdowns
-- ✅ Full monochrome iOS app: Today, Inbox, Calendar (interactive, per-date drill-down),
-  Routines, Tracks, Review, onboarding on every launch
-- ✅ 79 backend tests passing
-- 🚧 `askcal-landing` still reflects an earlier coffee-themed concept from before the product
-  pivoted to the monochrome design language above; the landing page rebuild is queued
-- 🚧 Web dashboard, deploy pipeline, and adaptive scheduling (chronotype, weight nudging)
-  are deliberately not built yet
-- 🚧 Pre-open-source hardening in progress: refresh-token encryption at rest, PKCE on the
-  OAuth flow, CI, and a LICENSE are the current blockers — not yet safe to treat as
-  production-ready for public self-hosting
-
-<br>
-
----
-
-<div align="center">
-<sub>Built solo, one honest bug report at a time.</sub>
-</div>
+The header is hand-built SVG with no images, no external fonts and no third-party services.
+Animation is CSS gated behind `prefers-reduced-motion`, so everything readable stays readable
+without it. Regenerate with `python3 scripts/generate_header.py`.

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 22" width="880" height="22" font-family="'Courier New', ui-monospace, monospace" role="img" aria-label="section divider">
+  <defs>
+    <style>
+      .mark { opacity: .18; }
+      @keyframes slide { 0% { transform: translateX(0); opacity:.9 } 92% { opacity:.9 } 100% { transform: translateX(848px); opacity:.9 } }
+      @media (prefers-reduced-motion: no-preference) {
+        .mark { opacity: .9; animation: slide 3.6s linear infinite; }
+      }
+    </style>
+  </defs>
+  <line x1="8" y1="11" x2="872" y2="11" stroke="#CFC5AE" stroke-width="2" stroke-dasharray="2 6"/>
+  <line x1="8" y1="4" x2="8" y2="18" stroke="#B3A98F" stroke-width="2"/>
+  <line x1="872" y1="4" x2="872" y2="18" stroke="#B3A98F" stroke-width="2"/>
+  <rect class="mark" x="8" y="7" width="14" height="8" rx="2" fill="#B4654A"/>
+</svg>

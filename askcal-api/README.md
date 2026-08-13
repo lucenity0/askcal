@@ -102,12 +102,59 @@ Overflow is explicit: anything that doesn't fit is returned in
 
 ## Tracks
 
-Four life-areas plus Finance: `uni`, `career`, `design`, `feed`, `finance`.
-Each carries a per-user weight (`app/services/profile.py` maps onboarding
-answers — student type, work type — to weights), so the same email scores
-differently for two different users. Finance is always active at neutral
-weight; urgency comes from the regret formula's `money_loss` consequence, not
-the profile.
+Tracks are rows the user names, not a fixed set. Each has a slug (stable), a
+label (whatever they called it), and a **description that goes into the
+classifier prompt verbatim** — that description is the only thing that can move
+a piece of mail out of a track it never belonged in.
+
+A new account starts with five — `career`, `uni`, `design`, `finance`, `feed` —
+and every field on them is editable afterwards. Built-ins can be renamed and
+switched off but not deleted, which covers every reason to want one gone without
+stranding the mail already filed under it.
+
+Two flags decide what a track does: `active` (mail here may become work) and
+`auto_tasks` (this track makes work at all — off for read-later). Adding or
+editing a track re-runs the auto-task gates over mail already classified, so a
+change reaches the inbox you already have rather than only future mail.
+
+Weights still come from onboarding (`app/services/profile.py`), which only has
+an opinion about the five it shipped with — a track the user invented is left
+exactly as they set it.
+
+`app/services/tracks.py` owns the starting set, the slug rules and the prompt
+block.
+
+## Mailboxes
+
+`mail_accounts` holds every connected Google account; `users.google_refresh_token`
+is the superseded single-account column. One is `is_primary` — it owns the
+sign-in and the calendar — and the rest are mailboxes only.
+
+Each carries the set of tracks its mail is usually about, passed to the
+classifier as a leaning and never a rule. A sync pulls every active mailbox and
+isolates failures: a revoked token on one address costs that inbox, not the
+whole pass.
+
+Linking goes through `POST /api/accounts/link`, which is authenticated and
+returns a URL rather than redirecting, so no access token travels in a browser
+redirect. The callback issues no tokens on that path.
+
+## Secrets at rest
+
+Google refresh tokens are encrypted with Fernet (`app/core/crypto.py`), applied
+as a column type so no call site can forget it. Values carry an `enc:v1:`
+prefix, so plaintext rows written before the key keep working until
+`app/scripts/encrypt_tokens.py` rewrites them — turning encryption on does not
+take a mailbox offline.
+
+Set `ASKCAL_TOKEN_ENCRYPTION_KEY` in `.env.prod`:
+
+```bash
+python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
+```
+
+`/health` reports `tokens_encrypted`. A malformed key raises at startup rather
+than falling back to plaintext.
 
 ## Deployment
 
@@ -128,7 +175,15 @@ machine is the only way in. Without it the provider refuses to construct at
 startup with a message naming the fix.
 
 Confirm a deploy with `curl https://api.askcal.lucenity.dev/health`, which
-reports `llm_provider` and `classifier_configured`.
+reports `llm_provider`, `classifier_configured` and `tokens_encrypted`.
+
+Migrations run from the container's entrypoint on start. That entrypoint
+**ignores any command it is given**, so one-off scripts need `exec`, not `run`:
+
+```bash
+docker compose -f docker-compose.prod.yml -f docker-compose.subscription.yml \
+    exec api uv run python -m app.scripts.<name>
+```
 
 ## Layout
 
@@ -138,18 +193,25 @@ app/
 ├── config.py        pydantic-settings (env prefix ASKCAL_)
 ├── db.py            async engine + session dependency
 ├── deps.py          get_current_user (JWT bearer)
-├── core/             security (JWT/refresh tokens), error shape (AskcalError)
-├── models/           users, tracks, tasks, emails, routines, refresh_tokens, day_logs
+├── core/             security (JWT/refresh tokens), crypto (secrets at rest),
+│                      error shape (AskcalError)
+├── models/           users, mail_accounts, tracks, tasks, emails, day_notes,
+│                      routines, refresh_tokens, day_logs; types.py holds the
+│                      encrypted column type
 ├── schemas/          camelCase API models
 ├── llm/              provider protocol + transports (claude_code, gemini),
 │                      structured-output parsing, provider registry
 ├── services/          gmail (OAuth + ingestion), gcal (calendar read), classifier
 │                      (prompt + schema + retry policy), regret (scoring formula),
-│                      sync (orchestration + auto-tasking), scheduling (day-plan
-│                      + humanized deadlines)
+│                      sync (orchestration + auto-tasking), scheduling (day-plan,
+│                      local-day resolution, humanized deadlines), tracks (the
+│                      user's taxonomy), accounts (which mailbox answers what),
+│                      triage (what a mail wants), digest (morning + evening)
+├── scripts/          one-off maintenance, dry-run unless --apply
 └── routers/          /auth/*, /api/today, /api/tasks, /api/inbox (+ sync/handle/
-                       snooze), /api/calendar, /api/tracks, /api/routines, /api/me,
-                       /api/closing-time, /api/carry-forward
+                       snooze), /api/calendar, /api/tracks, /api/accounts,
+                       /api/notes, /api/routines, /api/me, /api/settings,
+                       /api/digest/*, /api/closing-time, /api/carry-forward
 ```
 
 `app/services/brew_engine.py` is a leftover from an earlier coffee-themed
