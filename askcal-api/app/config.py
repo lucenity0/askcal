@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     debug: bool = False
 
     jwt_secret: str = "change-me"
+    # Fernet key for secrets stored in the database (Google refresh tokens).
+    # Empty means values are written in plain text — fine locally, reported by
+    # /health so a production deployment cannot be quietly unprotected.
+    token_encryption_key: str = ""
     jwt_algorithm: str = "HS256"
     access_token_ttl_minutes: int = 15
     refresh_token_ttl_days: int = 30

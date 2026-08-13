@@ -54,6 +54,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "alembic" },
     { name = "asyncpg" },
+    { name = "cryptography" },
     { name = "fastapi" },
     { name = "google-auth", extra = ["requests"] },
     { name = "google-genai" },
@@ -74,6 +75,7 @@ dev = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.13" },
     { name = "asyncpg", specifier = ">=0.30" },
+    { name = "cryptography", specifier = ">=43" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "google-auth", extras = ["requests"], specifier = ">=2.30" },
     { name = "google-genai", specifier = ">=1.0" },

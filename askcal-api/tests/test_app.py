@@ -147,3 +147,9 @@ def test_the_day_has_a_page_to_write_on():
     # The week strip marks which days are written on; asking day by day would
     # be seven requests to draw one row.
     assert "get" in paths["/api/notes"]
+
+
+def test_health_reports_whether_tokens_are_encrypted():
+    """A deployment that quietly stopped encrypting looks identical to one that
+    never started, and the answer should not require opening the database."""
+    assert isinstance(client.get("/health").json()["tokens_encrypted"], bool)

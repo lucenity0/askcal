@@ -17,6 +17,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
 from app.models.base import TimestampMixin
+from app.models.types import EncryptedText
 
 # Which tracks a mailbox usually carries. A plain association table: the pair
 # is the whole fact, and there is nothing else to say about it.
@@ -66,9 +67,10 @@ class MailAccount(TimestampMixin, Base):
     # it is long, it wraps, and they already know it.
     label: Mapped[str | None] = mapped_column(String(80))
     google_sub: Mapped[str | None] = mapped_column(String(64))
-    # TODO: encrypt at rest (#19). Moving it here changed where it lives, not
-    # how it is stored, and it is still the most sensitive column in the schema.
-    google_refresh_token: Mapped[str | None] = mapped_column(Text)
+    # Encrypted at rest — see app/models/types.py. A refresh token is a
+    # long-lived key to somebody's whole mailbox and calendar, and this is the
+    # most sensitive column in the schema.
+    google_refresh_token: Mapped[str | None] = mapped_column(EncryptedText)
 
     # Superseded by `tracks` below. Kept one release; nothing reads it.
     default_track_id: Mapped[uuid.UUID | None] = mapped_column(

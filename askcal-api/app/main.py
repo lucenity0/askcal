@@ -24,6 +24,7 @@ from app.routers import (
     today,
     tracks,
 )
+from app.core.crypto import encryption_configured
 from app.llm.registry import classifier_configured, classifier_unavailable_reason
 from app.services.sync import sync_loop
 
@@ -43,6 +44,13 @@ async def lifespan(app: FastAPI):
         )
     if s.jwt_secret == "change-me":
         logger.error("ASKCAL_JWT_SECRET is still the default — tokens are forgeable.")
+    # A deployment that quietly stopped encrypting looks exactly like one that
+    # never started, so it says so on every boot rather than only in /health.
+    if not encryption_configured():
+        logger.error(
+            "ASKCAL_TOKEN_ENCRYPTION_KEY is unset — Google refresh tokens are "
+            "stored in plain text."
+        )
 
     task = asyncio.create_task(sync_loop()) if s.sync_enabled else None
     yield
@@ -88,6 +96,9 @@ async def health() -> dict:
         "status": "ok",
         "llm_provider": get_settings().llm_provider,
         "classifier_configured": reason is None,
+        # Verifiable from outside. "Are the refresh tokens encrypted" is not a
+        # question anyone should have to answer by opening the database.
+        "tokens_encrypted": encryption_configured(),
     }
     # Only present when something is wrong, so a healthy deploy stays terse and
     # an unhealthy one says what to fix without shelling into the VM.
