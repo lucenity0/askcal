@@ -71,11 +71,6 @@ class MailAccount(TimestampMixin, Base):
     # most sensitive column in the schema.
     google_refresh_token: Mapped[str | None] = mapped_column(EncryptedText)
 
-    # Superseded by `tracks` below. Kept one release; nothing reads it.
-    default_track_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("tracks.id", ondelete="SET NULL")
-    )
-
     # The account that owns the sign-in and the calendar. Exactly one per user,
     # enforced by a partial unique index.
     is_primary: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -86,7 +81,6 @@ class MailAccount(TimestampMixin, Base):
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     user: Mapped["User"] = relationship(back_populates="mail_accounts")
-    default_track: Mapped["Track | None"] = relationship(lazy="selectin")
 
     # What mail at this address is usually about — as many as apply. No address
     # is one thing: a college account carries coursework, fees and the odd
