@@ -652,8 +652,21 @@ final class AskcalStore {
     /// in More: trigger a Gmail sync, wait, then refetch everything. The
     /// pipeline may have auto-created tasks from actionable mail, so tasks
     /// and the day plan refresh along with the inbox.
+    /// True from the tap until the results are on screen.
+    ///
+    /// The server answers the trigger immediately and does the work in the
+    /// background, so this covers the wait as well as the request. Without it
+    /// "Sync now" sat there looking untapped for six seconds and then quietly
+    /// changed the list — which reads as a dead button, not a slow one.
+    private(set) var isSyncing = false
+
     func syncInbox() async {
-        guard isLive else { return }
+        // A second tap mid-sync would restart the wait and fight the first for
+        // the same list.
+        guard isLive, !isSyncing else { return }
+        isSyncing = true
+        defer { isSyncing = false }
+
         do {
             try await APIClient.shared.triggerSync()
         } catch {

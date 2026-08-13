@@ -108,6 +108,11 @@ struct TodayPage: View {
         // rebuild gone, the today-only blocks simply are or are not there —
         // which is what turning to another page should look like.
         .task(id: selected) { await load() }
+        // The page owns this, not the editor. `DayNoteView` fetched it in its
+        // own .task, and on the phone that view only exists once the popup is
+        // open — so the row below the day sat empty until you tapped it, which
+        // read as the note not having saved.
+        .task(id: AskcalStore.dayString(selected)) { await store.loadNote(for: selected) }
         .task(id: weekKey) { await loadMarks() }
         // Today is live: a tick has to land immediately. This is also what
         // keeps today's list in `displayed` at the moment you leave it, which

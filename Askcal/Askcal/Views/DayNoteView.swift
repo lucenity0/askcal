@@ -44,6 +44,11 @@ struct DayNoteView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .task(id: AskcalStore.dayString(date)) {
+            // The fetch belongs to whoever shows the day, not to this view —
+            // on the phone this only exists while the popup is open, so
+            // fetching here left the collapsed row blank until it was tapped.
+            // Kept as a fallback for the iPad's facing page, which is the one
+            // place this view appears without a day page having asked first.
             await store.loadNote(for: date)
             // Only when not mid-edit: replacing the field under someone's
             // cursor with a slower answer from the network loses whatever they

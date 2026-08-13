@@ -162,8 +162,20 @@ struct SettingsPage: View {
                         .foregroundStyle(book.inkDim)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                Button("Sync now") { Task { await store.syncInbox() } }
-                    .buttonStyle(PillButtonStyle(filled: false))
+                // Says so while it happens. The server answers the trigger at
+                // once and works in the background, so the old button sat
+                // looking untapped for six seconds and then silently changed
+                // the list — a dead button, as far as anyone could tell.
+                Button(store.isSyncing ? "Pulling your mail…" : "Sync now") {
+                    Task {
+                        await store.syncInbox()
+                        // The sync just moved "Last run"; re-read it rather
+                        // than leaving the timestamp above stale.
+                        await load()
+                    }
+                }
+                .buttonStyle(PillButtonStyle(filled: false))
+                .disabled(store.isSyncing)
                 PageRule()
             }
         }

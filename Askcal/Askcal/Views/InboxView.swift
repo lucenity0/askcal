@@ -104,8 +104,11 @@ struct InboxView: View {
                 .font(BookType.body(15))
                 .foregroundStyle(book.inkSub)
             if store.isLive {
-                Button("Sync now") { Task { await store.syncInbox() } }
-                    .buttonStyle(PillButtonStyle(filled: false))
+                Button(store.isSyncing ? "Pulling your mail…" : "Sync now") {
+                    Task { await store.syncInbox() }
+                }
+                .buttonStyle(PillButtonStyle(filled: false))
+                .disabled(store.isSyncing)
             }
         }
     }
