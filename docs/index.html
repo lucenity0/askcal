@@ -1,0 +1,513 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Askcal — your inbox, ranked by regret</title>
+<meta name="description" content="A daily scheduler that reads your mail and ranks it by what ignoring it costs you, not by when it arrived.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>📓</text></svg>">
+
+<meta property="og:title" content="Askcal — your inbox, ranked by regret">
+<meta property="og:description" content="Most mail tools sort by when things arrived. Nothing arrives in order of what it costs you.">
+<meta property="og:type" content="website">
+
+<script>
+  // Marks the page as able to animate. The hidden-then-revealed state below is
+  // scoped to this class, so with scripts blocked nothing is ever hidden —
+  // otherwise the whole page renders blank and the failure is total.
+  document.documentElement.className += " js";
+</script>
+
+<style>
+/* ── The palette is the app's own, from DesignSystem/Paper.swift. Day is warm
+   paper with a red margin rule; night is the blackboard the app switches to.
+   Both are defined here rather than derived, so the page and the product
+   cannot drift apart the way a screenshot does. ───────────────────────── */
+:root {
+  --paper:   #F5F0E6;
+  --recess:  #E8E1D3;
+  --card:    #FBF8F1;
+  --rule:    #CFC5AE;
+  --rule-hi: #B3A98F;
+  --margin:  #B4654A;
+  --ink:     #2A2724;
+  --ink-dim: #57514A;
+  --ink-sub: #6A635A;
+
+  --serif: ui-serif, "New York", Iowan Old Style, Georgia, serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+
+  --measure: 34rem;
+  --gutter: clamp(1.25rem, 5vw, 3.5rem);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper:   #16191B;
+    --recess:  #101314;
+    --card:    #1E2224;
+    --rule:    #2E3336;
+    --rule-hi: #454B4E;
+    --margin:  #9C5B47;
+    --ink:     #E9ECE9;
+    --ink-dim: #B2B8B5;
+    --ink-sub: #949B98;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Anything measured — a time, a count, a score — is mono. The whole app keeps
+   this rule, so a number always looks like a number. */
+.mono, code, .kicker, .stat, .row-time, .chip { font-family: var(--mono); }
+
+a { color: inherit; }
+
+.skip {
+  position: absolute; left: -9999px;
+  background: var(--card); color: var(--ink);
+  padding: .75rem 1rem; border: 2px solid var(--ink);
+}
+.skip:focus { left: 1rem; top: 1rem; z-index: 99; }
+
+/* ── The sheet ────────────────────────────────────────────────────────── */
+
+.sheet { max-width: 72rem; margin: 0 auto; padding: 0 var(--gutter); }
+
+/* Every section is a page: a margin rule down the left, writing to the right
+   of it. Not a decoration — it is the same construction as the app's own
+   NotebookPage, which is why the two read as one thing. */
+.pg {
+  position: relative;
+  padding: clamp(3.5rem, 9vw, 7rem) 0;
+  border-top: 1px solid var(--rule);
+}
+.pg:first-of-type { border-top: 0; }
+
+.pg::before {
+  content: "";
+  position: absolute;
+  left: calc(var(--gutter) * -0.55);
+  top: 0; bottom: 0;
+  width: 2px;
+  background: var(--margin);
+  opacity: .55;
+}
+@media (max-width: 40rem) { .pg::before { display: none; } }
+
+.kicker {
+  font-size: .6875rem;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  color: var(--ink-sub);
+  margin: 0 0 1rem;
+}
+
+h1, h2, h3 { font-weight: 600; line-height: 1.15; margin: 0 0 1rem; letter-spacing: -.01em; }
+h1 { font-size: clamp(3rem, 10vw, 5.5rem); }
+h2 { font-size: clamp(1.75rem, 4.2vw, 2.75rem); max-width: 22ch; }
+h3 { font-size: 1.125rem; margin-bottom: .35rem; }
+
+p { max-width: var(--measure); margin: 0 0 1.15rem; color: var(--ink-dim); }
+.lede { font-size: 1.25rem; color: var(--ink); max-width: 30rem; }
+
+/* ── Hero ─────────────────────────────────────────────────────────────── */
+
+.hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 22rem);
+  gap: clamp(2rem, 6vw, 5rem);
+  align-items: center;
+}
+@media (max-width: 56rem) { .hero-grid { grid-template-columns: 1fr; } }
+
+.chips { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 2rem; }
+.chip {
+  font-size: .6875rem; letter-spacing: .12em;
+  padding: .4rem .8rem;
+  border: 1px solid var(--rule-hi); border-radius: 999px;
+  color: var(--ink-dim);
+}
+
+/* ── The day, drawn rather than screenshotted ─────────────────────────── */
+
+.day {
+  background: var(--card);
+  border: 2px solid var(--ink);
+  border-radius: 14px;
+  padding: 1.25rem 1.25rem 1rem;
+}
+.day-hd {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: .625rem; letter-spacing: .2em; text-transform: uppercase;
+  color: var(--ink-sub); font-family: var(--mono);
+  margin-bottom: .85rem;
+}
+.row {
+  display: grid;
+  grid-template-columns: 3.4rem 1.75rem 1fr;
+  align-items: center;
+  gap: .5rem;
+  padding: .6rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+.row:last-child { border-bottom: 0; }
+.row-time { font-size: .6875rem; color: var(--ink-sub); text-align: right; }
+
+.mark {
+  width: 1.15rem; height: 1.15rem; border-radius: 50%;
+  border: 2px solid var(--rule-hi);
+  display: grid; place-items: center;
+  justify-self: center;
+}
+.row.done .mark { background: var(--ink); border-color: var(--ink); }
+.mark svg { width: .7rem; height: .7rem; opacity: 0; }
+.row.done .mark svg { opacity: 1; }
+.js .row.done .mark svg { opacity: 0; }
+.js .row.done.lit .mark svg { opacity: 1; }
+@media (prefers-reduced-motion: no-preference) {
+  .mark svg { transition: opacity .3s ease; }
+}
+
+.row-title { font-size: .95rem; }
+.row.done .row-title { color: var(--ink-sub); text-decoration: line-through; }
+.row-meta { font-family: var(--mono); font-size: .625rem; color: var(--ink-sub); }
+
+/* ── Reveal on scroll. Content is visible by default and only *animates*
+   when motion is welcome, so nothing depends on JS having run. ────────── */
+@media (prefers-reduced-motion: no-preference) {
+  .js .rise { opacity: 0; transform: translateY(14px); }
+  .js .rise.lit { opacity: 1; transform: none; transition: opacity .6s ease, transform .6s ease; }
+}
+
+/* ── The formula ──────────────────────────────────────────────────────── */
+
+.formula {
+  font-family: var(--mono); font-size: .8125rem; line-height: 2.1;
+  background: var(--recess);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 1.1rem 1.25rem;
+  max-width: 38rem;
+  overflow-x: auto;
+}
+.formula b { color: var(--ink); font-weight: 600; }
+.formula .c { color: var(--ink-sub); }
+
+/* ── Two-column compare ───────────────────────────────────────────────── */
+
+.compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; max-width: 44rem; }
+@media (max-width: 44rem) { .compare { grid-template-columns: 1fr; } }
+.panel {
+  border: 1px solid var(--rule); border-radius: 10px;
+  padding: 1rem 1.15rem; background: var(--card);
+}
+.panel h3 { font-family: var(--mono); font-size: .625rem; letter-spacing: .18em;
+  text-transform: uppercase; color: var(--ink-sub); }
+.panel p { font-size: .9375rem; margin: 0; }
+
+/* ── The pipeline ─────────────────────────────────────────────────────── */
+
+.steps { list-style: none; padding: 0; margin: 0; max-width: 40rem; counter-reset: s; }
+.steps li {
+  counter-increment: s;
+  display: grid; grid-template-columns: 2rem 1fr; gap: 1rem;
+  padding: 1rem 0; border-bottom: 1px solid var(--rule);
+}
+.steps li:last-child { border-bottom: 0; }
+.steps li::before {
+  content: counter(s, decimal-leading-zero);
+  font-family: var(--mono); font-size: .6875rem; color: var(--ink-sub);
+  padding-top: .3rem;
+}
+.steps p { margin: 0; font-size: .9375rem; }
+
+/* ── Decisions ────────────────────────────────────────────────────────── */
+
+.notes { display: grid; gap: 1.5rem; max-width: 44rem; }
+.note { border-left: 2px solid var(--rule-hi); padding-left: 1.1rem; }
+.note p { font-size: .9375rem; margin: 0; }
+
+.stats { display: flex; flex-wrap: wrap; gap: 2.25rem; margin-top: 2.5rem; }
+.stat b { display: block; font-family: var(--mono); font-size: 1.5rem; color: var(--ink); font-weight: 600; }
+.stat span { font-size: .6875rem; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-sub); }
+
+footer { border-top: 1px solid var(--rule); padding: 2.5rem 0 4rem; }
+footer p { font-size: .875rem; color: var(--ink-sub); }
+</style>
+</head>
+
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<main id="main" class="sheet">
+
+  <!-- ── Hero ───────────────────────────────────────────────────────── -->
+  <section class="pg">
+    <div class="hero-grid">
+      <div>
+        <p class="kicker">Askcal · Gmail → your day</p>
+        <h1>Askcal</h1>
+        <p class="lede">Your inbox, ranked by regret.</p>
+        <p>
+          Every mail tool you have ever used sorts by when things arrived.
+          Nothing arrives in the order of what it costs you to ignore it.
+          Askcal reads your mail, scores each message by what missing it
+          would actually cost, and turns the ones that matter into a day —
+          already arranged around your calendar.
+        </p>
+        <div class="chips">
+          <span class="chip">SWIFTUI</span>
+          <span class="chip">FASTAPI</span>
+          <span class="chip">POSTGRES</span>
+          <span class="chip">CLAUDE</span>
+        </div>
+      </div>
+
+      <!-- Drawn, not screenshotted. A screenshot goes stale the moment a
+           colour changes; this is the same palette the app compiles. -->
+      <div class="day rise" aria-hidden="true">
+        <div class="day-hd"><span>Today</span><span>3 of 5</span></div>
+        <div class="row done" data-tick="0">
+          <span class="row-time">9:04 AM</span>
+          <span class="mark"><svg viewBox="0 0 12 12" fill="none" stroke="var(--card)" stroke-width="2.2" stroke-linecap="round"><path d="M2 6.2 4.6 9 10 3"/></svg></span>
+          <span><span class="row-title">assignment due</span><br><span class="row-meta">Uni</span></span>
+        </div>
+        <div class="row done" data-tick="1">
+          <span class="row-time">11:30 AM</span>
+          <span class="mark"><svg viewBox="0 0 12 12" fill="none" stroke="var(--card)" stroke-width="2.2" stroke-linecap="round"><path d="M2 6.2 4.6 9 10 3"/></svg></span>
+          <span><span class="row-title">reply to the professor</span><br><span class="row-meta">Uni</span></span>
+        </div>
+        <div class="row done" data-tick="2">
+          <span class="row-time">2:15 PM</span>
+          <span class="mark"><svg viewBox="0 0 12 12" fill="none" stroke="var(--card)" stroke-width="2.2" stroke-linecap="round"><path d="M2 6.2 4.6 9 10 3"/></svg></span>
+          <span><span class="row-title">client brief revision</span><br><span class="row-meta">Design</span></span>
+        </div>
+        <div class="row">
+          <span class="row-time"></span>
+          <span class="mark"></span>
+          <span><span class="row-title">semester fees</span><br><span class="row-meta">Finance · due in 6 h</span></span>
+        </div>
+        <div class="row">
+          <span class="row-time"></span>
+          <span class="mark"></span>
+          <span><span class="row-title">close the day</span><br><span class="row-meta">Uni</span></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── The problem ────────────────────────────────────────────────── -->
+  <section class="pg">
+    <p class="kicker">The premise</p>
+    <h2 class="rise">Recency is not consequence.</h2>
+    <p class="rise">
+      A newsletter that landed a minute ago sits above a fee notice from
+      Tuesday. Both look identical in a list, so you read both, and the one
+      with a deadline is the one you scroll past. That is not a discipline
+      problem. It is a sorting problem, and no amount of inbox-zero fixes a
+      list that was never ordered by what matters.
+    </p>
+    <p class="rise">
+      Askcal asks a different question of every message: <em>what does
+      ignoring this cost me?</em> A missed assessment costs an opportunity.
+      An unpaid fee costs money. A newsletter costs nothing, however
+      recently it arrived and however urgently it is written.
+    </p>
+  </section>
+
+  <!-- ── The formula ────────────────────────────────────────────────── -->
+  <section class="pg">
+    <p class="kicker">How it decides</p>
+    <h2 class="rise">The model extracts signals. Arithmetic does the scoring.</h2>
+    <p class="rise">
+      A language model is good at reading an email and bad at being
+      consistent about a number. So it never produces the score. It extracts
+      what it can actually judge — the stakes, the sender, whether there is a
+      concrete task, when it is due — and a deterministic formula turns those
+      into 0–100.
+    </p>
+    <div class="formula rise">
+      score = <b>consequence</b> <span class="c">(35 opportunity · 35 grade · 30 money · 12 social · 4 none)</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ <b>deadline proximity</b> <span class="c">(40 within a day, decaying to 10 within a week)</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ <b>sender</b> &nbsp;+ <b>action required</b><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;× <b>track weight</b> &nbsp;× <b>confidence</b> &nbsp;<span class="c">→ clamped 0–100</span>
+    </div>
+    <p class="rise" style="margin-top:1.15rem">
+      Every score is reproducible from the signals stored beside it. When a
+      task ranks oddly you can read why, rather than asking a model to
+      explain itself after the fact.
+    </p>
+  </section>
+
+  <!-- ── Tracks ─────────────────────────────────────────────────────── -->
+  <section class="pg">
+    <p class="kicker">Tracks</p>
+    <h2 class="rise">A PR review is work. It was filed under Design.</h2>
+    <p class="rise">
+      Askcal shipped with five categories — career, uni, design, finance,
+      feed — baked into the database, the prompt and the app. They described
+      a guess at someone's life rather than anyone's actual life. Asked to
+      pick one of five for a code review, the model picked the closest, and
+      the closest was wrong.
+    </p>
+    <div class="compare rise">
+      <div class="panel">
+        <h3>Before</h3>
+        <p>Five names in an enum. The prompt described them in fixed prose. Changing one meant a migration and a rebuild.</p>
+      </div>
+      <div class="panel">
+        <h3>After</h3>
+        <p>Tracks are rows you name. You write what belongs in each, and <em>that sentence</em> is what the classifier reads.</p>
+      </div>
+    </div>
+    <p class="rise" style="margin-top:1.5rem">
+      Which is the whole fix: a track called “work” tells a model nothing.
+      “Anything from my team or about a PR, even when I'm not working” moves
+      the review out of Design in one edit, with no deploy.
+    </p>
+  </section>
+
+  <!-- ── Mailboxes ──────────────────────────────────────────────────── -->
+  <section class="pg">
+    <p class="kicker">Mailboxes</p>
+    <h2 class="rise">College mail and personal mail. One day.</h2>
+    <p class="rise">
+      Not an account switcher — there is nothing to switch. Every mailbox
+      you connect pours into the same list, is scored on the same scale, and
+      becomes work on the same day.
+    </p>
+    <p class="rise">
+      Each mailbox carries the tracks its mail is usually about, and that
+      reaches the classifier as a <em>leaning</em> rather than a rule. It has
+      to be: a bill arriving at a college address is still about money, and a
+      mailbox that overrode the content would be confidently wrong every
+      time, with nothing on screen explaining why.
+    </p>
+  </section>
+
+  <!-- ── Pipeline ───────────────────────────────────────────────────── -->
+  <section class="pg">
+    <p class="kicker">The pipeline</p>
+    <h2 class="rise">Mail lands first. Judgement follows.</h2>
+    <ol class="steps rise">
+      <li><p><b>Ingest.</b> Every connected mailbox is pulled on a schedule. One dead mailbox costs you that inbox, not the pass.</p></li>
+      <li><p><b>Store.</b> Raw mail is written immediately, unscored. Classification never blocks ingestion, so a slow model never costs you an inbox.</p></li>
+      <li><p><b>Classify.</b> One call per batch, structured output validated against the same model the prompt is generated from — so prompt and parser cannot drift.</p></li>
+      <li><p><b>Score.</b> The deterministic formula, weighted by how much that track matters to you.</p></li>
+      <li><p><b>Gate.</b> A confidence floor and a stakes floor. A model's guess should not become your Tuesday.</p></li>
+      <li><p><b>Plan.</b> What survives is placed around your real calendar — deadlines first, then consequence, never into an hour that has already passed.</p></li>
+    </ol>
+  </section>
+
+  <!-- ── Decisions ──────────────────────────────────────────────────── -->
+  <section class="pg">
+    <p class="kicker">What it cost</p>
+    <h2 class="rise">The decisions worth defending.</h2>
+    <div class="notes rise">
+      <div class="note">
+        <h3>Encryption is a column type, not a call site.</h3>
+        <p>
+          A Google refresh token is a long-lived key to an entire mailbox and
+          calendar. Encrypting it wherever it is written means the one place
+          that forgets writes plaintext into a column everything else assumes
+          is safe. It is a SQLAlchemy type instead, so forgetting is not
+          available. Stored values carry a version prefix, which is what let
+          the key be switched on without taking a single mailbox offline.
+        </p>
+      </div>
+      <div class="note">
+        <h3>The classifier is measured, not eyeballed.</h3>
+        <p>
+          Every prompt change used to be validated by waiting for real mail and
+          seeing whether it looked right — which finds a regression days later,
+          on the one message that mattered. A golden set of twelve cases, each
+          carrying the rule it exists to pin, now answers the same questions
+          every time. Two of them found errors in the fixture before they found
+          any in the prompt.
+        </p>
+      </div>
+      <div class="note">
+        <h3>The same bug, four times, in four disguises.</h3>
+        <p>
+          A classifier silently unconfigured. An inactive track blocking every
+          task under it. Carried work losing its day. Auto-task rules that only
+          ever ran once, at classification. All four are one shape: state that
+          decides whether work reaches you, applied invisibly, with no way to
+          see or change it. Everything added since has to answer for all three.
+        </p>
+      </div>
+      <div class="note">
+        <h3>Migrations that can be undone.</h3>
+        <p>
+          Three schema changes each added the new shape beside the old one and
+          backfilled, so every step deployed alone and could roll back. The
+          columns came out much later, in a migration whose own docstring says
+          it restores the shape and not the data.
+        </p>
+      </div>
+    </div>
+
+    <div class="stats rise">
+      <div class="stat"><b>282</b><span>backend tests</span></div>
+      <div class="stat"><b>59</b><span>client tests</span></div>
+      <div class="stat"><b>12/12</b><span>golden set</span></div>
+      <div class="stat"><b>0</b><span>open issues</span></div>
+    </div>
+  </section>
+
+  <footer>
+    <p>
+      Built by <a href="https://github.com/lucenity0">@lucenity0</a> ·
+      <a href="https://github.com/lucenity0/askcal">source</a>
+    </p>
+    <p style="font-size:.8125rem">
+      Hand-built HTML. No framework, no fonts, no analytics, nothing loaded
+      from anywhere else.
+    </p>
+  </footer>
+</main>
+
+<script>
+// Reveals and the ticking checkboxes. Everything here is decoration: the page
+// is complete and readable with JS disabled, and the observer is skipped
+// outright when motion is unwelcome.
+(function () {
+  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var targets = document.querySelectorAll('.rise, [data-tick]');
+
+  if (reduced || !('IntersectionObserver' in window)) {
+    targets.forEach(function (el) { el.classList.add('lit'); });
+    return;
+  }
+
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (!entry.isIntersecting) return;
+      var el = entry.target;
+      // Rows tick in sequence, so the day fills itself out rather than
+      // arriving already finished.
+      var delay = el.hasAttribute('data-tick') ? el.getAttribute('data-tick') * 260 : 0;
+      setTimeout(function () { el.classList.add('lit'); }, delay);
+      io.unobserve(el);
+    });
+  }, { rootMargin: '0px 0px -12% 0px', threshold: 0.15 });
+
+  targets.forEach(function (el) { io.observe(el); });
+})();
+</script>
+</body>
+</html>
