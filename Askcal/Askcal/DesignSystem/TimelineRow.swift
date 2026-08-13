@@ -23,9 +23,6 @@ struct TimelineRow: View {
     /// plan that keeps changing; the one moment worth recording against a row
     /// is the moment it was done.
     var time: String?
-    /// Whether the list this row belongs to reserves the time column. Decided
-    /// by the list, not the row, so every mark in it lines up.
-    var showsTime = false
     var isFirst = false
     var isLast = false
     var toggle: () -> Void
@@ -48,12 +45,12 @@ struct TimelineRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: Space.sm) {
-            // The column is reserved for the whole list or for none of it, so
-            // every mark sits at the same x. Dropping it per row let some rows
-            // start at the checkbox and others a column-width further in, which
-            // is what made a list of mixed rows look ragged.
-            if showsTime {
-                Text(time ?? "")
+            // Per row, not per list. Reserving the column for a whole day put
+            // an empty gutter beside everything unfinished, to buy an alignment
+            // nobody asked for — an unfinished row starting at its mark and a
+            // finished one stepped in behind its time is the intended look.
+            if let time {
+                Text(time)
                     .font(BookType.meta(11))
                     .foregroundStyle(book.inkSub)
                     .lineLimit(1)
@@ -249,7 +246,6 @@ private struct TimelineRowPreview: View {
                 TimelineRow(
                     task: row.0,
                     time: row.1,
-                    showsTime: true,
                     isFirst: index == 0,
                     isLast: index == rows.count - 1,
                     toggle: {}, edit: {}, delete: {}

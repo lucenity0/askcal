@@ -252,7 +252,6 @@ struct TodayPage: View {
                         TimelineRow(
                             task: task,
                             time: rowTime(task),
-                            showsTime: showsTimeColumn,
                             isFirst: index == 0,
                             isLast: index == entries.count - 1,
                             toggle: {
@@ -290,13 +289,6 @@ struct TodayPage: View {
     private func rowTime(_ task: AskcalTask) -> String? {
         guard task.status == .done, let finished = task.completedAt else { return nil }
         return Self.clock(finished)
-    }
-
-    /// True once anything in the day is finished. The column appears for the
-    /// whole list at that point, so the marks stay in one line instead of some
-    /// rows indenting and others not.
-    private var showsTimeColumn: Bool {
-        entries.contains { $0.status == .done && $0.completedAt != nil }
     }
 
     /// One column, one format. The server's plan slots are "HH:MM", so
