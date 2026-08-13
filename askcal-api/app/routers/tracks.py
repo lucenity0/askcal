@@ -12,8 +12,8 @@ from app.schemas.tracks import (
     TrackItem,
     TrackOut,
     TrackPatchRequest,
-    TracksResponse,
     TrackSettingOut,
+    TracksResponse,
 )
 from app.services.autotask import reconsider_auto_tasks
 from app.services.profile import STUDENT_TYPES, WORK_TYPES, profile_track_settings

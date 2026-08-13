@@ -12,8 +12,9 @@ what the metaphor already promised, and it needs no browsing UI of its own.
 """
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects.postgresql import UUID
+
+from alembic import op
 
 revision = "0011"
 down_revision = "0010"

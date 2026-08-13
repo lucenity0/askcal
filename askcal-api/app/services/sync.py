@@ -23,7 +23,7 @@ import asyncio
 import logging
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -45,10 +45,10 @@ from app.services.classifier import (
     classify_batch,
     classify_pacing,
 )
-from app.services.tracks import fallback_track, track_by_slug
 from app.services.gmail import fetch_recent_messages
 from app.services.regret import compute_regret
 from app.services.scheduling import local_midnight, user_today
+from app.services.tracks import fallback_track, track_by_slug
 
 logger = logging.getLogger("askcal.sync")
 
@@ -88,7 +88,7 @@ async def _store_new_messages(
     """
     result = SyncResult()
     messages = await fetch_recent_messages(
-        account.google_refresh_token, since=local_midnight(user.timezone)
+        account.google_refresh_token or "", since=local_midnight(user.timezone)
     )
     result.fetched = len(messages)
     if messages:
@@ -120,7 +120,7 @@ async def _store_new_messages(
                 )
             )
             result.new += 1
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     account.last_synced_at = now
     user.last_synced_at = now
     await db.commit()
@@ -168,7 +168,7 @@ async def _classify_pending(db: AsyncSession, user: User) -> tuple[int, int]:
 
     classified = 0
     auto_tasked = 0
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     today = user_today(user.timezone)
     tasked_threads: set[str] = set()
     batch_size, delay = classify_pacing()
@@ -247,6 +247,7 @@ async def _classify_pending(db: AsyncSession, user: User) -> tuple[int, int]:
 
             if not should_auto_task(signals, track_row, email.regret_score, user):
                 continue
+            assert track_row is not None
             # Thread dedup. Checked against both the database and this pass,
             # because tasks added below are not flushed until the chunk commits —
             # two reminders about the same assignment can easily land in one batch.
@@ -320,7 +321,7 @@ async def sync_user(db: AsyncSession, user: User) -> SyncResult:
     # even when the answer is "it ran and could not reach your mail". The old
     # code only recorded success, so a failing sync looked identical to one that
     # had stopped running altogether.
-    user.last_sync_attempt_at = datetime.now(timezone.utc)
+    user.last_sync_attempt_at = datetime.now(UTC)
     user.last_sync_error = None
     await db.commit()
 

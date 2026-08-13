@@ -10,14 +10,13 @@ merely stale, and which mean somebody else has a copy.
 """
 
 import datetime as dt
-from datetime import timezone
 from types import SimpleNamespace
 
 import pytest
 
 from app.routers.auth import ROTATION_GRACE
 
-NOW = dt.datetime(2026, 8, 13, 12, 0, tzinfo=timezone.utc)
+NOW = dt.datetime(2026, 8, 13, 12, 0, tzinfo=dt.UTC)
 
 
 def token(*, revoked_at=None, replaced=False, expires_in_days=30):

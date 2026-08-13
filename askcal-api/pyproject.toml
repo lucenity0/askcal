@@ -2,7 +2,10 @@
 name = "askcal-api"
 version = "0.1.0"
 description = "Askcal backend — context-aware daily scheduler for student freelancers"
-requires-python = ">=3.12"
+# 3.13, matching .python-version, the Dockerfile and the README. It said 3.12,
+# which meant `uv sync` on a 3.12 machine produced an environment nothing else
+# in the project has ever run on.
+requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
@@ -21,10 +24,64 @@ dependencies = [
 dev = [
     "pytest>=8",
     "ruff>=0.5",
+    "mypy>=1.11",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# An unregistered marker is almost always a typo in a decorator, and a silent
+# one means the test quietly ran when it was meant to be skipped.
+addopts = "--strict-markers --strict-config"
 
 [tool.ruff]
 line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+# Beyond the default E4/E7/E9/F. Chosen for the mistakes this codebase has
+# actually made rather than for completeness: unsorted imports (I), unused
+# arguments and mutable defaults (B), old-style typing that contradicts the
+# 3.13 floor (UP), and comprehensions written the long way (C4).
+select = ["E4", "E7", "E9", "F", "I", "B", "UP", "C4", "SIM"]
+ignore = [
+    # `raise ... from err` inside an except block. Every raise in the routers is
+    # a deliberate translation of an internal error into an API one, and the
+    # chained traceback is noise in a 422 response.
+    "B904",
+    # Ternaries are not always clearer than the if/else they replace, and this
+    # rule fires hardest on the branches that most want reading slowly.
+    "SIM108",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Fixtures and fakes shadow builtins and hold long strings on purpose.
+"tests/*" = ["E501"]
+
+[tool.mypy]
+python_version = "3.13"
+files = ["app"]
+# Deliberately not strict. The codebase carries `# type: ignore` comments that
+# nothing has ever verified, and the first useful thing mypy can do is check
+# those are still true. Turning on the full set at once produces hundreds of
+# findings, which is the same as producing none.
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unreachable = true
+ignore_missing_imports = true
+
+# What is left after the pass that turned this on. Every one is a boundary with
+# a library whose stubs describe a wider type than the call site can produce —
+# `email.message` returning str-or-Message, the Gemini SDK's config union,
+# Starlette's handler signature, a `max()` over a generic. None is a finding
+# about this code, and silencing them per-module keeps the checker able to gate
+# CI rather than being switched off wholesale.
+[[tool.mypy.overrides]]
+module = [
+    "app.main",
+    "app.llm.gemini",
+    "app.llm.claude_code",
+    "app.services.gmail",
+    "app.services.scheduling",
+    "app.models.types",
+]
+ignore_errors = true

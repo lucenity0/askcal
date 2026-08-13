@@ -15,8 +15,8 @@ unranked until a later sync.
 
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Literal
+from datetime import UTC, datetime
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -205,7 +205,7 @@ EXCERPT_CHARS = 1500
 
 def _email_payload(e: Email) -> dict:
     body = (e.body_text or e.snippet or "")[:EXCERPT_CHARS]
-    payload = {
+    payload: dict[str, Any] = {
         "gmail_id": e.gmail_id,
         "from": e.sender,
         "subject": e.subject,
@@ -256,7 +256,7 @@ def parse_deadline(value: str | None) -> datetime | None:
     except ValueError:
         return None
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
+        parsed = parsed.replace(tzinfo=UTC)
     return parsed
 
 

@@ -1,26 +1,26 @@
 """Regret formula tests. Every score must be reproducible from signals alone."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from app.services.classifier import EmailSignals
 from app.services.regret import compute_regret
 
-NOW = datetime(2026, 7, 4, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 7, 4, 12, 0, tzinfo=UTC)
 
 
 def make_signals(**overrides) -> EmailSignals:
-    base = dict(
-        gmail_id="x",
-        track="career",
-        sender_type="other",
-        consequence="none",
-        action_required=False,
-        deadline_utc=None,
-        estimated_minutes=None,
-        confidence=0.9,
-    )
+    base = {
+        "gmail_id": "x",
+        "track": "career",
+        "sender_type": "other",
+        "consequence": "none",
+        "action_required": False,
+        "deadline_utc": None,
+        "estimated_minutes": None,
+        "confidence": 0.9,
+    }
     base.update(overrides)
     return EmailSignals(**base)
 

@@ -8,7 +8,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import get_settings
-from app.core.errors import AskcalError, http_exception_handler, askcal_error_handler
+from app.core.crypto import encryption_configured
+from app.core.errors import AskcalError, askcal_error_handler, http_exception_handler
+from app.llm.registry import classifier_configured, classifier_unavailable_reason
 from app.routers import (
     accounts,
     auth,
@@ -19,13 +21,13 @@ from app.routers import (
     me,
     notes,
     routines,
-    settings as settings_router,
     tasks,
     today,
     tracks,
 )
-from app.core.crypto import encryption_configured
-from app.llm.registry import classifier_configured, classifier_unavailable_reason
+from app.routers import (
+    settings as settings_router,
+)
 from app.services.sync import sync_loop
 
 logger = logging.getLogger("askcal")

@@ -46,7 +46,7 @@ def test_open_day_schedules_sequentially_by_regret():
     assert slots[0]["task_id"] == tasks[1].id
     # no overlaps
     ranges = sorted(slot_range(s) for s in slots)
-    for (s1, e1), (s2, _) in zip(ranges, ranges[1:]):
+    for (_, e1), (s2, _) in zip(ranges, ranges[1:], strict=False):
         assert e1 <= s2
 
 

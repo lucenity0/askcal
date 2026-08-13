@@ -52,7 +52,7 @@ async def get_morning(user: CurrentUser, db: DbSession) -> DigestResponse:
     busy: list = []
     if token := calendar_token(user):
         try:
-            busy = await busy_blocks(token, now.date())
+            busy = await busy_blocks(token, now.date(), user.timezone)
         except Exception:  # noqa: BLE001 — logged upstream; never fails the digest
             busy = []
 

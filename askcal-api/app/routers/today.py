@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter
 from sqlalchemy import select
@@ -7,9 +7,9 @@ from sqlalchemy.orm import selectinload
 
 from app.deps import CurrentUser, DbSession
 from app.models import Task, TaskStatus
+from app.routers.tasks import due_by_today
 from app.schemas.today import PlanSlot, TaskOut, TodayResponse
 from app.services.accounts import calendar_token
-from app.routers.tasks import due_by_today
 from app.services.gcal import busy_blocks
 from app.services.scheduling import build_day_plan, humanize_due, user_today
 
@@ -48,7 +48,7 @@ async def get_today(user: CurrentUser, db: DbSession) -> TodayResponse:
 
     plan, unscheduled = build_day_plan(
         list(tasks), busy, today, user.timezone,
-        now=datetime.now(timezone.utc),
+        now=datetime.now(UTC),
     )
 
     def task_out(t: Task) -> TaskOut:

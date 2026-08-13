@@ -13,8 +13,9 @@ address; the address itself is not something they need read back to them.
 """
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects.postgresql import UUID
+
+from alembic import op
 
 revision = "0010"
 down_revision = "0009"

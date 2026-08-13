@@ -3,24 +3,22 @@
 import asyncio
 import datetime as dt
 import json
-from datetime import timezone
 
+from app.models import Email
 from app.services.classifier import (
-    EmailSignals,
     classify_batch,
     parse_deadline,
 )
-from app.models import Email
 
 
 def test_parse_deadline_iso_with_z():
     parsed = parse_deadline("2026-07-06T23:59:00Z")
-    assert parsed == dt.datetime(2026, 7, 6, 23, 59, tzinfo=timezone.utc)
+    assert parsed == dt.datetime(2026, 7, 6, 23, 59, tzinfo=dt.UTC)
 
 
 def test_parse_deadline_naive_assumed_utc():
     parsed = parse_deadline("2026-07-06T23:59:00")
-    assert parsed.tzinfo == timezone.utc
+    assert parsed.tzinfo == dt.UTC
 
 
 def test_parse_deadline_garbage_and_none():
@@ -86,7 +84,7 @@ def _email(gmail_id: str) -> Email:
         subject=f"subject {gmail_id}",
         snippet="body",
         body_text="body",
-        received_at=dt.datetime(2026, 8, 8, 9, 0, tzinfo=timezone.utc),
+        received_at=dt.datetime(2026, 8, 8, 9, 0, tzinfo=dt.UTC),
     )
 
 

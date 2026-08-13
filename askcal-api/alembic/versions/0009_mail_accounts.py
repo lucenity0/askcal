@@ -13,8 +13,9 @@ that cannot recover its own data is not a rollback.
 """
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects.postgresql import UUID
+
+from alembic import op
 
 revision = "0009"
 down_revision = "0008"

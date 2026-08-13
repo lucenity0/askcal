@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from urllib.parse import urlencode
 
 import jwt
@@ -32,7 +32,7 @@ async def _issue_refresh_token(db: DbSession, user: User) -> str:
         RefreshToken(
             user_id=user.id,
             token_hash=token_hash,
-            expires_at=datetime.now(timezone.utc)
+            expires_at=datetime.now(UTC)
             + timedelta(days=get_settings().refresh_token_ttl_days),
         )
     )
@@ -156,7 +156,7 @@ async def google_start(scheme: str = "askcal") -> RedirectResponse:
         {
             "scheme": scheme,
             "type": "oauth_state",
-            "exp": datetime.now(timezone.utc) + timedelta(minutes=10),
+            "exp": datetime.now(UTC) + timedelta(minutes=10),
         },
         s.jwt_secret,
         algorithm=s.jwt_algorithm,
@@ -222,7 +222,7 @@ async def refresh(body: RefreshRequest, db: DbSession) -> RefreshResponse:
     which shrinks a stolen token's life to "until the real client next refreshes"
     — and makes the theft visible when it happens.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     token = await db.scalar(
         select(RefreshToken).where(
             RefreshToken.token_hash == hash_refresh_token(body.refresh_token)
@@ -278,7 +278,7 @@ async def revoke(user: CurrentUser, db: DbSession) -> Response:
     await db.execute(
         update(RefreshToken)
         .where(RefreshToken.user_id == user.id, RefreshToken.revoked_at.is_(None))
-        .values(revoked_at=datetime.now(timezone.utc))
+        .values(revoked_at=datetime.now(UTC))
     )
     await db.commit()
     return Response(status_code=204)

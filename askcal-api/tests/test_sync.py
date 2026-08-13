@@ -14,7 +14,6 @@ database, which is what makes it worth running on every change.
 
 import asyncio
 import datetime as dt
-from datetime import timezone
 from types import SimpleNamespace
 
 import pytest
@@ -131,7 +130,7 @@ def test_the_attempt_is_stamped_even_when_every_mailbox_fails(wired):
     run(FakeSession(), u)
 
     assert u.last_sync_attempt_at is not None
-    assert u.last_sync_attempt_at <= dt.datetime.now(timezone.utc)
+    assert u.last_sync_attempt_at <= dt.datetime.now(dt.UTC)
 
 
 def test_the_failure_names_the_mailbox_and_what_went_wrong(wired):

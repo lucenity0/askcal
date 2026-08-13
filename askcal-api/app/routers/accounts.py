@@ -8,7 +8,7 @@ mailboxes.
 """
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import jwt
 from fastapi import APIRouter
@@ -80,7 +80,7 @@ async def start_link(user: CurrentUser, db: DbSession, scheme: str = "askcal") -
             "type": LINK_STATE_TYPE,
             "scheme": scheme,
             "user_id": str(user.id),
-            "exp": datetime.now(timezone.utc) + timedelta(minutes=LINK_STATE_TTL_MINUTES),
+            "exp": datetime.now(UTC) + timedelta(minutes=LINK_STATE_TTL_MINUTES),
         },
         s.jwt_secret,
         algorithm=s.jwt_algorithm,

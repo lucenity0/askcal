@@ -8,7 +8,7 @@ POST /auth/revoke can actually revoke them.
 import hashlib
 import secrets
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import jwt
 
@@ -17,7 +17,7 @@ from app.config import get_settings
 
 def create_access_token(user_id: uuid.UUID) -> str:
     s = get_settings()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload = {
         "sub": str(user_id),
         "iat": now,

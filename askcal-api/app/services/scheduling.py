@@ -23,10 +23,11 @@ DEFAULT_TASK_MINUTES = 60
 
 
 def user_today(tz_name: str) -> dt.date:
+    tz: dt.tzinfo
     try:
         tz = ZoneInfo(tz_name)
     except (KeyError, ValueError):
-        tz = dt.timezone.utc
+        tz = dt.UTC
     return dt.datetime.now(tz).date()
 
 
@@ -37,10 +38,11 @@ def user_now(tz_name: str) -> dt.datetime:
     — in UTC that boundary moves by hours and a late-evening deadline falls out
     of the day it belongs to.
     """
+    tz: dt.tzinfo
     try:
         tz = ZoneInfo(tz_name)
     except (KeyError, ValueError):
-        tz = dt.timezone.utc
+        tz = dt.UTC
     return dt.datetime.now(tz)
 
 
@@ -53,21 +55,23 @@ def local_day(when: dt.datetime, tz_name: str) -> dt.date:
     appeared on the day you chose *and* on the one before, which looked like a
     duplicate and was actually two views of one disagreement.
     """
+    tz: dt.tzinfo
     try:
         tz = ZoneInfo(tz_name)
     except (KeyError, ValueError):
-        tz = dt.timezone.utc
+        tz = dt.UTC
     if when.tzinfo is None:
-        when = when.replace(tzinfo=dt.timezone.utc)
+        when = when.replace(tzinfo=dt.UTC)
     return when.astimezone(tz).date()
 
 
 def local_midnight(tz_name: str) -> dt.datetime:
     """Start of the user's current day, as an aware datetime."""
+    tz: dt.tzinfo
     try:
         tz = ZoneInfo(tz_name)
     except (KeyError, ValueError):
-        tz = dt.timezone.utc
+        tz = dt.UTC
     return dt.datetime.combine(dt.datetime.now(tz).date(), dt.time.min, tzinfo=tz)
 
 
@@ -78,7 +82,7 @@ def humanize_due(due_at: dt.datetime | None, now: dt.datetime | None = None) -> 
     """
     if due_at is None:
         return None
-    now = now or dt.datetime.now(dt.timezone.utc)
+    now = now or dt.datetime.now(dt.UTC)
     delta = due_at - now
     overdue = delta.total_seconds() < 0
     secs = abs(delta.total_seconds())
@@ -169,10 +173,11 @@ def build_day_plan(
     up to 5 min), never in the past — a task added at 15:55 must not land
     in a 09:00 slot that already happened.
     """
+    tz: dt.tzinfo
     try:
         tz = ZoneInfo(tz_name)
     except (KeyError, ValueError):
-        tz = dt.timezone.utc
+        tz = dt.UTC
 
     window_start = day_start.hour * 60 + day_start.minute
     window_end = day_end.hour * 60 + day_end.minute
@@ -221,7 +226,7 @@ def build_day_plan(
 
     # free gaps = window minus merged (calendar busy + pinned tasks)
     free: list[tuple[int, int]] = []
-    cursor = window_start
+    cursor: int = window_start
     for b_start, b_end in _merge(busy_minutes):
         if b_start > cursor:
             free.append((cursor, b_start))

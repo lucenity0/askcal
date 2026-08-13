@@ -14,6 +14,7 @@ Two columns: when a pass last ran, and what went wrong if anything.
 """
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "0012"

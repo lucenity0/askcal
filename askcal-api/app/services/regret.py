@@ -9,7 +9,7 @@ module behind the same compute_regret() signature.
             × track weight × confidence dampener, clamped to 0–100
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.services.classifier import EmailSignals, parse_deadline
 
@@ -73,7 +73,7 @@ def compute_regret(
     track_weight: float = 1.0,
     now: datetime | None = None,
 ) -> int:
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
 
     score: float = (
         CONSEQUENCE_BASE[signals.consequence]

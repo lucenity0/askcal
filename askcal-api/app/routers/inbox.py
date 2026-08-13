@@ -1,5 +1,5 @@
 import datetime as dt
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, tzinfo
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, BackgroundTasks
@@ -9,6 +9,7 @@ from app.config import get_settings
 from app.core.errors import AskcalError
 from app.deps import CurrentUser, DbSession
 from app.models import Email, Track
+from app.routers.tasks import _task_full_out
 from app.schemas.inbox import (
     EmailOut,
     HandleRequest,
@@ -17,15 +18,14 @@ from app.schemas.inbox import (
     SnoozeResponse,
     SyncAccepted,
 )
-from app.routers.tasks import _task_full_out
-from app.services.triage import mail_need
 from app.schemas.tasks import TaskFullOut
+from app.services.accounts import has_connected_mailbox, token_for_email
 from app.services.autotask import build_task
 from app.services.gmail import mark_as_read
 from app.services.scheduling import local_midnight, user_today
 from app.services.sync import run_sync_for_user
-from app.services.accounts import has_connected_mailbox, token_for_email
 from app.services.tracks import find_track
+from app.services.triage import mail_need
 
 router = APIRouter(prefix="/api", tags=["inbox"])
 
@@ -39,7 +39,7 @@ async def get_inbox(user: CurrentUser, db: DbSession) -> InboxResponse:
     branch used to have no such bound, so a mail snoozed once came back every
     day forever and the inbox filled with months of it.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(dt.UTC)
     window_start = now - timedelta(days=get_settings().inbox_window_days)
     emails = (
         await db.scalars(
@@ -170,10 +170,11 @@ async def snooze_email(
 
     until = body.until
     if until is None:
+        tz: tzinfo
         try:
             tz = ZoneInfo(user.timezone)
         except (KeyError, ValueError):
-            tz = timezone.utc
+            tz = dt.UTC
         tomorrow = datetime.now(tz).date() + dt.timedelta(days=1)
         until = datetime.combine(tomorrow, dt.time(8, 0), tzinfo=tz)
 

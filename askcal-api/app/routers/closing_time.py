@@ -1,5 +1,5 @@
 import datetime as dt
-from datetime import datetime, timezone
+from datetime import datetime
 
 from fastapi import APIRouter
 from sqlalchemy import func, select, update
@@ -7,12 +7,12 @@ from sqlalchemy.orm import selectinload
 
 from app.deps import CurrentUser, DbSession
 from app.models import DayLog, Task, TaskStatus
+from app.routers.tasks import due_by_today
 from app.schemas.closing_time import (
     CarryForwardResponse,
     ClosingTimeRequest,
     ClosingTimeResponse,
 )
-from app.routers.tasks import due_by_today
 from app.schemas.today import TaskOut
 from app.services.scheduling import humanize_due, user_today
 
@@ -44,7 +44,7 @@ async def _open_state(
 async def closing_time(
     body: ClosingTimeRequest, user: CurrentUser, db: DbSession
 ) -> ClosingTimeResponse:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(dt.UTC)
 
     if body.pulled:
         await db.execute(

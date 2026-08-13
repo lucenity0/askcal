@@ -14,8 +14,9 @@ token revoked by signing out was not replaced, and reads differently.
 """
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects.postgresql import UUID
+
+from alembic import op
 
 revision = "0013"
 down_revision = "0012"

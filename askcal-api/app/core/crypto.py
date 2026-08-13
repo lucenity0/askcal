@@ -54,7 +54,7 @@ def encryption_configured() -> bool:
 
 
 def is_encrypted(value: str | None) -> bool:
-    return bool(value) and value.startswith(PREFIX)
+    return value is not None and value.startswith(PREFIX)
 
 
 def encrypt_secret(value: str | None) -> str | None:
@@ -81,7 +81,7 @@ def decrypt_secret(value: str | None) -> str | None:
     Rows written before the backfill are still plaintext and must keep working,
     so an unprefixed value is returned as-is rather than treated as corrupt.
     """
-    if not is_encrypted(value):
+    if value is None or not is_encrypted(value):
         return value
     fernet = _fernet()
     if fernet is None:

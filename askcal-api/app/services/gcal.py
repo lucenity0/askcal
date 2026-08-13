@@ -6,7 +6,7 @@ the single consent flow in gmail.py). Nothing here ever writes to Google.
 
 import logging
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -64,10 +64,11 @@ async def fetch_events(
     if cached and _time.time() - cached[0] < _EVENTS_TTL_SECONDS:
         return cached[1]
 
+    tz: tzinfo
     try:
         tz = ZoneInfo(tz_name)
     except (KeyError, ValueError):
-        tz = timezone.utc
+        tz = UTC
 
     access_token = await refresh_google_access_token(google_refresh_token)
     time_min = datetime.combine(start, time.min, tzinfo=tz)

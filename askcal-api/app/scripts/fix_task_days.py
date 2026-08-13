@@ -51,6 +51,8 @@ async def main(apply: bool) -> int:
             user: User | None = task.user
             if user is None:
                 continue
+            if task.scheduled_at is None:  # filtered in SQL; narrows for the checker
+                continue
             correct = local_day(task.scheduled_at, user.timezone)
             if task.scheduled_for == correct:
                 continue

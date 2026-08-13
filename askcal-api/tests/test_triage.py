@@ -9,7 +9,7 @@ import datetime as dt
 
 from app.services.triage import mail_need
 
-NOW = dt.datetime(2026, 8, 12, 9, 0, tzinfo=dt.timezone.utc)
+NOW = dt.datetime(2026, 8, 12, 9, 0, tzinfo=dt.UTC)
 
 
 def signals(**over):

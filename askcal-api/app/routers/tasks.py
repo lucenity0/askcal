@@ -1,6 +1,6 @@
 import datetime as dt
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Query
@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.errors import AskcalError
 from app.deps import CurrentUser, DbSession
-from app.models import Task, TaskStatus, Track
+from app.models import Task, TaskStatus
 from app.schemas.tasks import (
     TaskCreateRequest,
     TaskFullOut,
@@ -174,7 +174,7 @@ async def patch_task(
             raise AskcalError(422, "INVALID_STATUS", f"Unknown status '{body.status}'")
         task.status = status
         if status == TaskStatus.done:
-            task.completed_at = datetime.now(timezone.utc)
+            task.completed_at = datetime.now(dt.UTC)
         elif status == TaskStatus.carried:
             task.carried_count += 1
             # Move the day it lives on, not just the label. Marking it carried

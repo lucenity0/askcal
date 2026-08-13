@@ -11,13 +11,12 @@ app.services.classifier, so app/llm/ gains no edge back into app/services/.
 import json
 import logging
 import re
-from typing import Any, TypeVar
+from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
 logger = logging.getLogger("askcal.llm.structured")
 
-T = TypeVar("T", bound=BaseModel)
 
 _FENCE = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL)
 
@@ -93,7 +92,7 @@ def as_item_list(data: Any, *, key_field: str) -> list[dict]:
     return []
 
 
-def validate_items(
+def validate_items[T: BaseModel](
     items: list[dict],
     model: type[T],
     *,

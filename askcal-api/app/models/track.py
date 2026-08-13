@@ -1,10 +1,8 @@
-import enum
 import uuid
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Boolean,
-    Enum,
     Float,
     ForeignKey,
     Integer,

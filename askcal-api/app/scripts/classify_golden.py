@@ -44,7 +44,7 @@ def _as_email(case):
         subject=case.subject,
         body_text=case.body,
         snippet=case.body[:120],
-        received_at=dt.datetime.now(dt.timezone.utc),
+        received_at=dt.datetime.now(dt.UTC),
         account=SimpleNamespace(
             label="golden",
             email="golden@example",

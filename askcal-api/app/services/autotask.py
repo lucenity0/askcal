@@ -16,7 +16,7 @@ never consulted. They are now floors.
 """
 
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -58,7 +58,7 @@ def sanitize_deadline(
         return None
     s = get_settings()
     if received_at.tzinfo is None:
-        received_at = received_at.replace(tzinfo=timezone.utc)
+        received_at = received_at.replace(tzinfo=UTC)
 
     horizon = received_at + timedelta(days=s.deadline_max_horizon_days)
     floor = received_at - timedelta(days=s.deadline_max_overdue_days)
@@ -141,9 +141,7 @@ def should_auto_task(
         return False
     if signals.confidence < min_confidence:
         return False
-    if regret_score is not None and regret_score < min_regret:
-        return False
-    return True
+    return not (regret_score is not None and regret_score < min_regret)
 
 
 def build_task(
@@ -214,7 +212,6 @@ async def reconsider_auto_tasks(db: AsyncSession, user) -> int:
     Returns how many tasks were created.
     """
     from app.services.classifier import EmailSignals  # circular at module level
-
     from app.services.tracks import fallback_track, track_by_slug
 
     tracks = list(
@@ -236,7 +233,7 @@ async def reconsider_auto_tasks(db: AsyncSession, user) -> int:
 
     for email in candidates:
         try:
-            signals = EmailSignals(**email.signals)
+            signals = EmailSignals(**(email.signals or {}))
         except Exception:  # noqa: BLE001 — a stored shape we no longer parse
             continue
 
@@ -248,6 +245,10 @@ async def reconsider_auto_tasks(db: AsyncSession, user) -> int:
             track_row = fallback_track(tracks, getattr(email.account, "tracks", None))
         if not should_auto_task(signals, track_row, email.regret_score, user):
             continue
+        # should_auto_task returns False for a missing track; mypy cannot see
+        # through the predicate, and an assert here would crash a sync pass over
+        # a type annotation.
+        assert track_row is not None
         # Same dedup as the sync path: a mail already answered by a task must
         # not produce a second one just because a setting moved.
         if await open_task_exists_for_thread(db, email):

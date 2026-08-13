@@ -62,5 +62,5 @@ def _has_live_deadline(raw: str | None, now: dt.datetime | None) -> bool:
     except (ValueError, AttributeError):
         return False
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=dt.timezone.utc)
-    return parsed > (now or dt.datetime.now(dt.timezone.utc))
+        parsed = parsed.replace(tzinfo=dt.UTC)
+    return parsed > (now or dt.datetime.now(dt.UTC))

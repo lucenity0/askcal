@@ -1,0 +1,51 @@
+name: backend
+
+# Nothing has ever run these on push. The suite is deliberately database-free,
+# so this needs no services and finishes in seconds — which is the only reason
+# a check like this survives contact with a real project.
+on:
+  push:
+    branches: [main]
+    paths: ["askcal-api/**", ".github/workflows/backend.yml"]
+  pull_request:
+    paths: ["askcal-api/**", ".github/workflows/backend.yml"]
+
+defaults:
+  run:
+    working-directory: askcal-api
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # From .python-version, so CI cannot drift onto a different interpreter
+      # than the Dockerfile and the developer machine.
+      - run: uv python install
+
+      - run: uv sync --frozen --all-groups
+
+      # Ordered cheapest first: lint fails in a second, types in a few, tests
+      # last. A red build should say what is wrong before you finish reading it.
+      - name: ruff
+        run: uv run ruff check .
+
+      - name: mypy
+        run: uv run mypy
+
+      - name: tests
+        run: uv run pytest -q
+
+# Deliberately absent: `ruff format --check`, which would rewrite 59 files whose
+# layout is hand-set and often load-bearing — aligned tables of colours, prompt
+# text kept at a readable measure. Adopting a formatter is a decision about the
+# whole codebase, not a line in a CI file.
+#
+# Also absent: `alembic check`, which needs a live database. This suite's value
+# is that it needs none, and adding Postgres to run one check would cost every
+# push several times its runtime.

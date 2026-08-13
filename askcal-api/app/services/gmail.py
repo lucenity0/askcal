@@ -13,7 +13,7 @@ import logging
 import re
 import secrets
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from urllib.parse import urlencode
 
 import httpx
@@ -289,7 +289,7 @@ def parse_message(msg: dict) -> GmailMessage:
         sender=headers.get("from"),
         snippet=msg.get("snippet"),
         body_text=extract_body_text(payload),
-        received_at=datetime.fromtimestamp(received_ms / 1000, tz=timezone.utc),
+        received_at=datetime.fromtimestamp(received_ms / 1000, tz=UTC),
         # Keep the raw envelope minus bulky part data — body_text already holds
         # the extracted text; full re-fetch by id is always possible.
         raw={k: v for k, v in msg.items() if k != "payload"},

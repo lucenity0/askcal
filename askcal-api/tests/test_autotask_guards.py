@@ -6,7 +6,6 @@ the deadline sanitising, and deadline-driven scheduling.
 """
 
 import datetime as dt
-from datetime import timezone
 from types import SimpleNamespace
 
 import pytest
@@ -19,7 +18,7 @@ from app.services.autotask import (
 )
 from app.services.classifier import EmailSignals
 
-RECEIVED = dt.datetime(2026, 8, 8, 9, 0, tzinfo=timezone.utc)
+RECEIVED = dt.datetime(2026, 8, 8, 9, 0, tzinfo=dt.UTC)
 TODAY = dt.date(2026, 8, 8)
 
 
@@ -117,7 +116,7 @@ def test_automated_senders_still_task():
 
 def test_a_plausible_deadline_survives():
     got = sanitize_deadline("2026-08-20T23:59:00Z", RECEIVED)
-    assert got == dt.datetime(2026, 8, 20, 23, 59, tzinfo=timezone.utc)
+    assert got == dt.datetime(2026, 8, 20, 23, 59, tzinfo=dt.UTC)
 
 
 def test_a_hallucinated_far_future_deadline_is_dropped():
@@ -152,18 +151,18 @@ def test_no_deadline_schedules_for_today():
 
 def test_a_distant_deadline_does_not_land_on_today():
     """Everything used to be scheduled_for=today, inflating the day's plan."""
-    due = dt.datetime(2026, 8, 29, 23, 59, tzinfo=timezone.utc)
+    due = dt.datetime(2026, 8, 29, 23, 59, tzinfo=dt.UTC)
     assert scheduled_day_for(due, TODAY) == dt.date(2026, 8, 28)
 
 
 def test_an_imminent_deadline_lands_on_today():
-    due = dt.datetime(2026, 8, 9, 12, 0, tzinfo=timezone.utc)
+    due = dt.datetime(2026, 8, 9, 12, 0, tzinfo=dt.UTC)
     assert scheduled_day_for(due, TODAY) == TODAY
 
 
 def test_an_overdue_deadline_lands_on_today_not_in_the_past():
     """Overdue work belongs on today's list, not the day it was missed."""
-    due = dt.datetime(2026, 8, 1, 12, 0, tzinfo=timezone.utc)
+    due = dt.datetime(2026, 8, 1, 12, 0, tzinfo=dt.UTC)
     assert scheduled_day_for(due, TODAY) == TODAY
 
 
@@ -224,7 +223,7 @@ def test_a_deadline_lands_on_the_users_day_not_utcs():
     day from UTC filed the task a day earlier than the app had already drawn it,
     so one task appeared on both days and read as a duplicate.
     """
-    due = dt.datetime(2026, 8, 19, 19, 30, tzinfo=timezone.utc)  # 20th 01:00 IST
+    due = dt.datetime(2026, 8, 19, 19, 30, tzinfo=dt.UTC)  # 20th 01:00 IST
     assert scheduled_day_for(due, dt.date(2026, 8, 1), "Asia/Kolkata") == dt.date(
         2026, 8, 19
     )
@@ -235,7 +234,7 @@ def test_a_deadline_lands_on_the_users_day_not_utcs():
 def test_local_day_reads_an_instant_where_the_user_is():
     from app.services.scheduling import local_day
 
-    late = dt.datetime(2026, 8, 19, 20, 0, tzinfo=timezone.utc)  # 20th 01:30 IST
+    late = dt.datetime(2026, 8, 19, 20, 0, tzinfo=dt.UTC)  # 20th 01:30 IST
     assert local_day(late, "Asia/Kolkata") == dt.date(2026, 8, 20)
     assert local_day(late, "UTC") == dt.date(2026, 8, 19)
 
@@ -243,5 +242,5 @@ def test_local_day_reads_an_instant_where_the_user_is():
 def test_an_unknown_timezone_falls_back_to_utc_rather_than_raising():
     from app.services.scheduling import local_day
 
-    when = dt.datetime(2026, 8, 19, 20, 0, tzinfo=timezone.utc)
+    when = dt.datetime(2026, 8, 19, 20, 0, tzinfo=dt.UTC)
     assert local_day(when, "Mars/Olympus") == dt.date(2026, 8, 19)

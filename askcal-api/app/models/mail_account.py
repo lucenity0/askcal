@@ -9,7 +9,6 @@ from sqlalchemy import (
     ForeignKey,
     String,
     Table,
-    Text,
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID

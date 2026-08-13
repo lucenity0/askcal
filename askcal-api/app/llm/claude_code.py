@@ -190,7 +190,7 @@ class ClaudeCodeProvider:
                 out_b, err_b = await asyncio.wait_for(
                     proc.communicate(user.encode()), timeout=self._timeout
                 )
-            except (asyncio.TimeoutError, TimeoutError):
+            except TimeoutError:
                 # wait_for cancels communicate() but does NOT reap the child.
                 # Without this kill a wedged `claude` survives for the container's
                 # lifetime, keeps burning quota, and outlives the temp directory
