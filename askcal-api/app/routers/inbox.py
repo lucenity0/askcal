@@ -152,7 +152,8 @@ async def handle_email(
     # half the tasks Askcal creates.
     signals = email.signals or {}
     task = build_task(
-        email, signals.get("deadline_utc"), track, user_today(user.timezone)
+        email, signals.get("deadline_utc"), track,
+        user_today(user.timezone), user.timezone
     )
     email.handled = True
     db.add(task)

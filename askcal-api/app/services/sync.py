@@ -259,7 +259,11 @@ async def _classify_pending(db: AsyncSession, user: User) -> tuple[int, int]:
             # scratch next pass, paying for the same LLM call twice.
             try:
                 async with db.begin_nested():
-                    db.add(build_task(email, signals.deadline_utc, track_row, today))
+                    db.add(
+                        build_task(
+                            email, signals.deadline_utc, track_row, today, user.timezone
+                        )
+                    )
             except IntegrityError:
                 logger.info(
                     "task already exists for %s — a concurrent pass won the race",
@@ -289,27 +293,52 @@ async def syncable_accounts(db: AsyncSession, user: User) -> list[MailAccount]:
     return list(rows)
 
 
+async def _record_sync_error(db: AsyncSession, user: User, message: str) -> None:
+    """Keep the reason where the settings screen can read it.
+
+    Truncated because this is a line of UI copy, not a log: a stack-trace-length
+    string in a settings row is unreadable and tells the user nothing the first
+    clause did not.
+    """
+    user.last_sync_error = message[:300]
+    await db.commit()
+
+
 async def sync_user(db: AsyncSession, user: User) -> SyncResult:
     """Full pass for one user, across every mailbox they have connected.
 
     Raises GMAIL_DISCONNECTED only when there is nothing to pull at all.
     """
+    # Stamped before anything can fail, so "when did this last run" is answerable
+    # even when the answer is "it ran and could not reach your mail". The old
+    # code only recorded success, so a failing sync looked identical to one that
+    # had stopped running altogether.
+    user.last_sync_attempt_at = datetime.now(timezone.utc)
+    user.last_sync_error = None
+    await db.commit()
+
     accounts = await syncable_accounts(db, user)
     if not accounts:
+        await _record_sync_error(db, user, "No mailbox connected")
         raise AskcalError(401, "GMAIL_DISCONNECTED", "No Gmail connection for this account")
 
     result = SyncResult()
+    failures: list[str] = []
     for account in accounts:
         try:
             fetched = await _store_new_messages(db, user, account)
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 — recorded, then carry on
             # One dead mailbox must not stop the others. A revoked token on a
             # college address should cost you that inbox, not your whole day.
             await db.rollback()
             logger.exception("fetch failed for %s — continuing", account.email)
+            failures.append(f"{account.email}: {type(exc).__name__}")
             continue
         result.fetched += fetched.fetched
         result.new += fetched.new
+
+    if failures:
+        await _record_sync_error(db, user, "; ".join(failures))
 
     # Classification is per-user, not per-mailbox: it runs over everything
     # unclassified in one pass, so a batch can span accounts and the pass limit
@@ -354,7 +383,7 @@ async def sync_all_users() -> None:
         for user in users:
             try:
                 await sync_user(db, user)
-            except Exception:
+            except Exception as exc:
                 # The rollback is the point. One user raising mid-transaction
                 # used to leave the shared session in a failed state, so every
                 # subsequent user died with PendingRollbackError — one bad
@@ -362,6 +391,14 @@ async def sync_all_users() -> None:
                 # below read as though the rest were fine.
                 await db.rollback()
                 logger.exception("sync failed for %s — continuing", user.email)
+                # Recorded on the user, not only in the log. A failure only the
+                # container can see is one the person it happened to cannot act
+                # on — which is how a stale timestamp came to be the only
+                # symptom of a sync that had been failing for an hour.
+                try:
+                    await _record_sync_error(db, user, str(exc) or type(exc).__name__)
+                except Exception:
+                    await db.rollback()
 
 
 async def sync_loop() -> None:

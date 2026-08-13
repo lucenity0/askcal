@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.models import Email, Task, TaskStatus, Track, TrackKey
 from app.services.classifier import parse_deadline
+from app.services.scheduling import local_day
 
 logger = logging.getLogger("askcal.autotask")
 
@@ -71,7 +72,9 @@ def sanitize_deadline(
     return parsed
 
 
-def scheduled_day_for(due_at: datetime | None, today: date) -> date:
+def scheduled_day_for(
+    due_at: datetime | None, today: date, tz_name: str = "UTC"
+) -> date:
     """The day this task belongs on.
 
     Everything used to land on today unconditionally, so a deadline three weeks
@@ -83,7 +86,10 @@ def scheduled_day_for(due_at: datetime | None, today: date) -> date:
     if due_at is None:
         return today
     lead = timedelta(days=get_settings().task_schedule_lead_days)
-    return max(today, (due_at.astimezone(timezone.utc).date() - lead))
+    # The deadline's day where the user is, not in UTC. `today` is already
+    # their local day, so comparing it against a UTC date put work a day out
+    # for anyone far enough east or west.
+    return max(today, local_day(due_at, tz_name) - lead)
 
 
 def auto_task_gates(user) -> tuple[float, int]:
@@ -145,6 +151,7 @@ def build_task(
     deadline_utc: str | None,
     track_row: Track,
     today: date,
+    tz_name: str = "UTC",
 ) -> Task:
     """The daily-pipeline payoff: an actionable classified email becomes a task.
 
@@ -162,7 +169,7 @@ def build_task(
             round(email.estimated_minutes / 60, 1) if email.estimated_minutes else None
         ),
         due_at=due_at,
-        scheduled_for=scheduled_day_for(due_at, today),
+        scheduled_for=scheduled_day_for(due_at, today, tz_name),
     )
 
 
@@ -244,7 +251,7 @@ async def reconsider_auto_tasks(db: AsyncSession, user) -> int:
         if await open_task_exists_for_thread(db, email):
             continue
 
-        db.add(build_task(email, signals.deadline_utc, track_row, today))
+        db.add(build_task(email, signals.deadline_utc, track_row, today, user.timezone))
         email.handled = True
         created += 1
 

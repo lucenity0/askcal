@@ -35,7 +35,14 @@ class User(TimestampMixin, Base):
     # TODO: encrypt at rest (#19).
     google_refresh_token: Mapped[str | None] = mapped_column(Text)
     timezone: Mapped[str] = mapped_column(String(64), default="UTC")
+    # When mail last actually arrived.
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # When a pass last ran, and what went wrong if anything. Separate from the
+    # line above because "the sync is not running" and "the sync ran and could
+    # not reach your mailbox" are different problems with different fixes, and
+    # one timestamp could not tell them apart.
+    last_sync_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_sync_error: Mapped[str | None] = mapped_column(Text)
     # Profile setting from the spec ("carry-forward sensitivity"). Not yet
     # wired into the brew engine — the JS source of truth uses a fixed penalty.
     carry_forward_sensitivity: Mapped[float] = mapped_column(Float, default=1.0)

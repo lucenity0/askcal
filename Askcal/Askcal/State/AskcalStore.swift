@@ -444,6 +444,10 @@ final class AskcalStore {
         let ud = UserDefaults.standard
         if let d = ud.data(forKey: Self.localTasksKey),
            let t = try? JSONDecoder().decode([AskcalTask].self, from: d) { tasks = t }
+        // Written since notes existed but never read back, so a signed-out
+        // session lost every page it had written the moment the app restarted.
+        if let d = ud.data(forKey: Self.localNotesKey),
+           let n = try? JSONDecoder().decode([String: DayNote].self, from: d) { notes = n }
     }
 
     /// Persist the offline session so a rebuild/relaunch keeps it. No-op when
@@ -774,10 +778,18 @@ final class AskcalStore {
         // the user made them. Falls back to the first one that is on.
         let slug = track ?? defaultTrack?.id ?? ""
 
+        // Always sent, never left for the server to infer. When it was omitted
+        // the server derived the day from the pinned time in UTC while this row
+        // used the local one, so a task pinned late in the evening was filed on
+        // two different days at once and read as a duplicate.
+        let day = scheduledFor
+            ?? scheduledAt.map { Calendar.current.startOfDay(for: $0) }
+            ?? Calendar.current.startOfDay(for: .now)
+
         let optimistic = AskcalTask(
             id: UUID(), track: slug, title: trimmed, meta: nil,
             regretScore: QuickAdd.regretScore, estimatedHours: nil,
-            scheduledFor: scheduledFor ?? scheduledAt,
+            scheduledFor: day,
             scheduledAt: scheduledAt, dueAt: dueAt
         )
         if isToday(optimistic.scheduledFor) { tasks.append(optimistic) }
@@ -788,7 +800,7 @@ final class AskcalStore {
             do {
                 let saved = try await APIClient.shared.createTask(
                     title: trimmed, track: slug,
-                    scheduledAt: scheduledAt, dueAt: dueAt, scheduledFor: scheduledFor
+                    scheduledAt: scheduledAt, dueAt: dueAt, scheduledFor: day
                 )
                 // swap the placeholder for the server's row: real id, real score
                 replace(placeholder: optimistic.id, with: saved)

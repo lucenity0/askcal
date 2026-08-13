@@ -24,7 +24,13 @@ class ClassifierStatus(CamelModel):
 class SyncStatus(CamelModel):
     interval_minutes: int
     window_days: int
+    # When mail last actually arrived.
     last_synced_at: dt.datetime | None = None
+    # When a pass last ran, and why it failed if it did. "Last run" used to show
+    # last_synced_at, so a sync running on time and failing was indistinguishable
+    # from one that had stopped running an hour ago.
+    last_attempt_at: dt.datetime | None = None
+    last_error: str | None = None
     enabled: bool
 
 

@@ -151,9 +151,17 @@ struct SettingsPage: View {
                 Rubric("sync")
                 factRow("Every", "\(sync.intervalMinutes) min")
                 factRow("Looks back", "\(sync.windowDays) days")
-                factRow("Last run", sync.lastSyncedAt.map {
-                    $0.formatted(.relative(presentation: .named))
-                } ?? "never")
+                // Two facts, because they answer different questions. "Last run"
+                // said when mail last arrived, so a sync running on time and
+                // failing looked exactly like one that had stopped an hour ago.
+                factRow("Last run", relative(sync.lastAttemptAt))
+                factRow("Last mail in", relative(sync.lastSyncedAt))
+                if let problem = sync.lastError {
+                    Text(problem)
+                        .font(BookType.body(13))
+                        .foregroundStyle(book.inkDim)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 Button("Sync now") { Task { await store.syncInbox() } }
                     .buttonStyle(PillButtonStyle(filled: false))
                 PageRule()
@@ -627,6 +635,12 @@ struct SettingsPage: View {
             savingName = false
             Haptics.tick()
         }
+    }
+
+    /// "never" rather than a dash, because an empty timestamp here is a fact
+    /// worth reading as one.
+    private func relative(_ date: Date?) -> String {
+        date.map { $0.formatted(.relative(presentation: .named)) } ?? "never"
     }
 
     private func loadAccounts() async {

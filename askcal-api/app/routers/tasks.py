@@ -16,7 +16,7 @@ from app.schemas.tasks import (
     TaskPatchRequest,
     TasksResponse,
 )
-from app.services.scheduling import humanize_due, user_today
+from app.services.scheduling import humanize_due, local_day, user_today
 from app.services.tracks import find_track
 
 router = APIRouter(prefix="/api", tags=["tasks"])
@@ -110,7 +110,7 @@ async def create_task(
     scheduled_for = body.scheduled_for
     if scheduled_for is None:
         scheduled_for = (
-            body.scheduled_at.astimezone(timezone.utc).date()
+            local_day(body.scheduled_at, user.timezone)
             if body.scheduled_at
             else user_today(user.timezone)
         )
@@ -192,8 +192,9 @@ async def patch_task(
     if "scheduled_for" in fields and body.scheduled_for is not None:
         task.scheduled_for = body.scheduled_for
     elif "scheduled_at" in fields and body.scheduled_at is not None:
-        # keep the day bucket consistent with a newly pinned time
-        task.scheduled_for = body.scheduled_at.astimezone(timezone.utc).date()
+        # Keep the day bucket consistent with a newly pinned time — in the
+        # user's timezone, not UTC.
+        task.scheduled_for = local_day(body.scheduled_at, user.timezone)
 
     await db.commit()
     return _task_full_out(task)

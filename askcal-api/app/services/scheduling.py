@@ -44,6 +44,24 @@ def user_now(tz_name: str) -> dt.datetime:
     return dt.datetime.now(tz)
 
 
+def local_day(when: dt.datetime, tz_name: str) -> dt.date:
+    """Which of the user's days an instant falls on.
+
+    Deriving this in UTC put work on the wrong day for anyone east or west of
+    it. At UTC+5:30 a task pinned to 01:00 is still yesterday in UTC, so the
+    server filed it a day earlier than the app had already drawn it — the task
+    appeared on the day you chose *and* on the one before, which looked like a
+    duplicate and was actually two views of one disagreement.
+    """
+    try:
+        tz = ZoneInfo(tz_name)
+    except (KeyError, ValueError):
+        tz = dt.timezone.utc
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=dt.timezone.utc)
+    return when.astimezone(tz).date()
+
+
 def local_midnight(tz_name: str) -> dt.datetime:
     """Start of the user's current day, as an aware datetime."""
     try:

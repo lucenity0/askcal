@@ -21,6 +21,7 @@ import SwiftUI
 struct ContentView: View {
     @Environment(AskcalStore.self) private var store
     @Environment(\.webAuthenticationSession) private var webAuth
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage("themeMode") private var themeRaw = ThemeMode.storageDefault
 
     @State private var tab: PageDestination = .today
@@ -103,6 +104,14 @@ struct ContentView: View {
             showGreeting = true
             await store.bootstrap()
             await NotificationManager.refreshSchedules(dayClosed: store.dayClosed)
+        }
+        // Coming back to the app refetches. The server syncs on its own every
+        // few minutes, but nothing told the app about it — so mail that had
+        // arrived and been ranked an hour ago was simply not on screen until
+        // something was pulled by hand, which read as the sync being broken.
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active, didLaunch else { return }
+            Task { await store.refreshAll() }
         }
     }
 

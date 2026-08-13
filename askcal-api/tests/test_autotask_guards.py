@@ -212,3 +212,36 @@ def test_raising_confidence_stops_a_borderline_mail_auto_tasking():
     assert not should_auto_task(
         signals, track_row, 60, _User(auto_task_min_confidence=0.95)
     )
+
+
+# ── the day a task lands on, in the user's timezone ────────────────────────
+
+
+def test_a_deadline_lands_on_the_users_day_not_utcs():
+    """The duplicate-on-the-previous-day bug.
+
+    At UTC+5:30, 01:00 local on the 20th is still the 19th in UTC. Deriving the
+    day from UTC filed the task a day earlier than the app had already drawn it,
+    so one task appeared on both days and read as a duplicate.
+    """
+    due = dt.datetime(2026, 8, 19, 19, 30, tzinfo=timezone.utc)  # 20th 01:00 IST
+    assert scheduled_day_for(due, dt.date(2026, 8, 1), "Asia/Kolkata") == dt.date(
+        2026, 8, 19
+    )
+    # Same instant, read in UTC, is the day before.
+    assert scheduled_day_for(due, dt.date(2026, 8, 1), "UTC") == dt.date(2026, 8, 18)
+
+
+def test_local_day_reads_an_instant_where_the_user_is():
+    from app.services.scheduling import local_day
+
+    late = dt.datetime(2026, 8, 19, 20, 0, tzinfo=timezone.utc)  # 20th 01:30 IST
+    assert local_day(late, "Asia/Kolkata") == dt.date(2026, 8, 20)
+    assert local_day(late, "UTC") == dt.date(2026, 8, 19)
+
+
+def test_an_unknown_timezone_falls_back_to_utc_rather_than_raising():
+    from app.services.scheduling import local_day
+
+    when = dt.datetime(2026, 8, 19, 20, 0, tzinfo=timezone.utc)
+    assert local_day(when, "Mars/Olympus") == dt.date(2026, 8, 19)

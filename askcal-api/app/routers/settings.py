@@ -69,6 +69,8 @@ def _build(user) -> SettingsResponse:
             interval_minutes=s.sync_interval_minutes,
             window_days=_pref(user, "inbox_window_days", s.inbox_window_days),
             last_synced_at=user.last_synced_at,
+            last_attempt_at=user.last_sync_attempt_at,
+            last_error=user.last_sync_error,
             enabled=s.sync_enabled,
         ),
         auto_task=AutoTaskPrefs(

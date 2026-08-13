@@ -355,6 +355,11 @@ struct AppSettings: Codable, Equatable {
         var intervalMinutes: Int
         var windowDays: Int
         var lastSyncedAt: Date?
+        /// When a pass last ran, and why it failed if it did. Separate from
+        /// `lastSyncedAt`, which is when mail last actually arrived — one
+        /// timestamp could not tell "not running" from "running and failing".
+        var lastAttemptAt: Date?
+        var lastError: String?
         var enabled: Bool
     }
 
