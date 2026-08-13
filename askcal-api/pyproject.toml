@@ -1,6 +1,6 @@
 [project]
 name = "askcal-api"
-version = "0.1.0"
+version = "2.0.0"
 description = "Askcal backend — context-aware daily scheduler for student freelancers"
 # 3.13, matching .python-version, the Dockerfile and the README. It said 3.12,
 # which meant `uv sync` on a 3.12 machine produced an environment nothing else
