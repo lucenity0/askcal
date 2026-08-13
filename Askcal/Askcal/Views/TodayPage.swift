@@ -252,6 +252,7 @@ struct TodayPage: View {
                         TimelineRow(
                             task: task,
                             time: rowTime(task),
+                            showsTime: showsTimeColumn,
                             isFirst: index == 0,
                             isLast: index == entries.count - 1,
                             toggle: {
@@ -287,14 +288,15 @@ struct TodayPage: View {
     /// does not care about status. Same column, same day, some rows timed and
     /// some not, for a reason nothing on screen could explain.
     private func rowTime(_ task: AskcalTask) -> String? {
-        if task.status == .done, let finished = task.completedAt {
-            return Self.clock(finished)
-        }
-        if let slot = store.slot(for: task)?.time, let label = Self.clock(serverTime: slot) {
-            return label
-        }
-        if let pinned = task.scheduledAt { return Self.clock(pinned) }
-        return nil
+        guard task.status == .done, let finished = task.completedAt else { return nil }
+        return Self.clock(finished)
+    }
+
+    /// True once anything in the day is finished. The column appears for the
+    /// whole list at that point, so the marks stay in one line instead of some
+    /// rows indenting and others not.
+    private var showsTimeColumn: Bool {
+        entries.contains { $0.status == .done && $0.completedAt != nil }
     }
 
     /// One column, one format. The server's plan slots are "HH:MM", so
@@ -311,17 +313,6 @@ struct TodayPage: View {
         date.formatted(date: .omitted, time: .shortened)
     }
 
-    /// The plan's `"HH:MM"` in that same format, so a server slot and a time
-    /// picked on the phone cannot read differently for the same hour.
-    private static func clock(serverTime: String) -> String? {
-        let parts = serverTime.split(separator: ":").compactMap { Int($0) }
-        guard parts.count == 2 else { return nil }
-        var components = DateComponents()
-        components.hour = parts[0]
-        components.minute = parts[1]
-        guard let date = Calendar.current.date(from: components) else { return nil }
-        return clock(date)
-    }
 
     // MARK: - Connect / errors
 

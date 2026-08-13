@@ -261,7 +261,9 @@ struct CalendarView: View {
             ForEach(Array(entries.enumerated()), id: \.element.id) { index, task in
                 TimelineRow(
                     task: task,
-                    time: store.slot(for: task)?.time ?? pinnedTime(task),
+                    // Same rule as the day page: the finish time, or nothing.
+                    time: rowTime(task),
+                    showsTime: showsTimeColumn,
                     isFirst: index == 0,
                     isLast: index == entries.count - 1,
                     toggle: {
@@ -276,9 +278,18 @@ struct CalendarView: View {
         }
     }
 
-    private func pinnedTime(_ task: AskcalTask) -> String? {
-        guard let at = task.scheduledAt else { return nil }
-        return at.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute())
+    /// Same rule as the day page: when it was finished, or nothing.
+    ///
+    /// This showed a raw `"09:00"` slot from the plan next to a pinned time
+    /// rendered as `"08:15"` — which was 8:15 *pm* with the marker deleted —
+    /// so one column carried two clocks and neither said which.
+    private func rowTime(_ task: AskcalTask) -> String? {
+        guard task.status == .done, let finished = task.completedAt else { return nil }
+        return finished.formatted(date: .omitted, time: .shortened)
+    }
+
+    private var showsTimeColumn: Bool {
+        entries.contains { $0.status == .done && $0.completedAt != nil }
     }
 
     // MARK: - Data

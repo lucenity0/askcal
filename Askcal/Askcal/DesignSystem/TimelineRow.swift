@@ -19,7 +19,13 @@ import SwiftUI
 
 struct TimelineRow: View {
     let task: AskcalTask
+    /// When this was finished, and nothing else. A planned time belongs to a
+    /// plan that keeps changing; the one moment worth recording against a row
+    /// is the moment it was done.
     var time: String?
+    /// Whether the list this row belongs to reserves the time column. Decided
+    /// by the list, not the row, so every mark in it lines up.
+    var showsTime = false
     var isFirst = false
     var isLast = false
     var toggle: () -> Void
@@ -32,19 +38,22 @@ struct TimelineRow: View {
     private var done: Bool { task.status == .done }
 
     var body: some View {
-        HStack(alignment: .top, spacing: Space.lg) {
-            // Dropped entirely when there is no time, rather than shown as a
-            // dash. Tracks lists work that has no hour attached to it, and a
-            // column of placeholders is worse than no column.
-            if let time {
-                Text(time)
-                    .font(BookType.meta(12))
+        HStack(alignment: .top, spacing: Space.md) {
+            // The column is reserved for the whole list or for none of it, so
+            // every mark sits at the same x. Dropping it per row let some rows
+            // start at the checkbox and others 66pt further in, which is what
+            // made a list of mixed rows look ragged.
+            if showsTime {
+                Text(time ?? "")
+                    .font(BookType.meta(11))
                     .foregroundStyle(book.inkSub)
-                    // Wide enough for "10:30 AM". It was 44pt, sized for a
-                    // bare "09:00" back when the column dropped the AM/PM.
-                    .frame(width: 66, alignment: .leading)
                     .lineLimit(1)
-                    .padding(.top, Space.lg)
+                    .frame(width: 56, alignment: .trailing)
+                    // Centred against the check rather than pushed down by a
+                    // guessed padding: same height as the mark's own target,
+                    // so the two line up whatever the row's height turns out
+                    // to be.
+                    .frame(height: 44)
             }
 
             rail
