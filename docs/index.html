@@ -3,510 +3,1038 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Askcal — your inbox, ranked by regret</title>
-<meta name="description" content="A daily scheduler that reads your mail and ranks it by what ignoring it costs you, not by when it arrived.">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>📓</text></svg>">
+<title>Askcal — a scheduler that ranks mail by consequence</title>
+<meta name="description" content="Askcal reads your mail, scores each message by what ignoring it costs rather than when it arrived, and builds a day around what is left.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%23F2F1ED'/><rect x='3' y='3' width='10' height='1.5' fill='%2316171A'/><rect x='3' y='7' width='10' height='1.5' fill='%2316171A'/><rect x='3' y='11' width='6' height='1.5' fill='%23BB5B38'/></svg>">
 
-<meta property="og:title" content="Askcal — your inbox, ranked by regret">
-<meta property="og:description" content="Most mail tools sort by when things arrived. Nothing arrives in order of what it costs you.">
-<meta property="og:type" content="website">
+<link rel="stylesheet" href="askcal.css">
 
 <script>
-  // Marks the page as able to animate. The hidden-then-revealed state below is
-  // scoped to this class, so with scripts blocked nothing is ever hidden —
-  // otherwise the whole page renders blank and the failure is total.
+  /* Marks the page as able to run its controls. Everything that only works
+     with scripts is hidden or defused behind this class, so with them
+     blocked the page offers nothing it cannot do. */
   document.documentElement.className += " js";
+
+  /* Resolved before first paint: a stored Night arriving after it is a white
+     flash in a dark room. */
+  try {
+    var t = localStorage.getItem("askcal-theme");
+    if (t === "day" || t === "night") document.documentElement.dataset.theme = t;
+  } catch (e) { /* private mode — fall through to the system preference */ }
 </script>
-
-<style>
-/* ── The palette is the app's own, from DesignSystem/Paper.swift. Day is warm
-   paper with a red margin rule; night is the blackboard the app switches to.
-   Both are defined here rather than derived, so the page and the product
-   cannot drift apart the way a screenshot does. ───────────────────────── */
-:root {
-  --paper:   #F5F0E6;
-  --recess:  #E8E1D3;
-  --card:    #FBF8F1;
-  --rule:    #CFC5AE;
-  --rule-hi: #B3A98F;
-  --margin:  #B4654A;
-  --ink:     #2A2724;
-  --ink-dim: #57514A;
-  --ink-sub: #6A635A;
-
-  --serif: ui-serif, "New York", Iowan Old Style, Georgia, serif;
-  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
-
-  --measure: 34rem;
-  --gutter: clamp(1.25rem, 5vw, 3.5rem);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --paper:   #16191B;
-    --recess:  #101314;
-    --card:    #1E2224;
-    --rule:    #2E3336;
-    --rule-hi: #454B4E;
-    --margin:  #9C5B47;
-    --ink:     #E9ECE9;
-    --ink-dim: #B2B8B5;
-    --ink-sub: #949B98;
-  }
-}
-
-* { box-sizing: border-box; }
-
-html { scroll-behavior: smooth; }
-@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
-
-body {
-  margin: 0;
-  background: var(--paper);
-  color: var(--ink);
-  font-family: var(--serif);
-  font-size: 1.0625rem;
-  line-height: 1.65;
-  -webkit-font-smoothing: antialiased;
-}
-
-/* Anything measured — a time, a count, a score — is mono. The whole app keeps
-   this rule, so a number always looks like a number. */
-.mono, code, .kicker, .stat, .row-time, .chip { font-family: var(--mono); }
-
-a { color: inherit; }
-
-.skip {
-  position: absolute; left: -9999px;
-  background: var(--card); color: var(--ink);
-  padding: .75rem 1rem; border: 2px solid var(--ink);
-}
-.skip:focus { left: 1rem; top: 1rem; z-index: 99; }
-
-/* ── The sheet ────────────────────────────────────────────────────────── */
-
-.sheet { max-width: 72rem; margin: 0 auto; padding: 0 var(--gutter); }
-
-/* Every section is a page: a margin rule down the left, writing to the right
-   of it. Not a decoration — it is the same construction as the app's own
-   NotebookPage, which is why the two read as one thing. */
-.pg {
-  position: relative;
-  padding: clamp(3.5rem, 9vw, 7rem) 0;
-  border-top: 1px solid var(--rule);
-}
-.pg:first-of-type { border-top: 0; }
-
-.pg::before {
-  content: "";
-  position: absolute;
-  left: calc(var(--gutter) * -0.55);
-  top: 0; bottom: 0;
-  width: 2px;
-  background: var(--margin);
-  opacity: .55;
-}
-@media (max-width: 40rem) { .pg::before { display: none; } }
-
-.kicker {
-  font-size: .6875rem;
-  letter-spacing: .22em;
-  text-transform: uppercase;
-  color: var(--ink-sub);
-  margin: 0 0 1rem;
-}
-
-h1, h2, h3 { font-weight: 600; line-height: 1.15; margin: 0 0 1rem; letter-spacing: -.01em; }
-h1 { font-size: clamp(3rem, 10vw, 5.5rem); }
-h2 { font-size: clamp(1.75rem, 4.2vw, 2.75rem); max-width: 22ch; }
-h3 { font-size: 1.125rem; margin-bottom: .35rem; }
-
-p { max-width: var(--measure); margin: 0 0 1.15rem; color: var(--ink-dim); }
-.lede { font-size: 1.25rem; color: var(--ink); max-width: 30rem; }
-
-/* ── Hero ─────────────────────────────────────────────────────────────── */
-
-.hero-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 22rem);
-  gap: clamp(2rem, 6vw, 5rem);
-  align-items: center;
-}
-@media (max-width: 56rem) { .hero-grid { grid-template-columns: 1fr; } }
-
-.chips { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 2rem; }
-.chip {
-  font-size: .6875rem; letter-spacing: .12em;
-  padding: .4rem .8rem;
-  border: 1px solid var(--rule-hi); border-radius: 999px;
-  color: var(--ink-dim);
-}
-
-/* ── The day, drawn rather than screenshotted ─────────────────────────── */
-
-.day {
-  background: var(--card);
-  border: 2px solid var(--ink);
-  border-radius: 14px;
-  padding: 1.25rem 1.25rem 1rem;
-}
-.day-hd {
-  display: flex; justify-content: space-between; align-items: baseline;
-  font-size: .625rem; letter-spacing: .2em; text-transform: uppercase;
-  color: var(--ink-sub); font-family: var(--mono);
-  margin-bottom: .85rem;
-}
-.row {
-  display: grid;
-  grid-template-columns: 3.4rem 1.75rem 1fr;
-  align-items: center;
-  gap: .5rem;
-  padding: .6rem 0;
-  border-bottom: 1px solid var(--rule);
-}
-.row:last-child { border-bottom: 0; }
-.row-time { font-size: .6875rem; color: var(--ink-sub); text-align: right; }
-
-.mark {
-  width: 1.15rem; height: 1.15rem; border-radius: 50%;
-  border: 2px solid var(--rule-hi);
-  display: grid; place-items: center;
-  justify-self: center;
-}
-.row.done .mark { background: var(--ink); border-color: var(--ink); }
-.mark svg { width: .7rem; height: .7rem; opacity: 0; }
-.row.done .mark svg { opacity: 1; }
-.js .row.done .mark svg { opacity: 0; }
-.js .row.done.lit .mark svg { opacity: 1; }
-@media (prefers-reduced-motion: no-preference) {
-  .mark svg { transition: opacity .3s ease; }
-}
-
-.row-title { font-size: .95rem; }
-.row.done .row-title { color: var(--ink-sub); text-decoration: line-through; }
-.row-meta { font-family: var(--mono); font-size: .625rem; color: var(--ink-sub); }
-
-/* ── Reveal on scroll. Content is visible by default and only *animates*
-   when motion is welcome, so nothing depends on JS having run. ────────── */
-@media (prefers-reduced-motion: no-preference) {
-  .js .rise { opacity: 0; transform: translateY(14px); }
-  .js .rise.lit { opacity: 1; transform: none; transition: opacity .6s ease, transform .6s ease; }
-}
-
-/* ── The formula ──────────────────────────────────────────────────────── */
-
-.formula {
-  font-family: var(--mono); font-size: .8125rem; line-height: 2.1;
-  background: var(--recess);
-  border: 1px solid var(--rule);
-  border-radius: 10px;
-  padding: 1.1rem 1.25rem;
-  max-width: 38rem;
-  overflow-x: auto;
-}
-.formula b { color: var(--ink); font-weight: 600; }
-.formula .c { color: var(--ink-sub); }
-
-/* ── Two-column compare ───────────────────────────────────────────────── */
-
-.compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; max-width: 44rem; }
-@media (max-width: 44rem) { .compare { grid-template-columns: 1fr; } }
-.panel {
-  border: 1px solid var(--rule); border-radius: 10px;
-  padding: 1rem 1.15rem; background: var(--card);
-}
-.panel h3 { font-family: var(--mono); font-size: .625rem; letter-spacing: .18em;
-  text-transform: uppercase; color: var(--ink-sub); }
-.panel p { font-size: .9375rem; margin: 0; }
-
-/* ── The pipeline ─────────────────────────────────────────────────────── */
-
-.steps { list-style: none; padding: 0; margin: 0; max-width: 40rem; counter-reset: s; }
-.steps li {
-  counter-increment: s;
-  display: grid; grid-template-columns: 2rem 1fr; gap: 1rem;
-  padding: 1rem 0; border-bottom: 1px solid var(--rule);
-}
-.steps li:last-child { border-bottom: 0; }
-.steps li::before {
-  content: counter(s, decimal-leading-zero);
-  font-family: var(--mono); font-size: .6875rem; color: var(--ink-sub);
-  padding-top: .3rem;
-}
-.steps p { margin: 0; font-size: .9375rem; }
-
-/* ── Decisions ────────────────────────────────────────────────────────── */
-
-.notes { display: grid; gap: 1.5rem; max-width: 44rem; }
-.note { border-left: 2px solid var(--rule-hi); padding-left: 1.1rem; }
-.note p { font-size: .9375rem; margin: 0; }
-
-.stats { display: flex; flex-wrap: wrap; gap: 2.25rem; margin-top: 2.5rem; }
-.stat b { display: block; font-family: var(--mono); font-size: 1.5rem; color: var(--ink); font-weight: 600; }
-.stat span { font-size: .6875rem; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-sub); }
-
-footer { border-top: 1px solid var(--rule); padding: 2.5rem 0 4rem; }
-footer p { font-size: .875rem; color: var(--ink-sub); }
-</style>
 </head>
 
 <body>
 <a class="skip" href="#main">Skip to content</a>
 
-<main id="main" class="sheet">
+<!-- The grid, drawn. Every rule on the page sits on one of these, which is
+     what stops the lines disagreeing with each other. -->
+<div class="rules" aria-hidden="true">
+  <div class="rules-in">
+    <span></span><span></span><span></span><span></span><span></span><span></span>
+    <span></span><span></span><span></span><span></span><span></span><span></span>
+  </div>
+</div>
 
-  <!-- ── Hero ───────────────────────────────────────────────────────── -->
-  <section class="pg">
-    <div class="hero-grid">
+<nav class="nav">
+  <div class="nav-in">
+    <a class="nav-mark" href="./">askcal</a>
+    <!-- Grouped, so one auto margin decides the whole bar. Left as loose
+         children, the flex gaps and the mark's auto margin fought and the
+         links scattered across the width. -->
+    <div class="nav-links">
+      <a class="nav-a nav-opt" href="#turn">How it works</a>
+      <a class="nav-a nav-opt" href="#fig-01">How it decides</a>
+      <a class="nav-a" href="https://github.com/lucenity0/askcal">GitHub</a>
+      <button class="nav-b" id="theme-b" type="button" aria-pressed="false">Night</button>
+    </div>
+  </div>
+</nav>
+
+<main id="main">
+
+  <!-- =================================================================== -->
+  <!-- HERO                                                                -->
+  <!-- =================================================================== -->
+  <header class="hero">
+    <div class="pg">
+      <div class="hero-grid">
+        <div class="hero-type">
+          <p class="t-label hero-kicker">// askcal · a daily scheduler</p>
+
+          <h1 class="t-display"><span class="ln">Your inbox,</span>
+            <span class="ln">ranked by <span class="accent">regret</span>.</span></h1>
+
+          <p class="prose hero-lede">Not everything in your inbox deserves your
+            attention. Askcal works out what will actually cost you something if
+            you ignore it — then builds your day around that.</p>
+
+          <div class="cta">
+            <a class="btn solid" href="#turn">See how it works</a>
+            <a class="btn" href="https://github.com/lucenity0/askcal">Source
+              <span aria-hidden="true">→</span></a>
+          </div>
+        </div>
+
+        <div class="hero-note">
+          <p><span class="def-w">regret</span><span class="def-p">noun</span></p>
+          <p class="def-b">what it costs you to have ignored something.
+            <b>Not how loudly it asked, and not when it arrived.</b></p>
+        </div>
+
+        <!-- Placed into the void the headline's stepped lines leave, and
+             bottom-aligned to the row the buttons sit on. Everything inside
+             a plate is the app's own palette; the page around it stays
+             neutral. Invented entries — the shapes are real, the day is not. -->
+        <figure class="hero-art">
+          <span class="tape" aria-hidden="true"></span>
+          <div class="plate" role="img"
+               aria-label="A day in Askcal: five entries between 09:00 and 21:00, two of them ticked off, one pinned to a fixed time.">
+            <div class="plate-hd">
+              <span>Today · Thursday</span>
+              <span class="right">14 Aug</span>
+            </div>
+            <div class="plate-rows">
+              <div class="prow done live" role="button" tabindex="0" aria-pressed="true">
+                <span class="prow-t">09:00</span>
+                <span class="pmark"><svg viewBox="0 0 12 12" stroke-linecap="round"><path d="M2 6.2 4.6 9 10 3"/></svg></span>
+                <span class="prow-s">assignment due</span>
+                <span class="prow-pin">pinned</span>
+              </div>
+              <div class="prow done live" role="button" tabindex="0" aria-pressed="true">
+                <span class="prow-t">11:30</span>
+                <span class="pmark"><svg viewBox="0 0 12 12" stroke-linecap="round"><path d="M2 6.2 4.6 9 10 3"/></svg></span>
+                <span class="prow-s">reply to the professor</span>
+                <span></span>
+              </div>
+              <div class="prow live" role="button" tabindex="0" aria-pressed="false">
+                <span class="prow-t">14:00</span>
+                <span class="pmark"><svg viewBox="0 0 12 12" stroke-linecap="round"><path d="M2 6.2 4.6 9 10 3"/></svg></span>
+                <span class="prow-s">client brief</span>
+                <span></span>
+              </div>
+              <div class="prow live" role="button" tabindex="0" aria-pressed="false">
+                <span class="prow-t">17:00</span>
+                <span class="pmark"><svg viewBox="0 0 12 12" stroke-linecap="round"><path d="M2 6.2 4.6 9 10 3"/></svg></span>
+                <span class="prow-s">term fee payment</span>
+                <span></span>
+              </div>
+              <div class="prow live" role="button" tabindex="0" aria-pressed="false">
+                <span class="prow-t">21:00</span>
+                <span class="pmark"><svg viewBox="0 0 12 12" stroke-linecap="round"><path d="M2 6.2 4.6 9 10 3"/></svg></span>
+                <span class="prow-s">close the day</span>
+                <span></span>
+              </div>
+            </div>
+            <div class="plate-ft">
+              <span data-tally>2 done · 3 to go</span>
+              <span class="right">sorted by regret</span>
+            </div>
+          </div>
+        </figure>
+      </div>
+    </div>
+
+    <div class="hero-foot">
+      <div class="pg foot-strip">
+        <div><span>client</span><b>SwiftUI · iOS 26.4</b></div>
+        <div><span>server</span><b>FastAPI · Postgres</b></div>
+        <div><span>tests</span><b>282 · 59 · 12/12</b></div>
+        <div><span>status</span><b>deployed, running</b></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- =================================================================== -->
+  <!-- THE TURN — what arrives, and what it becomes                        -->
+  <!-- =================================================================== -->
+  <section class="pg sec ruled" id="turn">
+    <div class="sec-hd">
+      <p class="t-label">// how it works</p>
       <div>
-        <p class="kicker">Askcal · Gmail → your day</p>
-        <h1>Askcal</h1>
-        <p class="lede">Your inbox, ranked by regret.</p>
-        <p>
-          Every mail tool you have ever used sorts by when things arrived.
-          Nothing arrives in the order of what it costs you to ignore it.
-          Askcal reads your mail, scores each message by what missing it
-          would actually cost, and turns the ones that matter into a day —
-          already arranged around your calendar.
-        </p>
-        <div class="chips">
-          <span class="chip">SWIFTUI</span>
-          <span class="chip">FASTAPI</span>
-          <span class="chip">POSTGRES</span>
-          <span class="chip">CLAUDE</span>
+        <h2 class="t-section">Twelve arrived. Four of them wanted
+          something.</h2>
+        <p class="prose" style="margin-top:.9rem">The same morning, twice.
+          First as a list, in the order it landed. Then as a day, in the order
+          it costs you — and the things that wanted nothing from you are not on
+          it at all.</p>
+      </div>
+    </div>
+
+    <div class="turn">
+      <div class="turn-a">
+      <p class="t-label turn-cap">// what arrived · by time</p>
+      <div class="plate inbox" role="img"
+           aria-label="An inbox of five messages in arrival order: a scholarship office notice, a professor, a client, a bank statement and a music service.">
+        <div class="plate-hd"><span>Inbox</span><span class="right">12 unread</span></div>
+        <div class="plate-rows">
+          <div class="mrow unread">
+            <span class="mrow-dot"></span>
+            <span class="mrow-b"><span class="mrow-f">Scholarship office</span>
+              <span class="mrow-s">Important update regarding your…</span></span>
+            <span class="mrow-t">09:41</span>
+          </div>
+          <div class="mrow unread">
+            <span class="mrow-dot"></span>
+            <span class="mrow-b"><span class="mrow-f">Professor</span>
+              <span class="mrow-s">Assessment submission window</span></span>
+            <span class="mrow-t">08:22</span>
+          </div>
+          <div class="mrow unread">
+            <span class="mrow-dot"></span>
+            <span class="mrow-b"><span class="mrow-f">Client</span>
+              <span class="mrow-s">Re: logo revisions</span></span>
+            <span class="mrow-t">yesterday</span>
+          </div>
+          <div class="mrow">
+            <span class="mrow-dot"></span>
+            <span class="mrow-b"><span class="mrow-f">Your bank</span>
+              <span class="mrow-s">Your monthly statement</span></span>
+            <span class="mrow-t">Wed</span>
+          </div>
+          <div class="mrow">
+            <span class="mrow-dot"></span>
+            <span class="mrow-b"><span class="mrow-f">Music app</span>
+              <span class="mrow-s">Your weekly listening update</span></span>
+            <span class="mrow-t">Wed</span>
+          </div>
         </div>
+        <div class="plate-ft"><span>… and 7 more</span><span class="right">by arrival</span></div>
+      </div>
       </div>
 
-      <!-- Drawn, not screenshotted. A screenshot goes stale the moment a
-           colour changes; this is the same palette the app compiles. -->
-      <div class="day rise" aria-hidden="true">
-        <div class="day-hd"><span>Today</span><span>3 of 5</span></div>
-        <div class="row done" data-tick="0">
-          <span class="row-time">9:04 AM</span>
-          <span class="mark"><svg viewBox="0 0 12 12" fill="none" stroke="var(--card)" stroke-width="2.2" stroke-linecap="round"><path d="M2 6.2 4.6 9 10 3"/></svg></span>
-          <span><span class="row-title">assignment due</span><br><span class="row-meta">Uni</span></span>
-        </div>
-        <div class="row done" data-tick="1">
-          <span class="row-time">11:30 AM</span>
-          <span class="mark"><svg viewBox="0 0 12 12" fill="none" stroke="var(--card)" stroke-width="2.2" stroke-linecap="round"><path d="M2 6.2 4.6 9 10 3"/></svg></span>
-          <span><span class="row-title">reply to the professor</span><br><span class="row-meta">Uni</span></span>
-        </div>
-        <div class="row done" data-tick="2">
-          <span class="row-time">2:15 PM</span>
-          <span class="mark"><svg viewBox="0 0 12 12" fill="none" stroke="var(--card)" stroke-width="2.2" stroke-linecap="round"><path d="M2 6.2 4.6 9 10 3"/></svg></span>
-          <span><span class="row-title">client brief revision</span><br><span class="row-meta">Design</span></span>
-        </div>
-        <div class="row">
-          <span class="row-time"></span>
-          <span class="mark"></span>
-          <span><span class="row-title">semester fees</span><br><span class="row-meta">Finance · due in 6 h</span></span>
-        </div>
-        <div class="row">
-          <span class="row-time"></span>
-          <span class="mark"></span>
-          <span><span class="row-title">close the day</span><br><span class="row-meta">Uni</span></span>
+      <div class="turn-b">
+        <p class="t-label turn-cap">// what it became · by consequence</p>
+        <div class="plate" role="img"
+             aria-label="The same morning as a day: four entries, two of them pinned to fixed times.">
+          <div class="plate-hd"><span>Your day</span><span class="right">by regret</span></div>
+          <div class="plate-rows">
+            <div class="prow">
+              <span class="prow-t">09:00</span>
+              <span class="pmark"><svg viewBox="0 0 12 12" stroke-linecap="round"><path d="M2 6.2 4.6 9 10 3"/></svg></span>
+              <span class="prow-s">Assessment submission</span>
+              <span class="prow-pin">pinned</span>
+            </div>
+            <div class="prow">
+              <span class="prow-t">11:30</span>
+              <span class="pmark"><svg viewBox="0 0 12 12" stroke-linecap="round"><path d="M2 6.2 4.6 9 10 3"/></svg></span>
+              <span class="prow-s">Reply to the professor</span>
+              <span class="prow-pin">pinned</span>
+            </div>
+            <div class="prow">
+              <span class="prow-t">14:00</span>
+              <span class="pmark"><svg viewBox="0 0 12 12" stroke-linecap="round"><path d="M2 6.2 4.6 9 10 3"/></svg></span>
+              <span class="prow-s">Review client revisions</span>
+              <span></span>
+            </div>
+            <div class="prow">
+              <span class="prow-t">17:00</span>
+              <span class="pmark"><svg viewBox="0 0 12 12" stroke-linecap="round"><path d="M2 6.2 4.6 9 10 3"/></svg></span>
+              <span class="prow-s">Pay the term fee</span>
+              <span></span>
+            </div>
+          </div>
+          <p class="dropped">The listening update and the statement are
+            <b>not here</b> — nothing is owed on either, so neither became work.
+            They stay in the inbox to be read when there is time.</p>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ── The problem ────────────────────────────────────────────────── -->
-  <section class="pg">
-    <p class="kicker">The premise</p>
-    <h2 class="rise">Recency is not consequence.</h2>
-    <p class="rise">
-      A newsletter that landed a minute ago sits above a fee notice from
-      Tuesday. Both look identical in a list, so you read both, and the one
-      with a deadline is the one you scroll past. That is not a discipline
-      problem. It is a sorting problem, and no amount of inbox-zero fixes a
-      list that was never ordered by what matters.
-    </p>
-    <p class="rise">
-      Askcal asks a different question of every message: <em>what does
-      ignoring this cost me?</em> A missed assessment costs an opportunity.
-      An unpaid fee costs money. A newsletter costs nothing, however
-      recently it arrived and however urgently it is written.
-    </p>
-  </section>
-
-  <!-- ── The formula ────────────────────────────────────────────────── -->
-  <section class="pg">
-    <p class="kicker">How it decides</p>
-    <h2 class="rise">The model extracts signals. Arithmetic does the scoring.</h2>
-    <p class="rise">
-      A language model is good at reading an email and bad at being
-      consistent about a number. So it never produces the score. It extracts
-      what it can actually judge — the stakes, the sender, whether there is a
-      concrete task, when it is due — and a deterministic formula turns those
-      into 0–100.
-    </p>
-    <div class="formula rise">
-      score = <b>consequence</b> <span class="c">(35 opportunity · 35 grade · 30 money · 12 social · 4 none)</span><br>
-      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ <b>deadline proximity</b> <span class="c">(40 within a day, decaying to 10 within a week)</span><br>
-      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ <b>sender</b> &nbsp;+ <b>action required</b><br>
-      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;× <b>track weight</b> &nbsp;× <b>confidence</b> &nbsp;<span class="c">→ clamped 0–100</span>
-    </div>
-    <p class="rise" style="margin-top:1.15rem">
-      Every score is reproducible from the signals stored beside it. When a
-      task ranks oddly you can read why, rather than asking a model to
-      explain itself after the fact.
-    </p>
-  </section>
-
-  <!-- ── Tracks ─────────────────────────────────────────────────────── -->
-  <section class="pg">
-    <p class="kicker">Tracks</p>
-    <h2 class="rise">A PR review is work. It was filed under Design.</h2>
-    <p class="rise">
-      Askcal shipped with five categories — career, uni, design, finance,
-      feed — baked into the database, the prompt and the app. They described
-      a guess at someone's life rather than anyone's actual life. Asked to
-      pick one of five for a code review, the model picked the closest, and
-      the closest was wrong.
-    </p>
-    <div class="compare rise">
-      <div class="panel">
-        <h3>Before</h3>
-        <p>Five names in an enum. The prompt described them in fixed prose. Changing one meant a migration and a rebuild.</p>
-      </div>
-      <div class="panel">
-        <h3>After</h3>
-        <p>Tracks are rows you name. You write what belongs in each, and <em>that sentence</em> is what the classifier reads.</p>
+  <!-- =================================================================== -->
+  <!-- FIG. 01 — the signature                                             -->
+  <!-- =================================================================== -->
+  <section class="pg sec ruled" id="fig-01">
+    <div class="sec-hd">
+      <p class="t-label">Fig. 01</p>
+      <div>
+        <h2 class="t-section">The model reads. Arithmetic scores.</h2>
+        <p class="prose" style="margin-top:.9rem">Ask a language model for a
+          number between 0 and 100 and you get a different answer on Tuesday
+          than on Monday for the same message. So it is never asked. It
+          extracts what it can genuinely judge — the stakes, the sender,
+          whether there is a concrete task, when it is due — and four terms of
+          arithmetic turn those into the score.</p>
       </div>
     </div>
-    <p class="rise" style="margin-top:1.5rem">
-      Which is the whole fix: a track called “work” tells a model nothing.
-      “Anything from my team or about a PR, even when I'm not working” moves
-      the review out of Design in one edit, with no deploy.
-    </p>
+
+    <div class="fig-panel">
+    <div class="fig-hd">
+      <span class="fig-t">The regret function</span>
+      <span class="fig-src">askcal-api/app/services/regret.py</span>
+    </div>
+
+    <div class="fig" data-fig>
+      <div class="fig-pick" role="radiogroup" aria-label="Pick a message to score">
+        <button class="fig-opt" type="button" role="radio" aria-checked="true" data-i="0">
+          <span class="fig-opt-m"></span>
+          <span><span class="t-body">Term fee — payable Friday, 17:00</span>
+            <span class="t-label fig-opt-f">automated · 3 days out</span></span>
+        </button>
+        <button class="fig-opt" type="button" role="radio" aria-checked="false" data-i="1">
+          <span class="fig-opt-m"></span>
+          <span><span class="t-body">Revision on the deck, by Thursday</span>
+            <span class="t-label fig-opt-f">a client · 2 days out</span></span>
+        </button>
+        <button class="fig-opt" type="button" role="radio" aria-checked="false" data-i="2">
+          <span class="fig-opt-m"></span>
+          <span><span class="t-body">Applications close 5 September</span>
+            <span class="t-label fig-opt-f">bulk mail · 3 weeks out</span></span>
+        </button>
+        <button class="fig-opt" type="button" role="radio" aria-checked="false" data-i="3">
+          <span class="fig-opt-m"></span>
+          <span><span class="t-body">Someone viewed your profile</span>
+            <span class="t-label fig-opt-f">automated · no date</span></span>
+        </button>
+        <button class="fig-opt" type="button" role="radio" aria-checked="false" data-i="4">
+          <span class="fig-opt-m"></span>
+          <span><span class="t-body">50 new roles for you this week</span>
+            <span class="t-label fig-opt-f">bulk mail · no date</span></span>
+        </button>
+      </div>
+
+      <div class="fig-out">
+        <div class="row t-data"><span class="k">consequence</span><span class="v" data-v="c">money_loss</span><span class="lead"></span><span class="n" data-n="c">30</span></div>
+        <div class="row t-data"><span class="k">deadline</span><span class="v" data-v="d">≤ 96 h</span><span class="lead"></span><span class="n" data-n="d">18</span></div>
+        <div class="row t-data"><span class="k">sender</span><span class="v" data-v="s">automated_system</span><span class="lead"></span><span class="n" data-n="s">6</span></div>
+        <div class="row t-data"><span class="k">action</span><span class="v" data-v="a">required</span><span class="lead"></span><span class="n" data-n="a">10</span></div>
+        <div class="row mul t-data"><span class="k">track weight</span><span class="v" data-v="w">finance</span><span class="lead"></span><span class="n" data-n="w">× 1.0</span></div>
+
+        <div class="total">
+          <span class="t-label">Regret</span>
+          <span></span>
+          <span class="n" data-total>64</span>
+        </div>
+
+        <!-- In the order autotask.py applies them: is there a real task at
+             all, was the model confident, did the stakes score. -->
+        <div class="fig-gates t-data">
+          <div class="fig-g" data-g="act"><span class="m">✓</span><span data-gt="act">a concrete task, with stakes</span></div>
+          <div class="fig-g" data-g="conf"><span class="m">✓</span><span data-gt="conf">confidence 0.91 ≥ 0.60</span></div>
+          <div class="fig-g" data-g="score"><span class="m">✓</span><span data-gt="score">regret 64 ≥ 25</span></div>
+        </div>
+        <p class="verdict t-label" data-verdict>→ becomes a task on your day</p>
+      </div>
+    </div>
+    </div>
+
+    <p class="fig-note t-body">Not a mock-up. The constants, both floors and the
+      clamp are the ones in <code class="inline-code">regret.py</code> and
+      <code class="inline-code">config.py</code>; this is that function, running
+      here. Every message is invented — the shapes are real, the mail is not.</p>
   </section>
 
-  <!-- ── Mailboxes ──────────────────────────────────────────────────── -->
-  <section class="pg">
-    <p class="kicker">Mailboxes</p>
-    <h2 class="rise">College mail and personal mail. One day.</h2>
-    <p class="rise">
-      Not an account switcher — there is nothing to switch. Every mailbox
-      you connect pours into the same list, is scored on the same scale, and
-      becomes work on the same day.
-    </p>
-    <p class="rise">
-      Each mailbox carries the tracks its mail is usually about, and that
-      reaches the classifier as a <em>leaning</em> rather than a rule. It has
-      to be: a bill arriving at a college address is still about money, and a
-      mailbox that overrode the content would be confidently wrong every
-      time, with nothing on screen explaining why.
-    </p>
+
+  <!-- =================================================================== -->
+  <!-- THE GATES                                                           -->
+  <!-- =================================================================== -->
+  <section class="pg sec ruled" id="gates">
+    <div class="sec-hd">
+      <p class="t-label">// what it refuses</p>
+      <div>
+        <h2 class="t-section">Most mail is not work.</h2>
+        <p class="prose" style="margin-top:.9rem">Scoring a message and making
+          work out of it are different decisions. The first version of the second
+          one was, in effect, “the model said yes” — five clauses, three of them
+          almost always true, and a two-item blacklist that the loudest mail in
+          any inbox walks straight through: a blast only has to be labelled
+          <code class="inline-code">money_loss</code> to pass. Confidence and the
+          score were both already computed and never once consulted. They are
+          floors now.</p>
+      </div>
+    </div>
+
+    <div class="gates-track" data-gates>
+    <div class="gates-stick">
+    <div class="fig-panel">
+      <div class="fig-hd">
+        <span class="fig-t">Four gates, one morning</span>
+        <span class="fig-src">askcal-api/app/services/autotask.py</span>
+      </div>
+      <div class="gates-scroll">
+        <table class="gates">
+          <colgroup>
+            <col class="c-mail"><col class="c-act"><col class="c-csq">
+            <col class="c-cnf"><col class="c-scr"><col class="c-vrd">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">the mail</th>
+              <th scope="col">action</th>
+              <th scope="col">consequence</th>
+              <th scope="col" class="n">conf</th>
+              <th scope="col" class="n">score</th>
+              <th scope="col">verdict</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="out"><td class="mail">50 new roles for you this week</td><td class="f"><span class="n-mark">✗</span></td><td class="f">none</td><td class="n">—</td><td class="n">0</td><td class="why">a digest is reading, not work</td></tr>
+            <tr class="out"><td class="mail">Someone viewed your profile</td><td class="f"><span class="n-mark">✗</span></td><td class="f">social</td><td class="n">—</td><td class="n">18</td><td class="why">social is never a task</td></tr>
+            <tr class="out"><td class="mail">Payment successful — card debited</td><td class="f"><span class="n-mark">✗</span></td><td class="f">none</td><td class="n">—</td><td class="n">10</td><td class="why">money that already moved</td></tr>
+            <tr class="pass"><td class="mail">Term fee — payable Friday</td><td class="f"><span class="y">✓</span></td><td class="f">money_loss</td><td class="n">0.91</td><td class="n score">64</td><td class="why">→ task, Thursday</td></tr>
+            <tr class="pass"><td class="mail">Revision on the deck, by Thursday</td><td class="f"><span class="y">✓</span></td><td class="f">client_trust</td><td class="n">0.88</td><td class="n score">85</td><td class="why">→ task, today</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="gates-count">
+        <span data-gates-left>five to consider</span>
+        <span><b data-gates-made>0</b> became work</span>
+      </div>
+    </div>
+    </div>
+    </div>
+
+    <p class="fig-note t-body">Two of five. The sender is deliberately
+      <b>not</b> a gate: an assignment from a no-reply system is as real as a
+      client writing by hand, and filtering automated senders out silently
+      dropped exactly the work that mattered — a bug this project has shipped
+      once and does not intend to ship twice.</p>
   </section>
 
-  <!-- ── Pipeline ───────────────────────────────────────────────────── -->
-  <section class="pg">
-    <p class="kicker">The pipeline</p>
-    <h2 class="rise">Mail lands first. Judgement follows.</h2>
-    <ol class="steps rise">
-      <li><p><b>Ingest.</b> Every connected mailbox is pulled on a schedule. One dead mailbox costs you that inbox, not the pass.</p></li>
-      <li><p><b>Store.</b> Raw mail is written immediately, unscored. Classification never blocks ingestion, so a slow model never costs you an inbox.</p></li>
-      <li><p><b>Classify.</b> One call per batch, structured output validated against the same model the prompt is generated from — so prompt and parser cannot drift.</p></li>
-      <li><p><b>Score.</b> The deterministic formula, weighted by how much that track matters to you.</p></li>
-      <li><p><b>Gate.</b> A confidence floor and a stakes floor. A model's guess should not become your Tuesday.</p></li>
-      <li><p><b>Plan.</b> What survives is placed around your real calendar — deadlines first, then consequence, never into an hour that has already passed.</p></li>
-    </ol>
+  <!-- =================================================================== -->
+  <!-- THE CONSTANTS                                                       -->
+  <!-- =================================================================== -->
+  <section class="pg sec ruled" id="constants">
+    <div class="sec-hd">
+      <p class="t-label">// the arithmetic</p>
+      <div>
+        <h2 class="t-section">Four terms, one multiplier, one dampener.</h2>
+        <p class="prose" style="margin-top:.9rem">All of it, printed. A score you
+          can print is a score you can argue with — and when something ranks
+          oddly you read why in four lines rather than asking a model to explain
+          a judgement it has already forgotten making.</p>
+      </div>
+    </div>
+
+    <div class="fig-panel">
+      <div class="fig-hd">
+        <span class="fig-t">Every constant in the formula</span>
+        <span class="fig-src">askcal-api/app/services/regret.py · config.py</span>
+      </div>
+      <div class="consts">
+        <div class="const">
+          <h3>consequence</h3>
+          <dl>
+            <div><dt>opportunity_loss</dt><dd>35</dd></div>
+            <div><dt>grade_loss</dt><dd>35</dd></div>
+            <div><dt>client_trust</dt><dd>35</dd></div>
+            <div><dt>money_loss</dt><dd>30</dd></div>
+            <div><dt>social</dt><dd>12</dd></div>
+            <div><dt>none</dt><dd>4</dd></div>
+          </dl>
+          <p>A missed assessment and a missed exam cost the same thing. Money is
+            a shade below both — it is recoverable.</p>
+        </div>
+
+        <div class="const">
+          <h3>deadline · hours out</h3>
+          <dl>
+            <div><dt>≤ 24, or overdue</dt><dd>40</dd></div>
+            <div><dt>≤ 48</dt><dd>28</dd></div>
+            <div><dt>≤ 96</dt><dd>18</dd></div>
+            <div><dt>≤ 168</dt><dd>10</dd></div>
+            <div><dt>beyond a week</dt><dd>4</dd></div>
+            <div><dt>overdue &gt; 72 h</dt><dd>10</dd></div>
+            <div><dt>no deadline</dt><dd>0</dd></div>
+          </dl>
+          <p>Overdue lands in the hottest bucket and then cools, so a thing you
+            missed last month stops pinning the day at maximum forever.</p>
+        </div>
+
+        <div class="const">
+          <h3>sender</h3>
+          <dl>
+            <div><dt>client</dt><dd>12</dd></div>
+            <div><dt>recruiter</dt><dd>12</dd></div>
+            <div><dt>professor</dt><dd>8</dd></div>
+            <div><dt>automated_system</dt><dd>6</dd></div>
+            <div><dt>peer</dt><dd>4</dd></div>
+            <div><dt>other</dt><dd>0</dd></div>
+            <div><dt>newsletter</dt><dd class="neg">−20</dd></div>
+          </dl>
+          <p>Automated is worth points, not a penalty — assessment links and fee
+            notices arrive from no-reply addresses exactly as noise does.</p>
+        </div>
+
+        <div class="const">
+          <h3>and the rest</h3>
+          <dl>
+            <div><dt>action_required</dt><dd>10</dd></div>
+            <div><dt>per carry-forward</dt><dd>6</dd></div>
+            <div><dt>track weight</dt><dd>0.5–1.5</dd></div>
+            <div><dt>conf &lt; 0.40</dt><dd>×0.6</dd></div>
+            <div><dt>task floor</dt><dd>25</dd></div>
+            <div><dt>conf floor</dt><dd>0.60</dd></div>
+            <div><dt>clamp</dt><dd>0–100</dd></div>
+          </dl>
+          <p>Carrying a task adds to it. The thing you keep pushing to tomorrow
+            is usually the thing worth doing, and a score frozen on arrival can
+            never say so.</p>
+        </div>
+      </div>
+    </div>
   </section>
 
-  <!-- ── Decisions ──────────────────────────────────────────────────── -->
-  <section class="pg">
-    <p class="kicker">What it cost</p>
-    <h2 class="rise">The decisions worth defending.</h2>
-    <div class="notes rise">
+  <!-- =================================================================== -->
+  <!-- THE PLANNER                                                         -->
+  <!-- =================================================================== -->
+  <section class="pg sec ruled" id="day">
+    <div class="sec-hd">
+      <p class="t-label">// the day</p>
+      <div>
+        <h2 class="t-section">Ranking is easy. Fitting it into a Thursday is
+          not.</h2>
+      </div>
+    </div>
+
+    <div class="plan-grid">
+      <figure class="plan-art">
+        <div class="plate" role="img"
+             aria-label="A Thursday from 09:00 to 21:00. Four calendar blocks are marked busy; three tasks are placed into the gaps between them, one pinned to 11:00.">
+          <div class="plate-hd"><span>Thu 14 Aug</span><span class="right">09:00 – 21:00</span></div>
+          <div class="hours">
+            <div class="hr-t">09</div><div class="hr-c"></div>
+            <div class="hr-t">10</div><div class="hr-c"></div>
+            <div class="hr-t">11</div><div class="hr-c"></div>
+            <div class="hr-t">12</div><div class="hr-c"></div>
+            <div class="hr-t">13</div><div class="hr-c"></div>
+            <div class="hr-t">14</div><div class="hr-c"></div>
+            <div class="hr-t">15</div><div class="hr-c"></div>
+            <div class="hr-t">16</div><div class="hr-c"></div>
+            <div class="hr-t">17</div><div class="hr-c"></div>
+            <div class="hr-t">18</div><div class="hr-c"></div>
+            <div class="hr-t">19</div><div class="hr-c"></div>
+            <div class="hr-t">20</div><div class="hr-c"></div>
+
+            <!-- top and height are hours from 09:00, written as the hours
+                 they are. The planner works in minutes; this is the same
+                 arithmetic with the unit left visible. -->
+            <div class="hr-layer">
+              <div class="blk busy" style="top:0;height:calc(var(--hr) - 2px)"><span class="t">Design lecture</span><span class="r">busy</span></div>
+              <div class="blk busy" style="top:calc(var(--hr)*4);height:calc(var(--hr) - 2px)"><span class="t">Studio call</span><span class="r">busy</span></div>
+              <div class="blk busy" style="top:calc(var(--hr)*7);height:calc(var(--hr)*1.5 - 2px)"><span class="t">Lab</span><span class="r">busy</span></div>
+              <div class="blk busy" style="top:calc(var(--hr)*10);height:calc(var(--hr)*2 - 2px)"><span class="t">Evening class</span><span class="r">busy</span></div>
+
+              <div class="blk task" style="top:calc(var(--hr)*1);height:calc(var(--hr)*.5 - 2px)"><span class="t">Reply to the studio</span><span class="r">31</span></div>
+              <div class="blk task pin" style="top:calc(var(--hr)*2);height:calc(var(--hr)*.5 - 2px)"><span class="t">Term fee · pinned 11:00</span><span class="r">64</span></div>
+              <div class="blk task" style="top:calc(var(--hr)*2.5);height:calc(var(--hr)*1.5 - 2px)"><span class="t">Revision on the deck</span><span class="r">85</span></div>
+              <div class="blk task" style="top:calc(var(--hr)*5);height:calc(var(--hr)*2 - 2px)"><span class="t">Week 5 lab report</span><span class="r">63</span></div>
+            </div>
+          </div>
+          <p class="dropped"><b>Unscheduled · 1</b> — the portfolio refresh needs
+            180 minutes and no gap left on this day is that long. Surfaced, never
+            silently dropped and never double-booked on top of something else.</p>
+        </div>
+      </figure>
+
+      <div class="plan-copy">
+        <p class="prose">A ranked list is still a list. What survives the gates
+          has to live in the hours you actually have.</p>
+        <p class="prose dim">Busy blocks come from your real calendar and are
+          hard edges — the planner may not touch them and is never asked to
+          negotiate. Work is placed highest-consequence-first into the earliest
+          gap that fits it, so the brand deck outranks everything here and still
+          starts at 11:30: the half hour before the pin could not hold ninety minutes,
+          and something smaller took it instead.</p>
+        <p class="prose dim">A pin is an edge like any other. Nothing is ever
+          placed into an hour that has already gone.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- =================================================================== -->
+  <!-- TRACKS                                                              -->
+  <!-- =================================================================== -->
+  <section class="pg sec ruled" id="tracks">
+    <div class="sec-hd">
+      <p class="t-label">// in your words</p>
+      <div>
+        <h2 class="t-section">A code review is work. It was filed under
+          Design.</h2>
+        <p class="prose" style="margin-top:.9rem">Askcal shipped with five
+          categories baked into the database, the prompt and the app. They
+          described a guess at somebody's life rather than anybody's actual one,
+          and asked to pick one of five for a pull-request review, the model
+          picked the closest — which was wrong. Tracks are rows you name now, and
+          the sentence you write is what the classifier reads, over any
+          assumption it has about what the name usually means.</p>
+      </div>
+    </div>
+
+    <div class="tracks">
+      <div class="trk">
+        <div class="trk-h"><b>Work</b><span class="w">weight 1.2 · active</span></div>
+        <p class="trk-d">Anything from my team or about a pull request, even when I'm not working.</p>
+        <div class="trk-m"><span class="chip on">makes tasks</span><span class="chip">31 mails</span><span class="chip">4 open</span></div>
+      </div>
+      <div class="trk off">
+        <div class="trk-h"><b>Feed</b><span class="w">weight 0.5 · active</span></div>
+        <p class="trk-d">Newsletters, digests, anything I read on a train and never act on.</p>
+        <div class="trk-m"><span class="chip">never makes tasks</span><span class="chip">212 mails</span><span class="chip">0 open</span></div>
+      </div>
+    </div>
+
+    <p class="lands">the pull-request review now lands in <b>Work</b> · one edit
+      · no migration, no deploy, no rebuild</p>
+  </section>
+
+  <!-- =================================================================== -->
+  <!-- WHAT IT COST                                                        -->
+  <!-- =================================================================== -->
+  <section class="pg sec ruled" id="cost">
+    <div class="sec-hd">
+      <p class="t-label">// what it cost</p>
+      <div>
+        <h2 class="t-section">The decisions worth defending.</h2>
+        <p class="prose" style="margin-top:.9rem">Every one of these replaced
+          something that already worked. That is the expensive kind.</p>
+      </div>
+    </div>
+
+    <div class="notes">
       <div class="note">
+        <p class="note-n">01 · secrets</p>
         <h3>Encryption is a column type, not a call site.</h3>
-        <p>
-          A Google refresh token is a long-lived key to an entire mailbox and
-          calendar. Encrypting it wherever it is written means the one place
-          that forgets writes plaintext into a column everything else assumes
-          is safe. It is a SQLAlchemy type instead, so forgetting is not
-          available. Stored values carry a version prefix, which is what let
-          the key be switched on without taking a single mailbox offline.
-        </p>
+        <p>A Google refresh token is a long-lived key to an entire mailbox and
+          calendar. Encrypting it wherever it happens to be written means the one
+          place that forgets writes plaintext into a column everything else
+          assumes is safe. <b>It is a database type instead, so forgetting is not
+          on the menu.</b> Stored values carry a version prefix, which is what let
+          the key be rotated without taking a single mailbox offline.</p>
       </div>
-      <div class="note">
-        <h3>The classifier is measured, not eyeballed.</h3>
-        <p>
-          Every prompt change used to be validated by waiting for real mail and
-          seeing whether it looked right — which finds a regression days later,
-          on the one message that mattered. A golden set of twelve cases, each
-          carrying the rule it exists to pin, now answers the same questions
-          every time. Two of them found errors in the fixture before they found
-          any in the prompt.
-        </p>
-      </div>
-      <div class="note">
-        <h3>The same bug, four times, in four disguises.</h3>
-        <p>
-          A classifier silently unconfigured. An inactive track blocking every
-          task under it. Carried work losing its day. Auto-task rules that only
-          ever ran once, at classification. All four are one shape: state that
-          decides whether work reaches you, applied invisibly, with no way to
-          see or change it. Everything added since has to answer for all three.
-        </p>
-      </div>
-      <div class="note">
-        <h3>Migrations that can be undone.</h3>
-        <p>
-          Three schema changes each added the new shape beside the old one and
-          backfilled, so every step deployed alone and could roll back. The
-          columns came out much later, in a migration whose own docstring says
-          it restores the shape and not the data.
-        </p>
-      </div>
-    </div>
 
-    <div class="stats rise">
-      <div class="stat"><b>282</b><span>backend tests</span></div>
-      <div class="stat"><b>59</b><span>client tests</span></div>
-      <div class="stat"><b>12/12</b><span>golden set</span></div>
-      <div class="stat"><b>0</b><span>open issues</span></div>
+      <div class="note">
+        <p class="note-n">02 · the classifier</p>
+        <h3>Measured, not eyeballed.</h3>
+        <p>Prompt changes used to be validated by waiting for real mail and seeing
+          whether it looked right — which finds a regression days later, on the
+          one message that mattered. <b>A golden set of twelve cases, each
+          carrying the rule it exists to pin, answers the same questions every
+          time.</b> Two of them found errors in the fixture before they found any
+          in the prompt.</p>
+      </div>
+
+      <div class="note">
+        <p class="note-n">03 · the same bug, four times</p>
+        <h3>State that decides what reaches you, applied invisibly.</h3>
+        <p>A classifier silently unconfigured. An inactive track blocking every
+          task under it. Carried work losing its day. Auto-task rules that only
+          ever ran once, at classification, so turning a track on did nothing for
+          mail already seen. <b>Four disguises, one shape</b> — and everything
+          added since has to answer for it.</p>
+      </div>
+
+      <div class="note">
+        <p class="note-n">04 · migrations</p>
+        <h3>Every step could be undone.</h3>
+        <p>Three schema changes each added the new shape beside the old one and
+          backfilled, so every step deployed alone and could roll back. The
+          columns came out much later, in a migration whose own docstring admits
+          <b>it restores the shape and not the data.</b></p>
+      </div>
+
+      <div class="note">
+        <p class="note-n">05 · the one that got away</p>
+        <h3>A dropped column, and a 500 on every request.</h3>
+        <p>One migration dropped a column the model still declared. Every
+          authenticated request failed for as long as it took to notice, which was
+          an evening. <b>The test suite was green throughout, and correctly so</b>
+          — it is deliberately database-free, which is what makes it fast enough
+          to run on every change and also what makes model-versus-schema drift
+          invisible to it. There is a command that catches exactly this. It is not
+          in CI yet.</p>
+      </div>
+
+      <div class="note">
+        <p class="note-n">06 · notifications</p>
+        <h3>A push that says nothing teaches you to swipe it away.</h3>
+        <p>The morning digest and the evening nudge fired fixed text — “your day
+          is ready” — which is a reminder that something exists, not a reason to
+          open it. <b>Both are written server-side now, in the same call as the
+          screen behind them</b>, because a push promising three deadlines that
+          opens onto a screen showing two is worse than no push at all.</p>
+      </div>
     </div>
   </section>
 
-  <footer>
-    <p>
-      Built by <a href="https://github.com/lucenity0">@lucenity0</a> ·
-      <a href="https://github.com/lucenity0/askcal">source</a>
-    </p>
-    <p style="font-size:.8125rem">
-      Hand-built HTML. No framework, no fonts, no analytics, nothing loaded
-      from anywhere else.
-    </p>
-  </footer>
+  <!-- =================================================================== -->
+  <!-- CLOSE                                                               -->
+  <!-- =================================================================== -->
+  <section class="pg sec close">
+    <div class="close-in">
+      <div class="close-t">
+        <p class="t-label" style="margin-bottom:1rem">// the whole of it</p>
+        <h2 class="t-display" style="font-size:clamp(2.25rem,6vw,4.5rem);max-width:18ch">
+          Stop asking what to do next. Let the <span class="accent">cost</span>
+          decide.</h2>
+      </div>
+      <div class="close-a">
+        <a class="btn solid" href="https://github.com/lucenity0/askcal">
+          Read the source <span aria-hidden="true">→</span></a>
+        <p class="close-note">Askcal is not a product and there is nothing to
+          sign up for. It runs, it is deployed, and the code is open.</p>
+      </div>
+    </div>
+  </section>
 </main>
 
-<script>
-// Reveals and the ticking checkboxes. Everything here is decoration: the page
-// is complete and readable with JS disabled, and the observer is skipped
-// outright when motion is unwelcome.
-(function () {
-  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  var targets = document.querySelectorAll('.rise, [data-tick]');
+<footer class="foot">
+  <div class="pg">
+    <div class="foot-grid">
+      <div class="foot-brand">
+        <p class="m">askcal</p>
+        <p>A daily scheduler that ranks a mailbox by what ignoring it costs,
+          and builds a day out of what survives.</p>
+      </div>
 
-  if (reduced || !('IntersectionObserver' in window)) {
-    targets.forEach(function (el) { el.classList.add('lit'); });
+      <div class="foot-col">
+        <h4>The page</h4>
+        <ul>
+          <li><a href="#turn">How it works</a></li>
+          <li><a href="#fig-01">How it decides</a></li>
+          <li><a href="#gates">What it refuses</a></li>
+          <li><a href="#day">The day</a></li>
+          <li><a href="#cost">What it cost</a></li>
+        </ul>
+      </div>
+
+      <div class="foot-col">
+        <h4>The code</h4>
+        <ul>
+          <li><a href="https://github.com/lucenity0/askcal">Repository</a></li>
+          <li><a href="https://github.com/lucenity0/askcal/tree/main/askcal-api">Backend · FastAPI</a></li>
+          <li><a href="https://github.com/lucenity0/askcal/tree/main/Askcal">Client · SwiftUI</a></li>
+          <li><a href="https://github.com/lucenity0/askcal/issues">Issues</a></li>
+        </ul>
+      </div>
+
+      <div class="foot-col">
+        <h4>Standing</h4>
+        <ul>
+          <li><a href="https://github.com/lucenity0/askcal/blob/main/LICENSE">Licence · MIT</a></li>
+          <li><a href="https://github.com/lucenity0/askcal/blob/main/PRIVACY.md">Privacy</a></li>
+          <li><span>No account, no signup, no tracking</span></li>
+          <li><a href="https://github.com/lucenity0">Built by lucenity0</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="foot-bar">
+      <span>© 2026 · askcal</span>
+      <span>a portfolio project, not a product</span>
+      <span class="right">hand-built · no framework, no analytics, nothing loaded from anywhere else</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+/* ===================================================================== *
+ * Theme. The button says where you are going, not where you are, because
+ * that is the only label that makes the tap predictable.
+ * ===================================================================== */
+(function () {
+  "use strict";
+  var btn = document.getElementById("theme-b");
+  if (!btn) return;
+  var root = document.documentElement;
+  var system = window.matchMedia("(prefers-color-scheme: dark)");
+  function current() { return root.dataset.theme || (system.matches ? "night" : "day"); }
+  function paint() {
+    var night = current() === "night";
+    btn.textContent = night ? "Day" : "Night";
+    btn.setAttribute("aria-pressed", String(night));
+  }
+  btn.addEventListener("click", function () {
+    root.dataset.theme = current() === "night" ? "day" : "night";
+    try { localStorage.setItem("askcal-theme", root.dataset.theme); } catch (e) {}
+    paint();
+  });
+  /* Somebody who never touched the button is still following the system, so
+     the page follows it changing under them. */
+  system.addEventListener("change", paint);
+  paint();
+})();
+
+/* ===================================================================== *
+ * The hero day is tickable.
+ *
+ * Ticking things off is the one gesture the whole product is about, so the
+ * drawing of it should do it. The rows carry role="button" in the markup
+ * rather than being made interactive here, so a screen reader is told what
+ * they are whether or not this file runs.
+ * ===================================================================== */
+(function () {
+  "use strict";
+  var rows = Array.prototype.slice.call(document.querySelectorAll(".prow.live"));
+  var tally = document.querySelector("[data-tally]");
+  if (!rows.length) return;
+
+  function paint() {
+    var done = rows.filter(function (r) { return r.classList.contains("done"); }).length;
+    var left = rows.length - done;
+    if (tally) {
+      tally.textContent = done + " done · " + (left === 0 ? "day closed" : left + " to go");
+    }
+  }
+  function toggle(row) {
+    row.setAttribute("aria-pressed", String(row.classList.toggle("done")));
+    paint();
+  }
+  rows.forEach(function (row) {
+    row.addEventListener("click", function () { toggle(row); });
+    /* Space and Enter both, because it is announced as a button. */
+    row.addEventListener("keydown", function (e) {
+      if (e.key === " " || e.key === "Enter") { e.preventDefault(); toggle(row); }
+    });
+  });
+  paint();
+})();
+
+/* ===================================================================== *
+ * FIG. 01 — the regret function, ported.
+ *
+ * Constant for constant from app/services/regret.py and app/config.py. If
+ * either moves this is wrong, and it is wrong visibly, in the one place on
+ * the page a visitor is most likely to check.
+ * ===================================================================== */
+(function () {
+  "use strict";
+
+  var CONSEQUENCE = {
+    opportunity_loss: 35, grade_loss: 35, client_trust: 35,
+    money_loss: 30, social: 12, none: 4
+  };
+  var DEADLINE = [[24, 40], [48, 28], [96, 18], [168, 10]];
+  var DEADLINE_FAR = 4, DEADLINE_STALE = 10, NO_DEADLINE = 0;
+  var SENDER = {
+    client: 12, recruiter: 12, professor: 8,
+    automated_system: 6, peer: 4, newsletter: -20, other: 0
+  };
+  var ACTION_REQUIRED = 10;
+  var LOW_CONFIDENCE = 0.4, LOW_CONFIDENCE_FACTOR = 0.6;
+  var MIN_CONFIDENCE = 0.6, MIN_REGRET = 25;      /* the auto-task floors */
+  var NON_TASKING = { social: 1, none: 1 };
+
+  function deadlinePoints(hours) {
+    if (hours === null) return NO_DEADLINE;
+    if (hours < -72) return DEADLINE_STALE;
+    for (var i = 0; i < DEADLINE.length; i++) {
+      if (hours <= DEADLINE[i][0]) return DEADLINE[i][1];
+    }
+    return DEADLINE_FAR;
+  }
+
+  function score(m) {
+    var raw = CONSEQUENCE[m.consequence]
+            + deadlinePoints(m.hours)
+            + SENDER[m.sender]
+            + (m.action ? ACTION_REQUIRED : 0);
+    var weighted = raw * Math.min(Math.max(m.weight, 0.5), 1.5);
+    if (m.confidence < LOW_CONFIDENCE) weighted *= LOW_CONFIDENCE_FACTOR;
+    return Math.max(0, Math.min(100, Math.round(weighted)));
+  }
+
+  /* Invented messages. Nothing here comes from a real inbox.
+   *
+   * Index 2 is the one worth having: 35 + 4 − 20 + 10 = 29 against a floor
+   * of 25, at 0.64 confidence against a floor of 0.60. It clears both by a
+   * hair, which is the only way to show the floors doing work rather than
+   * separating the obvious from the obvious. */
+  var MESSAGES = [
+    { consequence: "money_loss", hours: 75, sender: "automated_system", action: true,
+      confidence: 0.91, weight: 1.0, track: "finance", label: "≤ 96 h" },
+    { consequence: "client_trust", hours: 46, sender: "client", action: true,
+      confidence: 0.88, weight: 1.0, track: "design", label: "≤ 48 h" },
+    { consequence: "opportunity_loss", hours: 430, sender: "newsletter", action: true,
+      confidence: 0.64, weight: 1.0, track: "career", label: "> 168 h" },
+    { consequence: "social", hours: null, sender: "automated_system", action: false,
+      confidence: 0.79, weight: 1.0, track: "feed", label: "none" },
+    { consequence: "none", hours: null, sender: "newsletter", action: false,
+      confidence: 0.94, weight: 0.5, track: "feed", label: "none" }
+  ];
+
+  var fig = document.querySelector("[data-fig]");
+  if (!fig) return;
+  var $ = function (s) { return fig.querySelector(s); };
+  var $$ = function (s) { return Array.prototype.slice.call(fig.querySelectorAll(s)); };
+
+  function render(i) {
+    var m = MESSAGES[i];
+    var parts = {
+      c: CONSEQUENCE[m.consequence],
+      d: deadlinePoints(m.hours),
+      s: SENDER[m.sender],
+      a: m.action ? ACTION_REQUIRED : 0
+    };
+    var total = score(m);
+
+    $("[data-v=c]").textContent = m.consequence;
+    $("[data-v=d]").textContent = m.hours === null ? "no deadline" : m.label;
+    $("[data-v=s]").textContent = m.sender;
+    $("[data-v=a]").textContent = m.action ? "required" : "none";
+    $("[data-v=w]").textContent = m.track;
+
+    ["c", "d", "s", "a"].forEach(function (k) {
+      /* A real minus sign, not a hyphen — this column is tabular figures. */
+      $("[data-n=" + k + "]").textContent =
+        parts[k] < 0 ? "−" + Math.abs(parts[k]) : String(parts[k]);
+    });
+    $("[data-n=w]").textContent = "× " + m.weight.toFixed(1);
+    $("[data-total]").textContent = total;
+
+    var stakes = m.action && !NON_TASKING[m.consequence];
+    var gates = [
+      ["act", stakes, stakes ? "a concrete task, with stakes"
+                             : (m.action ? "stakes are " + m.consequence : "nothing to do")],
+      ["conf", m.confidence >= MIN_CONFIDENCE,
+               "confidence " + m.confidence.toFixed(2) + " " +
+               (m.confidence >= MIN_CONFIDENCE ? "≥" : "<") + " " + MIN_CONFIDENCE.toFixed(2)],
+      ["score", total >= MIN_REGRET,
+                "regret " + total + " " + (total >= MIN_REGRET ? "≥" : "<") + " " + MIN_REGRET]
+    ];
+    var passed = true;
+    gates.forEach(function (g) {
+      var row = $('[data-g="' + g[0] + '"]');
+      row.classList.toggle("no", !g[1]);
+      row.querySelector(".m").textContent = g[1] ? "✓" : "✗";
+      $('[data-gt="' + g[0] + '"]').textContent = g[2];
+      if (!g[1]) passed = false;
+    });
+
+    $("[data-verdict]").textContent = passed
+      ? "→ becomes a task on your day"
+      : "→ stays in the inbox, read when there is time";
+  }
+
+  /* ------------------------------------------------------------------- *
+   * The orchestration — the page's entire motion budget.
+   *
+   * The total counts from where it already is rather than from zero: the
+   * interesting thing about picking a second message is the distance
+   * between the two answers, not that a number exists.
+   * ------------------------------------------------------------------- */
+  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var shown = 0, timers = [];
+
+  function countTo(el, from, to, ms) {
+    var t0 = performance.now();
+    (function step(now) {
+      var p = Math.min((now - t0) / ms, 1);
+      el.textContent = Math.round(from + (to - from) * (1 - Math.pow(1 - p, 3)));
+      if (p < 1) requestAnimationFrame(step);
+    })(t0);
+  }
+
+  function select(i) {
+    $$(".fig-opt").forEach(function (o) {
+      o.setAttribute("aria-checked", String(+o.dataset.i === i));
+    });
+    if (reduced) { render(i); shown = +$("[data-total]").textContent; return; }
+
+    /* Cancel anything in flight, or clicking down the list quickly leaves
+       half of one answer sitting beside half of another. */
+    timers.forEach(clearTimeout);
+    timers = [];
+
+    fig.classList.add("settling");
+    timers.push(setTimeout(function () {
+      render(i);
+      var totalEl = $("[data-total]");
+      var to = +totalEl.textContent;
+      fig.classList.remove("settling");
+
+      $$(".row").forEach(function (row, n) {
+        row.querySelector(".v").style.transitionDelay = (n * 70) + "ms";
+        row.querySelector(".n").style.transitionDelay = (n * 70) + "ms";
+      });
+      $$(".fig-g").forEach(function (g, n) { g.style.transitionDelay = (380 + n * 60) + "ms"; });
+      $(".verdict").style.transitionDelay = "580ms";
+
+      countTo(totalEl, shown, to, 420);
+      shown = to;
+    }, 180));
+  }
+
+  $$(".fig-opt").forEach(function (b) {
+    b.addEventListener("click", function () { select(+b.dataset.i); });
+    /* Arrow keys, because this is a radiogroup and one is expected to
+       behave like one. */
+    b.addEventListener("keydown", function (e) {
+      var d = e.key === "ArrowDown" || e.key === "ArrowRight" ? 1
+            : e.key === "ArrowUp" || e.key === "ArrowLeft" ? -1 : 0;
+      if (!d) return;
+      e.preventDefault();
+      var opts = $$(".fig-opt");
+      var next = opts[(+b.dataset.i + d + opts.length) % opts.length];
+      next.focus();
+      select(+next.dataset.i);
+    });
+  });
+
+  render(0);
+  shown = +$("[data-total]").textContent;
+})();
+
+/* ===================================================================== *
+ * The gates table, driven by scroll.
+ *
+ * The panel is stuck inside a tall empty track, and how far you are through
+ * that track decides how many messages have been refused. Driven from one
+ * throttled scroll listener over the track's own progress rather than from
+ * per-row observers, because the rows are ordered: scrolling back up has to
+ * un-refuse them in reverse, and an observer fires on whichever boundary
+ * was crossed last rather than on where you now are.
+ * ===================================================================== */
+(function () {
+  "use strict";
+  var track = document.querySelector("[data-gates]");
+  if (!track) return;
+  var rows = Array.prototype.slice.call(track.querySelectorAll("tr.out"));
+  var left = track.querySelector("[data-gates-left]");
+  var made = track.querySelector("[data-gates-made]");
+  if (!rows.length) return;
+
+  /* Without motion the whole sequence is simply its outcome. */
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    rows.forEach(function (r) { r.classList.add("lit"); });
+    if (left) left.textContent = "three refused";
+    if (made) made.textContent = "2";
     return;
   }
 
-  var io = new IntersectionObserver(function (entries) {
-    entries.forEach(function (entry) {
-      if (!entry.isIntersecting) return;
-      var el = entry.target;
-      // Rows tick in sequence, so the day fills itself out rather than
-      // arriving already finished.
-      var delay = el.hasAttribute('data-tick') ? el.getAttribute('data-tick') * 260 : 0;
-      setTimeout(function () { el.classList.add('lit'); }, delay);
-      io.unobserve(el);
-    });
-  }, { rootMargin: '0px 0px -12% 0px', threshold: 0.15 });
+  var shown = -1;
+  function show(n) {
+    if (n === shown) return;
+    shown = n;
+    rows.forEach(function (r, i) { r.classList.toggle("lit", i < n); });
+    if (left) {
+      left.textContent = n === 0 ? "five to consider"
+        : n === rows.length ? "three refused"
+        : n + (n === 1 ? " refused" : " refused");
+    }
+    if (made) made.textContent = n >= rows.length ? "2" : "0";
+  }
 
-  targets.forEach(function (el) { io.observe(el); });
+  var ticking = false;
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(function () {
+      ticking = false;
+      var box = track.getBoundingClientRect();
+      var total = box.height - window.innerHeight;
+      if (total <= 0) { show(rows.length); return; }
+      var p = Math.min(Math.max(-box.top / total, 0), 1);
+      /* The last quarter of the track is left with every refusal applied,
+         so the finished state is held rather than flashed past. */
+      show(Math.min(rows.length, Math.floor(p / 0.75 * (rows.length + 1))));
+    });
+  }
+  show(0);
+  window.addEventListener("scroll", onScroll, { passive: true });
+  window.addEventListener("resize", onScroll, { passive: true });
+  onScroll();
 })();
 </script>
 </body>
