@@ -47,7 +47,7 @@
      measured — a rule the app itself keeps, so a number always looks like
      a number. */
   --display: "Elegancy", "Bodoni 72", Didot, "Playfair Display", Georgia, serif;
-  --sans: "Blauer Nue Local", -apple-system, BlinkMacSystemFont, "Helvetica Neue", system-ui, sans-serif;
+  --sans: "Blauer Nue", -apple-system, BlinkMacSystemFont, "Helvetica Neue", system-ui, sans-serif;
   --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
 
   --page: 72rem;
@@ -178,28 +178,29 @@ body::after {
   font-display: swap;
 }
 
-/* Blauer Nue is NOT shipped — its licence has not been confirmed for
-   webfont embedding, and local() references an installed copy rather than
-   redistributing one. On this machine it renders as intended; everywhere
-   else the stack falls through. Resolve the licence before publishing, then
-   this becomes a real @font-face with a file beside it. */
+/* Blauer Nue, self-hosted — three weights, the three the page asks for.
+ *
+ * Licensed, and web use is explicitly granted: the foundry's own
+ * documentation ships WOFF/WOFF2 for every weight and tells you to put them
+ * in your site's directory. The woff2 files here are theirs as delivered,
+ * not converted, which is why they are 12 KB each.
+ *
+ * No italic is shipped because the page asks for none. If one is ever
+ * wanted, add the face rather than letting the browser shear the roman. */
 @font-face {
-  font-family: "Blauer Nue Local";
-  src: local("Blauer Nue"), local("BlauerNue-Regular");
-  font-weight: 400;
-  font-style: normal;
+  font-family: "Blauer Nue";
+  src: url("fonts/blauernue-400.woff2") format("woff2");
+  font-weight: 400; font-style: normal; font-display: swap;
 }
 @font-face {
-  font-family: "Blauer Nue Local";
-  src: local("BlauerNue-Medium"), local("Blauer Nue Medium");
-  font-weight: 500;
-  font-style: normal;
+  font-family: "Blauer Nue";
+  src: url("fonts/blauernue-500.woff2") format("woff2");
+  font-weight: 500; font-style: normal; font-display: swap;
 }
 @font-face {
-  font-family: "Blauer Nue Local";
-  src: local("BlauerNue-SemiBold"), local("Blauer Nue SemiBold");
-  font-weight: 600;
-  font-style: normal;
+  font-family: "Blauer Nue";
+  src: url("fonts/blauernue-600.woff2") format("woff2");
+  font-weight: 600; font-style: normal; font-display: swap;
 }
 
 /* ----------------------------------------------------------------------- *
