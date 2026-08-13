@@ -7,9 +7,8 @@ from sqlalchemy.orm import selectinload
 
 from app.deps import CurrentUser, DbSession
 from app.models import Task, TaskStatus
-from app.schemas.today import BrewData, PlanSlot, TaskOut, TodayResponse
+from app.schemas.today import PlanSlot, TaskOut, TodayResponse
 from app.services.accounts import calendar_token
-from app.services.brew_engine import BREWS, calculate_brew
 from app.routers.tasks import due_by_today
 from app.services.gcal import busy_blocks
 from app.services.scheduling import build_day_plan, humanize_due, user_today
@@ -36,8 +35,6 @@ async def get_today(user: CurrentUser, db: DbSession) -> TodayResponse:
     ).all()
 
     carry_forward = sum(1 for t in tasks if t.status == TaskStatus.carried)
-    brew_key = calculate_brew([t.regret_score for t in tasks], carry_forward)
-    brew = BREWS[brew_key]
 
     # calendar busy blocks are hard no-go zones for the scheduler;
     # no calendar (or a fetch failure) degrades to an open day, never a 500
@@ -65,8 +62,6 @@ async def get_today(user: CurrentUser, db: DbSession) -> TodayResponse:
         )
 
     return TodayResponse(
-        brew=brew_key,
-        brew_data=BrewData(name=brew.name, tagline=brew.tagline, level=brew.level),
         top_tasks=[task_out(t) for t in tasks[:3]],
         day_plan=[PlanSlot(**slot) for slot in plan],
         unscheduled=[task_out(t) for t in unscheduled],

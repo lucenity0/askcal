@@ -1,7 +1,7 @@
 """Onboarding profile → track weights.
 
-The onboarding questions ("what's your order?" student/working/both,
-"what do you brew?" design/dev/both/other/none) map deterministically to
+The onboarding questions (student/working/both,
+"what do you make?" design/dev/both/other/none) map deterministically to
 per-track weight + active settings. Weights feed the regret formula
 (clamped 0.5–1.5 there), so two users receiving the identical email get
 different scores when their lives differ.

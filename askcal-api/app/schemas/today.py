@@ -4,12 +4,6 @@ import uuid
 from app.schemas.base import CamelModel
 
 
-class BrewData(CamelModel):
-    name: str
-    tagline: str
-    level: str
-
-
 class TaskOut(CamelModel):
     id: uuid.UUID
     track: str | None
@@ -26,8 +20,6 @@ class PlanSlot(CamelModel):
 
 
 class TodayResponse(CamelModel):
-    brew: str
-    brew_data: BrewData
     top_tasks: list[TaskOut]
     day_plan: list[PlanSlot]
     # tasks that fit nowhere around today's calendar — surfaced, never dropped

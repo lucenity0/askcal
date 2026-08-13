@@ -37,8 +37,9 @@ class User(TimestampMixin, Base):
     # one timestamp could not tell them apart.
     last_sync_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_sync_error: Mapped[str | None] = mapped_column(Text)
-    # Profile setting from the spec ("carry-forward sensitivity"). Not yet
-    # wired into the brew engine — the JS source of truth uses a fixed penalty.
+    # Profile setting from the spec ("carry-forward sensitivity"). Stored and
+    # never read: nothing has consulted it since the scoring it was meant to
+    # feed was removed.
     carry_forward_sensitivity: Mapped[float] = mapped_column(Float, default=1.0)
 
     # Small, changeable knobs the settings screen writes. JSONB because these

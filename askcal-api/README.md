@@ -213,7 +213,6 @@ app/
                        /api/digest/*, /api/closing-time, /api/carry-forward
 ```
 
-`app/services/brew_engine.py` is a leftover from an earlier coffee-themed
-concept the product has since moved away from — `/api/today` still returns
-its `brew`/`brewData` fields for backward compatibility, but the current iOS
-app ignores them entirely. Slated for removal.
+`/api/today` no longer returns `brew`/`brewData`, and `/api/inbox` no longer
+returns `tempIndicator`. Those were the last of an earlier coffee-themed
+concept; the app had stopped reading them long before they were removed.

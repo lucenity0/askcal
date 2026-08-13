@@ -10,7 +10,7 @@ from app.models.base import TimestampMixin
 
 
 class DayLog(TimestampMixin, Base):
-    """One row per closing-time ritual — feeds tomorrow's brew and history."""
+    """One row per closing-time ritual — the record of how a day was closed."""
 
     __tablename__ = "day_logs"
     __table_args__ = (UniqueConstraint("user_id", "date"),)

@@ -21,7 +21,6 @@ from app.routers.tasks import _task_full_out
 from app.services.triage import mail_need
 from app.schemas.tasks import TaskFullOut
 from app.services.autotask import build_task
-from app.services.brew_engine import temp_for_score
 from app.services.gmail import mark_as_read
 from app.services.scheduling import local_midnight, user_today
 from app.services.sync import run_sync_for_user
@@ -82,7 +81,6 @@ async def get_inbox(user: CurrentUser, db: DbSession) -> InboxResponse:
                 received_at=e.received_at,
                 regret_score=e.regret_score,
                 estimated_minutes=e.estimated_minutes,
-                temp_indicator=temp_for_score(e.regret_score),
                 needs=mail_need(e.signals, now),
                 snippet=e.snippet,
             )

@@ -16,14 +16,15 @@ from app.schemas.tracks import (
     TrackSettingOut,
 )
 from app.services.autotask import reconsider_auto_tasks
-from app.services.brew_engine import SCORE_THRESHOLDS
 from app.services.profile import STUDENT_TYPES, WORK_TYPES, profile_track_settings
 from app.services.tracks import find_track, slugify
 
 router = APIRouter(prefix="/api", tags=["tracks"])
 
-# "urgent" = high-consequence by itself (top scoring band)
-URGENT_THRESHOLD = SCORE_THRESHOLDS["long_black"]
+# "urgent" = high-consequence by itself. Was read out of the brew engine's
+# score bands; it is the only number anything still wanted from that file, and
+# a scheduler saying 65 is clearer than one saying "long black".
+URGENT_THRESHOLD = 65
 
 
 async def _track_or_404(db, user, slug: str) -> Track:

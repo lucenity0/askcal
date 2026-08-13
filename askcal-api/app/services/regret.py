@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from app.services.classifier import EmailSignals, parse_deadline
 
 # What ignoring this email costs. The spec's examples anchor the scale:
-# a client brief / OA / exam ignored ≈ brew-defining; a newsletter ≈ nothing.
+# a client brief / OA / exam ignored ≈ costly; a newsletter ≈ nothing.
 CONSEQUENCE_BASE = {
     "opportunity_loss": 35,  # missed OA, interview, placement window
     "grade_loss": 35,
@@ -26,7 +26,7 @@ CONSEQUENCE_BASE = {
 
 # Proximity buckets in hours-until-deadline. Overdue (down to -72h) lands in
 # the hottest bucket — "your espresso is getting cold" — then decays so stale
-# overdue items don't pin every brew at espresso forever.
+# overdue items don't pin the whole day at maximum forever.
 DEADLINE_POINTS = [
     (24, 40),  # due within a day, or overdue up to 72h
     (48, 28),
