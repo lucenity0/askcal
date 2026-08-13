@@ -50,6 +50,15 @@ struct ReviewSheet: View {
             }
             Button("Done", action: onClose)
                 .buttonStyle(PillButtonStyle(filled: true, fullWidth: true))
+            // The way back. Closing was one-way from here, so a day shut a
+            // few hours early — or by accident — stayed shut.
+            Button("Reopen the day") {
+                store.reopenDay()
+                onClose()
+            }
+            .font(BookType.meta(11))
+            .foregroundStyle(book.inkSub)
+            .frame(maxWidth: .infinity)
         }
     }
 

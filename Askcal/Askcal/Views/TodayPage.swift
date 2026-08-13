@@ -223,7 +223,8 @@ struct TodayPage: View {
                 closed: store.dayClosed,
                 summary: store.reviewSummary,
                 onReview: onOpenReview,
-                onClose: { withAnimation(.easeOut(duration: 0.3)) { store.closeDay() } }
+                onClose: { withAnimation(.easeOut(duration: 0.3)) { store.closeDay() } },
+                onReopen: { withAnimation(.easeOut(duration: 0.3)) { store.reopenDay() } }
             )
         }
     }

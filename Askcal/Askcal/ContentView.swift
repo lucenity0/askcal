@@ -111,6 +111,9 @@ struct ContentView: View {
         // something was pulled by hand, which read as the sync being broken.
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active, didLaunch else { return }
+            // Also re-reads whether today is closed, so a day left closed last
+            // night opens by itself rather than greeting you as finished.
+            store.refreshDayClosed()
             Task { await store.refreshAll() }
         }
     }

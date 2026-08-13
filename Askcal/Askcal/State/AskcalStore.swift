@@ -401,11 +401,13 @@ final class AskcalStore {
         isBootstrapping = true
         defer { isBootstrapping = false }
 
+        refreshDayClosed()
         guard APIClient.shared.isConnected else {
             loadLocal()
             return
         }
         isLive = true
+        refreshDayClosed()
         accountEmail = UserDefaults.standard.string(forKey: "accountEmail")
         await APIClient.shared.syncTimezone()  // align plans to device local time
         await refreshAll()
@@ -434,7 +436,8 @@ final class AskcalStore {
     private func resetForTesting() {
         let ud = UserDefaults.standard
         for key in [Self.localTasksKey, Self.localNotesKey, "localRoutines", "weekStripExpanded",
-                    "userName", "streakCount", "lastClosedDate"] {
+                    "userName", "streakCount", Self.closedDayKey,
+                    Self.closedDoneKey, Self.closedMovedKey] {
             ud.removeObject(forKey: key)
         }
         tasks = []
@@ -902,11 +905,49 @@ final class AskcalStore {
         UserDefaults.standard.integer(forKey: "streakCount")
     }
 
+    // Keys for the closing record. The counts are stored alongside the date
+    // because they describe a day that is over: recomputing them later reads a
+    // task list that has already moved on.
+    private static let closedDayKey = "lastClosedDate"
+    private static let closedDoneKey = "closedDoneCount"
+    private static let closedMovedKey = "closedMovedCount"
+
+    /// Re-read whether today is closed.
+    ///
+    /// `dayClosed` was in-memory only, so closing the day and relaunching put
+    /// the card back to "End your day" and took the summary with it — the ritual
+    /// undid itself overnight. Derived from the stored date instead, which also
+    /// means a new day opens on its own without anything having to notice
+    /// midnight.
+    func refreshDayClosed() {
+        dayClosed = UserDefaults.standard.string(forKey: Self.closedDayKey)
+            == Self.dayString(.now)
+    }
+
+    /// Undo the close. The day goes back to being editable and the streak is
+    /// left alone — reopening to add one more thing is not a broken streak.
+    func reopenDay() {
+        dayClosed = false
+        UserDefaults.standard.removeObject(forKey: Self.closedDayKey)
+        Haptics.tick()
+        Task { await NotificationManager.refreshSchedules(dayClosed: false) }
+    }
+
     func closeDay() {
         dayClosed = true
         let ud = UserDefaults.standard
         let today = Self.dayString(.now)
         let yesterday = Self.dayString(Calendar.current.date(byAdding: .day, value: -1, to: .now)!)
+
+        // Snapshot before anything moves. A carried task is filed on tomorrow
+        // the moment it is carried, and the day list only fetches today and
+        // earlier — so by the time the summary was read, the work it was
+        // describing had left the list and it reported "0 moved to tomorrow"
+        // for a day whose whole point was what got moved.
+        let (done, moved) = liveCounts
+        ud.set(done, forKey: Self.closedDoneKey)
+        ud.set(moved, forKey: Self.closedMovedKey)
+
         if ud.string(forKey: "lastClosedDate") != today {
             let current = ud.integer(forKey: "streakCount")
             ud.set(ud.string(forKey: "lastClosedDate") == yesterday ? current + 1 : 1,
@@ -935,10 +976,29 @@ final class AskcalStore {
         Task { await NotificationManager.refreshSchedules(dayClosed: true) }
     }
 
+    /// What today came to. Reads the closing record once the day is closed and
+    /// the live list before that, because the two cannot be the same query: a
+    /// closed day's carried work is filed on tomorrow and no longer in it.
     var reviewSummary: String {
-        let done = tasks.filter { $0.status == .done }.count
-        let moved = carriedTasks.count
-        return "\(done) done · \(moved) moved to tomorrow"
+        let (done, moved) = dayClosed ? closedCounts : liveCounts
+        let movedLabel = moved == 1 ? "1 moved to tomorrow" : "\(moved) moved to tomorrow"
+        return "\(done) done · \(movedLabel)"
+    }
+
+    /// Today's work as it stands. Done is scoped to today rather than the whole
+    /// list, which included every finished task the fetch happened to return
+    /// and inflated the count.
+    private var liveCounts: (done: Int, moved: Int) {
+        let done = dayEntries.filter { $0.status == .done }.count
+        // Carried rows have already been moved to tomorrow client-side, so they
+        // are not in `dayEntries` — counted from the full list by status.
+        let moved = tasks.filter { $0.status == .carried }.count
+        return (done, moved)
+    }
+
+    private var closedCounts: (done: Int, moved: Int) {
+        let ud = UserDefaults.standard
+        return (ud.integer(forKey: Self.closedDoneKey), ud.integer(forKey: Self.closedMovedKey))
     }
 
     /// yyyy-MM-dd for the date's *local* calendar day. Must use the device

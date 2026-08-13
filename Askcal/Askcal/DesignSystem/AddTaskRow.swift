@@ -83,6 +83,7 @@ struct EndOfDayCard: View {
     let summary: String
     var onReview: () -> Void
     var onClose: () -> Void
+    var onReopen: () -> Void
 
     @Environment(\.book) private var book
 
@@ -103,17 +104,19 @@ struct EndOfDayCard: View {
             VStack(alignment: .trailing, spacing: Space.md) {
                 Button("Review day", action: onReview)
                     .buttonStyle(PillButtonStyle(filled: false))
-                if !closed {
-                    Button(action: onClose) {
-                        HStack(spacing: Space.sm) {
-                            Text("Close the day")
-                            Image(systemName: "arrow.right")
-                        }
-                        .font(BookType.meta(11))
-                        .foregroundStyle(book.inkDim)
+                // Closed, the card offered nothing but a summary — so a day
+                // shut by accident, or one you wanted to add to, had no way
+                // back from the page you were standing on.
+                Button(action: closed ? onReopen : onClose) {
+                    HStack(spacing: Space.sm) {
+                        if closed { Image(systemName: "arrow.uturn.left") }
+                        Text(closed ? "Reopen" : "Close the day")
+                        if !closed { Image(systemName: "arrow.right") }
                     }
-                    .buttonStyle(.plain)
+                    .font(BookType.meta(11))
+                    .foregroundStyle(book.inkDim)
                 }
+                .buttonStyle(.plain)
             }
         }
         .padding(Space.xl)
