@@ -279,18 +279,16 @@ struct TodayPage: View {
         return Self.clock(at)
     }
 
-    /// The time beside the mark: where the plan put it while it is still to do,
-    /// and when it was actually finished once it is done.
+    /// The time beside the mark: when this is meant to happen. Always that,
+    /// never anything else.
     ///
-    /// The plan only contains open work, so a task used to lose its slot the
-    /// instant it was ticked — the day list got less informative the more of it
-    /// you did, and the finished rows sat flush left against an empty column.
-    /// A closed-out day should read as a record of when things happened.
+    /// It briefly showed the finish time on completed rows, which made one
+    /// column mean two different things depending on a row's state — you could
+    /// not read down it and know what you were looking at. When something was
+    /// finished is a different fact and belongs with the other facts, under the
+    /// title.
     private func rowTime(_ task: AskcalTask) -> String? {
-        if task.status == .done, let done = task.completedAt {
-            return Self.clock(done)
-        }
-        return store.slot(for: task)?.time ?? pinnedTime(task)
+        store.slot(for: task)?.time ?? pinnedTime(task)
     }
 
     /// One column, one format. The server's plan slots are "HH:MM", so

@@ -2,7 +2,7 @@ import datetime as dt
 from datetime import datetime, timezone
 
 from fastapi import APIRouter
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import selectinload
 
 from app.deps import CurrentUser, DbSession
@@ -50,7 +50,15 @@ async def closing_time(
         await db.execute(
             update(Task)
             .where(Task.user_id == user.id, Task.id.in_(body.pulled))
-            .values(status=TaskStatus.done, completed_at=now)
+            # coalesce, not `now`. Closing the day sends every task already
+            # ticked, and stamping them all again rewrote each one's real
+            # finish time to the instant the day was closed — so a day's work
+            # came back from the server looking as though it had all happened
+            # in the same minute. Only work that was never stamped gets one.
+            .values(
+                status=TaskStatus.done,
+                completed_at=func.coalesce(Task.completed_at, now),
+            )
         )
     if body.remaining:
         await db.execute(

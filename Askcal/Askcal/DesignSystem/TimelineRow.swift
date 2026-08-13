@@ -76,7 +76,17 @@ struct TimelineRow: View {
         // Looked up rather than derived, so a renamed track reads by its new
         // name here without every task having to be refetched.
         var parts: [String] = task.track.isEmpty ? [] : [store.trackLabel(task.track)]
-        if let deadline = task.deadlineLabel, !deadline.isEmpty { parts.append(deadline) }
+
+        // Finished work says when, instead of how long is left. A countdown on
+        // something already done is noise, and the time it was actually ticked
+        // is the one fact a closed-out day is a record of. It lives here rather
+        // than in the time column so that column keeps meaning one thing.
+        if done, let at = task.completedAt {
+            parts.append("done \(at.formatted(date: .omitted, time: .shortened))")
+        } else if let deadline = task.deadlineLabel, !deadline.isEmpty {
+            parts.append(deadline)
+        }
+
         if let hours = task.estimatedHours { parts.append("\(hours.formatted())h") }
         return parts.joined(separator: " · ")
     }
