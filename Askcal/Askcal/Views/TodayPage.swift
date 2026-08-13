@@ -274,28 +274,53 @@ struct TodayPage: View {
     }
 
     /// A task with a pinned start but no plan slot still knows its own time.
-    private func pinnedTime(_ task: AskcalTask) -> String? {
-        guard let at = task.scheduledAt else { return nil }
-        return Self.clock(at)
-    }
 
-    /// The time beside the mark: when this is meant to happen. Always that,
-    /// never anything else.
+    /// The time beside the mark: **when this happened, or is going to**.
     ///
-    /// It briefly showed the finish time on completed rows, which made one
-    /// column mean two different things depending on a row's state — you could
-    /// not read down it and know what you were looking at. When something was
-    /// finished is a different fact and belongs with the other facts, under the
-    /// title.
+    /// One question, answered for every row. Finished work says when it was
+    /// finished; open work says where the plan put it, or the time you pinned
+    /// yourself. Nothing else goes in this column.
+    ///
+    /// It used to be three different things at once. The plan only holds open
+    /// work, so ticking an auto-scheduled task dropped its slot and left the
+    /// column blank — while a task with a pinned time kept it, because that
+    /// does not care about status. Same column, same day, some rows timed and
+    /// some not, for a reason nothing on screen could explain.
     private func rowTime(_ task: AskcalTask) -> String? {
-        store.slot(for: task)?.time ?? pinnedTime(task)
+        if task.status == .done, let finished = task.completedAt {
+            return Self.clock(finished)
+        }
+        if let slot = store.slot(for: task)?.time, let label = Self.clock(serverTime: slot) {
+            return label
+        }
+        if let pinned = task.scheduledAt { return Self.clock(pinned) }
+        return nil
     }
 
     /// One column, one format. The server's plan slots are "HH:MM", so
     /// everything in that column is written the same way rather than switching
     /// to the device's 12-hour clock halfway down the list.
+    /// Written the way the phone writes times, AM/PM and all.
+    ///
+    /// This was `.hour(.twoDigits(amPM: .omitted))`, which does not mean
+    /// 24-hour — it renders in the device's own convention and then *deletes*
+    /// the marker. On a 12-hour phone a task pinned to 20:15 printed as
+    /// "08:15", indistinguishable from one at 8:15 in the morning, and sat in
+    /// a column beside genuine 24-hour strings from the server's day plan.
     private static func clock(_ date: Date) -> String {
-        date.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute())
+        date.formatted(date: .omitted, time: .shortened)
+    }
+
+    /// The plan's `"HH:MM"` in that same format, so a server slot and a time
+    /// picked on the phone cannot read differently for the same hour.
+    private static func clock(serverTime: String) -> String? {
+        let parts = serverTime.split(separator: ":").compactMap { Int($0) }
+        guard parts.count == 2 else { return nil }
+        var components = DateComponents()
+        components.hour = parts[0]
+        components.minute = parts[1]
+        guard let date = Calendar.current.date(from: components) else { return nil }
+        return clock(date)
     }
 
     // MARK: - Connect / errors

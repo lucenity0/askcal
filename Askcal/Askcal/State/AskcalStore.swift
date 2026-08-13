@@ -119,6 +119,14 @@ final class AskcalStore {
     /// a time the user pinned themselves; anything with neither sorts to the
     /// end, because "sometime today" comes after everything with an hour.
     private func minuteOfDay(_ task: AskcalTask) -> Int {
+        // Finished work sorts by when it was finished, which is what the time
+        // beside it now says. Ordering by a plan slot the task no longer has
+        // sent every completed row to the bottom regardless of when it actually
+        // happened, so the day did not read in the order it occurred.
+        if task.status == .done, let finished = task.completedAt {
+            let parts = Calendar.current.dateComponents([.hour, .minute], from: finished)
+            return (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
+        }
         if let slot = slot(for: task), let minutes = minutesSinceMidnight(slot.time) {
             return minutes
         }

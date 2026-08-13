@@ -40,7 +40,10 @@ struct TimelineRow: View {
                 Text(time)
                     .font(BookType.meta(12))
                     .foregroundStyle(book.inkSub)
-                    .frame(width: 44, alignment: .leading)
+                    // Wide enough for "10:30 AM". It was 44pt, sized for a
+                    // bare "09:00" back when the column dropped the AM/PM.
+                    .frame(width: 66, alignment: .leading)
+                    .lineLimit(1)
                     .padding(.top, Space.lg)
             }
 
@@ -77,13 +80,11 @@ struct TimelineRow: View {
         // name here without every task having to be refetched.
         var parts: [String] = task.track.isEmpty ? [] : [store.trackLabel(task.track)]
 
-        // Finished work says when, instead of how long is left. A countdown on
-        // something already done is noise, and the time it was actually ticked
-        // is the one fact a closed-out day is a record of. It lives here rather
-        // than in the time column so that column keeps meaning one thing.
-        if done, let at = task.completedAt {
-            parts.append("done \(at.formatted(date: .omitted, time: .shortened))")
-        } else if let deadline = task.deadlineLabel, !deadline.isEmpty {
+        // No deadline on finished work: a countdown to something already done
+        // is noise, and "overdue by 3 h" beside a ticked row is actively wrong.
+        // When it was finished is not repeated here either — the time column
+        // beside the mark is saying it.
+        if !done, let deadline = task.deadlineLabel, !deadline.isEmpty {
             parts.append(deadline)
         }
 
