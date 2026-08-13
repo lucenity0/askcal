@@ -13,6 +13,11 @@ from datetime import UTC, datetime
 
 from app.services.classifier import EmailSignals, parse_deadline
 
+# What one carry-forward adds to a task's effective consequence, before the
+# user's own sensitivity multiplies it. Small on purpose: three days of being
+# skipped should start to outrank a fresh trivial task, not leapfrog a deadline.
+CARRY_FORWARD_POINTS = 6
+
 # What ignoring this email costs. The spec's examples anchor the scale:
 # a client brief / OA / exam ignored ≈ costly; a newsletter ≈ nothing.
 CONSEQUENCE_BASE = {
@@ -89,3 +94,23 @@ def compute_regret(
         score *= LOW_CONFIDENCE_FACTOR
 
     return max(0, min(100, round(score)))
+
+
+def effective_regret(task, sensitivity: float = 1.0) -> int:
+    """A task's consequence, plus what skipping it has already cost.
+
+    `regret_score` is what the classifier concluded when the mail arrived, and
+    it never changes afterwards — which means a task you have pushed to tomorrow
+    four times ranks exactly as it did on day one, and keeps losing to whatever
+    is newest. The thing you keep avoiding is usually the thing worth doing.
+
+    `carry_forward_sensitivity` is the user's dial: 0 keeps the classifier's
+    answer untouched, higher values make the day insist harder. It is deliberately
+    a multiplier on a small constant rather than a rewrite of the stored score —
+    the classifier's judgement stays legible, and this stays separable from it.
+    """
+    carried = getattr(task, "carried_count", 0) or 0
+    if carried <= 0:
+        return task.regret_score
+    bumped = task.regret_score + carried * CARRY_FORWARD_POINTS * max(sensitivity, 0.0)
+    return int(min(100, bumped))

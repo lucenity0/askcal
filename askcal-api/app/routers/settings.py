@@ -78,6 +78,7 @@ def _build(user) -> SettingsResponse:
                 user, "auto_task_min_confidence", s.auto_task_min_confidence
             ),
             min_regret=_pref(user, "auto_task_min_regret", s.auto_task_min_regret),
+            carry_forward_sensitivity=user.carry_forward_sensitivity,
         ),
         reminders=ReminderPrefs(
             morning_digest=_pref(user, "morning_digest", _DEFAULTS["morning_digest"]),
@@ -110,6 +111,11 @@ async def patch_settings(
         # reassignment alone is not always enough to mark it dirty — without
         # this the write silently does nothing.
         flag_modified(user, "preferences")
+
+    # A real column, not a preference: it is read by the scheduler on every
+    # plan, which is the line this project draws for earning one.
+    if "carry_forward_sensitivity" in sent and body.carry_forward_sensitivity is not None:
+        user.carry_forward_sensitivity = body.carry_forward_sensitivity
 
     if "timezone" in sent and body.timezone:
         user.timezone = body.timezone

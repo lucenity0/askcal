@@ -49,6 +49,7 @@ async def get_today(user: CurrentUser, db: DbSession) -> TodayResponse:
     plan, unscheduled = build_day_plan(
         list(tasks), busy, today, user.timezone,
         now=datetime.now(UTC),
+        carry_forward_sensitivity=user.carry_forward_sensitivity,
     )
 
     def task_out(t: Task) -> TaskOut:

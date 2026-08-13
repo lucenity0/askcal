@@ -366,6 +366,9 @@ struct AppSettings: Codable, Equatable {
     struct AutoTaskPrefs: Codable, Equatable {
         var minConfidence: Double
         var minRegret: Int
+        /// How hard work you keep pushing to tomorrow argues for a place in
+        /// the day. 0 leaves the classifier's ranking untouched.
+        var carryForwardSensitivity: Double
     }
 
     struct ReminderPrefs: Codable, Equatable {

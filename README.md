@@ -7,7 +7,7 @@
 Built for the student freelancer juggling classes, client work and a job hunt at once —
 several inboxes, one life, no patience for another app that just lists things.
 
-[![backend tests](https://img.shields.io/badge/backend%20tests-276%20passing-2A2724?style=flat-square)](askcal-api)
+[![backend tests](https://img.shields.io/badge/backend%20tests-282%20passing-2A2724?style=flat-square)](askcal-api)
 [![stack](https://img.shields.io/badge/stack-SwiftUI%20%C2%B7%20FastAPI%20%C2%B7%20Postgres-2A2724?style=flat-square)]()
 [![python](https://img.shields.io/badge/python-3.13-2A2724?style=flat-square)]()
 [![license](https://img.shields.io/badge/license-unreleased-2A2724?style=flat-square)]()
@@ -88,7 +88,7 @@ The backend, with Postgres:
 cd askcal-api
 cp .env.example .env          # fill in Google OAuth + a JWT secret
 docker compose up -d
-uv run pytest                 # 276 tests, no database required
+uv run pytest                 # 282 tests, no database required
 ```
 
 The app: open `Askcal/Askcal.xcodeproj`, set the API base URL in Settings (defaults to the

@@ -119,6 +119,11 @@ _RULES_TAIL = """\
   — an OA or interview invite, a recruiter writing to them directly — is real
   work. (Track names are the user's, so match on the descriptions above rather
   than on any name you expect to see.)
+- Track by what the email ASKS OF YOU, not by its subject matter. A digest of
+  job listings is about jobs and is still reading; a newsletter about money is
+  about money and is still reading. If nothing in it is addressed to the user
+  personally and nothing is due, it belongs with the reading whatever it is
+  nominally concerned with.
 - sender_type: use `newsletter` for bulk/marketing mail and `automated_system`
   for platform/no-reply notifications; reserve `client`/`recruiter`/`professor`
   for a real person writing to the user.

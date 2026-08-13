@@ -133,17 +133,26 @@ def _due_minute(task: Task, day: dt.date, tz: dt.tzinfo) -> int | None:
     return local.hour * 60 + local.minute
 
 
-def _placement_rank(task: Task, day: dt.date, tz: dt.tzinfo) -> tuple[int, int, int]:
+def _placement_rank(
+    task: Task, day: dt.date, tz: dt.tzinfo, sensitivity: float = 1.0
+) -> tuple[int, int, int]:
     """Order untimed tasks for placement.
 
     Anything due today comes first, soonest deadline leading, because the
     deadline is the part of the day that cannot move. Everything else follows
     on consequence, highest first — which is the regret score's whole job.
+
+    Consequence here includes what skipping it has already cost: a task carried
+    four times ranked exactly as it did on day one and kept losing to whatever
+    was newest, which is how the thing you are avoiding stays avoided.
     """
+    from app.services.regret import effective_regret
+
     due = _due_minute(task, day, tz)
+    score = effective_regret(task, sensitivity)
     if due is not None:
-        return (0, due, -task.regret_score)
-    return (1, 0, -task.regret_score)
+        return (0, due, -score)
+    return (1, 0, -score)
 
 
 def _merge(intervals: list[tuple[int, int]]) -> list[tuple[int, int]]:
@@ -164,6 +173,7 @@ def build_day_plan(
     day_start: dt.time = WORK_DAY_START,
     day_end: dt.time = WORK_DAY_END,
     now: dt.datetime | None = None,
+    carry_forward_sensitivity: float = 1.0,
 ) -> tuple[list[dict], list[Task]]:
     """→ (plan slots, unscheduled tasks).
 
@@ -239,7 +249,9 @@ def build_day_plan(
     # submission after every higher-scoring task with no deadline at all, which
     # is how the plan could hand you a day that misses the one thing on it that
     # actually had a wall.
-    for task in sorted(unpinned, key=lambda t: _placement_rank(t, day, tz)):
+    for task in sorted(
+        unpinned, key=lambda t: _placement_rank(t, day, tz, carry_forward_sensitivity)
+    ):
         minutes = _task_minutes(task)
         due = _due_minute(task, day, tz)
         placed = False

@@ -43,6 +43,9 @@ class AutoTaskPrefs(CamelModel):
 
     min_confidence: float = Field(ge=0.0, le=1.0)
     min_regret: int = Field(ge=0, le=100)
+    # How hard work you keep pushing to tomorrow argues for a place in the day.
+    # Stored and read by nothing for months; it decides plan order now.
+    carry_forward_sensitivity: float = Field(ge=0.0, le=3.0)
 
 
 class ReminderPrefs(CamelModel):
@@ -69,6 +72,9 @@ class SettingsPatch(CamelModel):
 
     auto_task_min_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     auto_task_min_regret: int | None = Field(default=None, ge=0, le=100)
+    # 0 leaves the classifier's score untouched; higher makes the day insist
+    # harder about work you keep pushing.
+    carry_forward_sensitivity: float | None = Field(default=None, ge=0.0, le=3.0)
     morning_digest: bool | None = None
     morning_hour: int | None = Field(default=None, ge=0, le=23)
     evening_nudge: bool | None = None

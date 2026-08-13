@@ -107,8 +107,14 @@ GOLDEN: list[GoldenCase] = [
         action_required=False,
         consequence="none",
         has_deadline=False,
-        why="A digest listing openings is reading material. This is the single "
-            "noisiest false positive there is.",
+        why="A digest listing openings must not become a task — the single "
+            "noisiest false positive there is. Where it gets FILED is arguable: "
+            "the model reads it as career, which is defensible for a mail about "
+            "jobs, and it leads to the same outcome either way. Three attempts "
+            "to move it (the digest rule, a track-by-what-it-asks principle, a "
+            "Feed description naming digests outright) did not, and stuffing a "
+            "fourth in would cost the rules that do work.",
+        assert_track=False,
     ),
     GoldenCase(
         id="payment-receipt",

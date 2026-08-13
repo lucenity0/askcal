@@ -56,7 +56,10 @@ async def get_morning(user: CurrentUser, db: DbSession) -> DigestResponse:
         except Exception:  # noqa: BLE001 — logged upstream; never fails the digest
             busy = []
 
-    plan, _ = build_day_plan(tasks, busy, now.date(), user.timezone, now=now)
+    plan, _ = build_day_plan(
+        tasks, busy, now.date(), user.timezone, now=now,
+        carry_forward_sensitivity=user.carry_forward_sensitivity,
+    )
     return DigestResponse(**morning_digest(tasks, emails, plan, now))
 
 

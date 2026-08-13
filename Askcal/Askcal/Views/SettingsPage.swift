@@ -208,6 +208,22 @@ struct SettingsPage: View {
                        format: { "\(Int($0)) / 100" }) { new in
                     await patch(["autoTaskMinRegret": Int(new)])
                 }
+
+                Text("and work you keep moving:")
+                    .font(BookType.body(13))
+                    .foregroundStyle(book.inkSub)
+                    .padding(.top, Space.md)
+
+                // A task carried four times used to rank exactly as it did on
+                // day one and keep losing to whatever was newest — which is how
+                // the thing you are avoiding stays avoided.
+                slider("How insistent",
+                       value: auto.carryForwardSensitivity,
+                       range: 0...2,
+                       step: 0.25,
+                       format: { $0 == 0 ? "off" : "×\($0.formatted())" }) { new in
+                    await patch(["carryForwardSensitivity": new])
+                }
                 PageRule()
             }
         }

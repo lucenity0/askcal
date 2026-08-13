@@ -1,6 +1,7 @@
 """Regret formula tests. Every score must be reproducible from signals alone."""
 
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 
@@ -146,3 +147,55 @@ def test_score_always_in_range(consequence):
         deadline_utc=iso_in(1),
     )
     assert 0 <= compute_regret(signals, track_weight=1.5, now=NOW) <= 100
+
+
+# ── what skipping something has already cost ──────────────────────────────
+
+
+def carried(times: int, score: int = 40):
+    return SimpleNamespace(regret_score=score, carried_count=times)
+
+
+def test_fresh_work_scores_exactly_what_the_classifier_said():
+    from app.services.regret import effective_regret
+
+    assert effective_regret(carried(0)) == 40
+
+
+def test_each_carry_forward_adds_to_the_argument():
+    """A task pushed four times ranked exactly as it did on day one and kept
+    losing to whatever was newest — which is how the thing you are avoiding
+    stays avoided."""
+    from app.services.regret import effective_regret
+
+    assert effective_regret(carried(1)) > effective_regret(carried(0))
+    assert effective_regret(carried(4)) > effective_regret(carried(1))
+
+
+def test_zero_sensitivity_leaves_the_classifier_alone():
+    """The dial's floor is "do not do this at all", not "do a little of it"."""
+    from app.services.regret import effective_regret
+
+    assert effective_regret(carried(5), 0.0) == 40
+
+
+def test_sensitivity_scales_the_push():
+    from app.services.regret import effective_regret
+
+    gentle = effective_regret(carried(3), 0.5)
+    firm = effective_regret(carried(3), 2.0)
+    assert 40 < gentle < firm
+
+
+def test_it_cannot_climb_past_the_top_of_the_scale():
+    """The score is 0–100 everywhere else; carried work must not invent a 130
+    that outranks a genuine emergency by an amount the scale cannot express."""
+    from app.services.regret import effective_regret
+
+    assert effective_regret(carried(40, score=95), 3.0) == 100
+
+
+def test_a_task_with_no_carry_count_at_all_is_handled():
+    from app.services.regret import effective_regret
+
+    assert effective_regret(SimpleNamespace(regret_score=30)) == 30
