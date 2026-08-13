@@ -18,13 +18,30 @@ struct PriorityDot: View {
     @Environment(\.book) private var book
 
     var body: some View {
+        // The whole meaning is in the shape — filled, hollow, absent — so
+        // without a label this is silent, and the ranking that the entire app
+        // is built around simply does not exist for anyone using VoiceOver.
+        Group {
+            switch band {
+            case .high:
+                Circle().fill(book.fill).frame(width: 7, height: 7)
+            case .medium:
+                Circle().strokeBorder(book.fill, lineWidth: 1.5).frame(width: 7, height: 7)
+            case .low:
+                EmptyView()
+            }
+        }
+        .accessibilityLabel(label)
+        // `.low` draws nothing, so there is nothing to announce either —
+        // "low priority" on every third row is noise, not information.
+        .accessibilityHidden(band == .low)
+    }
+
+    private var label: String {
         switch band {
-        case .high:
-            Circle().fill(book.fill).frame(width: 7, height: 7)
-        case .medium:
-            Circle().strokeBorder(book.fill, lineWidth: 1.5).frame(width: 7, height: 7)
-        case .low:
-            EmptyView()
+        case .high: return "High consequence"
+        case .medium: return "Worth a look"
+        case .low: return ""
         }
     }
 }

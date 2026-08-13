@@ -80,6 +80,13 @@ struct GreetingView: View {
         }
         .contentShape(Rectangle())
         .onTapGesture { finish() }
+        // The greeting covers the whole app until it dismisses itself. Tapping
+        // to skip is a gesture VoiceOver cannot find, so without this the only
+        // way past it is to wait — while it reads out an animated room.
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel(greeting)
+        .accessibilityHint("Skip to your day")
         .task {
             if reduceMotion {
                 lineProgress = 1

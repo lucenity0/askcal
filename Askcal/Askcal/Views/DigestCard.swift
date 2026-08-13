@@ -34,6 +34,9 @@ struct DigestCard: View {
                             Text("·")
                                 .font(BookType.meta(12))
                                 .foregroundStyle(book.inkSub)
+                                // A bullet is punctuation, not content. Read
+                                // aloud it is "middle dot" before every line.
+                                .accessibilityHidden(true)
                             Text(line)
                                 .font(BookType.body(15))
                                 .foregroundStyle(book.inkDim)
@@ -42,6 +45,7 @@ struct DigestCard: View {
                         }
                         .padding(.vertical, Space.md)
                         .ruled()
+                        .accessibilityElement(children: .combine)
                     }
                 }
             }
@@ -70,6 +74,9 @@ struct DigestCard: View {
                ("still open", "\(d.stillOpen)")]
 
         VStack(spacing: 0) {
+            // Label and value are two columns on screen and one fact out
+            // loud — read separately they arrive as "due today" … "2", with
+            // everything else in between.
             ForEach(rows, id: \.0) { label, value in
                 HStack {
                     Text(label)
@@ -81,6 +88,7 @@ struct DigestCard: View {
                         .foregroundStyle(book.inkDim)
                 }
                 .padding(.vertical, Space.sm)
+                .accessibilityElement(children: .combine)
             }
         }
     }

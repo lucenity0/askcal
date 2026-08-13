@@ -84,6 +84,12 @@ struct TimelineRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
             .onTapGesture(perform: edit)
+            // The title and its facts are one thing to hear, and the tap that
+            // edits them is a gesture VoiceOver cannot find on its own — so
+            // without this the row can be ticked and deleted but never opened.
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityHint("Opens this task")
 
             menu
         }

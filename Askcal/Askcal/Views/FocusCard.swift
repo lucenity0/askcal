@@ -64,6 +64,12 @@ struct FocusCard: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
             .onTapGesture(perform: open)
+            // A tap gesture is invisible to VoiceOver: without this the card
+            // reads as three loose pieces of text and there is no way to open
+            // the task it is about.
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityHint("Opens this task")
 
             // No check here. Completing is what the timeline row below is
             // for, and a card whose job is "what now" should not be
