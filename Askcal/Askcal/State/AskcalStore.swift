@@ -518,6 +518,33 @@ final class AskcalStore {
         await fetchAll()
     }
 
+    /// When a sync was last asked for from this device.
+    private var lastSyncTrigger: Date?
+
+    /// How stale things have to be before coming back to the app pulls mail
+    /// rather than only re-reading. Short enough that reopening after lunch
+    /// fetches, long enough that flicking between apps does not hammer Gmail.
+    private static let foregroundSyncAfter: TimeInterval = 5 * 60
+
+    /// Coming back to the app.
+    ///
+    /// Two steps, deliberately. The refetch is immediate, so whatever the
+    /// server already knows is on screen at once. The sync is the slow part and
+    /// only runs when things have gone stale.
+    ///
+    /// This used to be the refetch alone, which meant reopening showed the
+    /// server's last known state and nothing more — if its background pass had
+    /// not run since you last looked, the screen was identical and the app
+    /// looked like it had ignored you. "Reopen" reasonably means "get my mail".
+    func refreshOnForeground() async {
+        guard isLive else { return }
+        await fetchAll()
+
+        let stale = lastSyncTrigger
+            .map { Date.now.timeIntervalSince($0) > Self.foregroundSyncAfter } ?? true
+        if stale { await syncInbox() }
+    }
+
     private func fetchAll() async {
         invalidateDayCache()
         do {
@@ -680,6 +707,7 @@ final class AskcalStore {
 
         do {
             try await APIClient.shared.triggerSync()
+            lastSyncTrigger = .now
         } catch {
             // a pull-to-refresh that quietly does nothing is worse than one
             // that says the sync didn't start

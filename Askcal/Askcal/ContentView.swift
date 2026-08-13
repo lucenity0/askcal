@@ -114,7 +114,7 @@ struct ContentView: View {
             // Also re-reads whether today is closed, so a day left closed last
             // night opens by itself rather than greeting you as finished.
             store.refreshDayClosed()
-            Task { await store.refreshAll() }
+            Task { await store.refreshOnForeground() }
         }
     }
 
