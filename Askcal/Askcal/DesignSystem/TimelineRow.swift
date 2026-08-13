@@ -35,25 +35,35 @@ struct TimelineRow: View {
     @Environment(\.book) private var book
     @Environment(AskcalStore.self) private var store
 
+    /// The two numbers worth touching if this still looks wrong.
+    ///
+    /// `timeWidth` is the gutter — wide enough for "10:30 PM" at meta(11) and
+    /// no wider, because every point of it is empty space on rows that are not
+    /// finished yet. `railLeadIn` must match the rectangle at the top of
+    /// `rail`, or the time and the mark stop centring on each other.
+    private static let timeWidth: CGFloat = 52
+    private static let railLeadIn: CGFloat = Space.xs
+
     private var done: Bool { task.status == .done }
 
     var body: some View {
-        HStack(alignment: .top, spacing: Space.md) {
+        HStack(alignment: .top, spacing: Space.sm) {
             // The column is reserved for the whole list or for none of it, so
             // every mark sits at the same x. Dropping it per row let some rows
-            // start at the checkbox and others 66pt further in, which is what
-            // made a list of mixed rows look ragged.
+            // start at the checkbox and others a column-width further in, which
+            // is what made a list of mixed rows look ragged.
             if showsTime {
                 Text(time ?? "")
                     .font(BookType.meta(11))
                     .foregroundStyle(book.inkSub)
                     .lineLimit(1)
-                    .frame(width: 56, alignment: .trailing)
-                    // Centred against the check rather than pushed down by a
-                    // guessed padding: same height as the mark's own target,
-                    // so the two line up whatever the row's height turns out
-                    // to be.
+                    .frame(width: Self.timeWidth, alignment: .trailing)
+                    // The same 44pt box the check sits in, pushed down by the
+                    // same lead-in — so the two centre on each other rather
+                    // than the time riding `railLeadIn` points high, which is
+                    // what it did when the box started at the row's top edge.
                     .frame(height: 44)
+                    .padding(.top, Self.railLeadIn)
             }
 
             rail
@@ -108,7 +118,7 @@ struct TimelineRow: View {
         VStack(spacing: 0) {
             Rectangle()
                 .fill(isFirst ? .clear : book.rule)
-                .frame(width: Stroke.hair, height: Space.xs)
+                .frame(width: Stroke.hair, height: Self.railLeadIn)
 
             CheckCircle(checked: done, action: toggle)
                 .accessibilityLabel(task.title)
@@ -180,3 +190,79 @@ struct CheckCircle: View {
         .buttonStyle(.plain)
     }
 }
+
+// MARK: - Previews
+
+// The row is the fiddliest thing in the app to get right — a gutter, a rail, a
+// tap target and wrapping text all lining up — and rebuilding onto a phone to
+// look at four pixels is a terrible loop. These cover the states that actually
+// disagree with each other: finished with a time, unfinished with none, and a
+// title long enough to wrap past the mark.
+//
+// Xcode canvas: ⌥⌘↩ to show it, ⌥⌘P to refresh. Edit `timeWidth` or
+// `railLeadIn` above and it redraws without a build.
+
+private func previewTask(
+    _ title: String,
+    done: Bool = false,
+    finishedAt: Date? = nil,
+    hours: Double? = nil,
+    due: Date? = nil
+) -> AskcalTask {
+    AskcalTask(
+        id: UUID(),
+        track: "uni",
+        title: title,
+        regretScore: 60,
+        estimatedHours: hours,
+        status: done ? .done : .pending,
+        dueAt: due,
+        completedAt: finishedAt
+    )
+}
+
+private struct TimelineRowPreview: View {
+    let mode: ThemeMode
+
+    private var rows: [(AskcalTask, String?)] {
+        let eight = Calendar.current.date(bySettingHour: 20, minute: 20, second: 0, of: .now)
+        let nine = Calendar.current.date(bySettingHour: 21, minute: 5, second: 0, of: .now)
+        return [
+            (previewTask("note db error", done: true, finishedAt: eight), "8:20 PM"),
+            (previewTask(
+                "Week 3 Assignment Deadline Extended — One-Time Exception!",
+                done: true, finishedAt: nine, hours: 0.5
+            ), "9:05 PM"),
+            // The row that shows the empty gutter: not finished, in a list that
+            // reserves the column so every mark stays on one line.
+            (previewTask(
+                "Design Overdue", hours: 1,
+                due: Date.now.addingTimeInterval(-3200)
+            ), nil),
+        ]
+    }
+
+    var body: some View {
+        let book = PaperPalette.palette(for: mode)
+        VStack(spacing: 0) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+                TimelineRow(
+                    task: row.0,
+                    time: row.1,
+                    showsTime: true,
+                    isFirst: index == 0,
+                    isLast: index == rows.count - 1,
+                    toggle: {}, edit: {}, delete: {}
+                )
+            }
+        }
+        .padding(Space.gutter)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(book.paper)
+        .environment(\.book, book)
+        .environment(AskcalStore())
+    }
+}
+
+#Preview("Rows · day") { TimelineRowPreview(mode: .day) }
+#Preview("Rows · night") { TimelineRowPreview(mode: .night) }
